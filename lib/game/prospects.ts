@@ -1,5 +1,6 @@
 import { Archetype, Position, Prospect } from "./types";
 import { makeRng } from "./rng";
+import { speedRatingFromForty } from "./speed";
 import {
   FIRST_NAMES,
   LAST_NAMES,
@@ -7,47 +8,33 @@ import {
   SCHOOL_SUFFIXES,
 } from "./names";
 
-const POSITION_COUNTS: Position[] = [
-  "QB",
-  "QB",
-  "QB",
-  "QB",
-  "RB",
-  "RB",
-  "RB",
-  "RB",
-  "RB",
-  "WR",
-  "WR",
-  "WR",
-  "WR",
-  "WR",
-  "WR",
-  "WR",
-  "WR",
-  "TE",
-  "TE",
-  "TE",
-  "TE",
-  "TE",
-  "DL",
-  "DL",
-  "DL",
-  "DL",
-  "LB",
-  "LB",
-  "LB",
-  "LB",
-  "LB",
-  "SEC",
-  "SEC",
-  "SEC",
-  "SEC",
-  "SEC",
-];
+const TOTAL_PROSPECTS = 36;
+
+const BASE_POSITION_COUNTS: Record<Position, number> = {
+  QB: 4,
+  RB: 5,
+  WR: 8,
+  TE: 5,
+  DL: 4,
+  LB: 5,
+  SEC: 5,
+};
+
+const MIN_POSITION_COUNTS: Record<Position, number> = {
+  QB: 3,
+  RB: 3,
+  WR: 5,
+  TE: 3,
+  DL: 3,
+  LB: 3,
+  SEC: 3,
+};
+
+const POSITIONS: Position[] = ["QB", "RB", "WR", "TE", "DL", "LB", "SEC"];
 
 type GeneratedProspect = Prospect & {
   scoutGrade: number;
+  athleticRating: number;
 };
 
 function randomFrom<T>(items: T[], rand: () => number): T {
@@ -60,6 +47,42 @@ function randomInt(min: number, max: number, rand: () => number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function buildPositionCounts(rand: () => number) {
+  const counts: Record<Position, number> = { ...MIN_POSITION_COUNTS };
+  const remainingSlots =
+    TOTAL_PROSPECTS -
+    POSITIONS.reduce((sum, position) => sum + MIN_POSITION_COUNTS[position], 0);
+
+  const scarcityProfile = POSITIONS.reduce<Record<Position, number>>((profile, position) => {
+    profile[position] = BASE_POSITION_COUNTS[position] * (0.7 + rand() * 0.9);
+    return profile;
+  }, {} as Record<Position, number>);
+
+  for (let index = 0; index < remainingSlots; index += 1) {
+    const availablePositions = POSITIONS.filter(
+      (position) => counts[position] < BASE_POSITION_COUNTS[position] + 3
+    );
+    const totalWeight = availablePositions.reduce(
+      (sum, position) => sum + scarcityProfile[position],
+      0
+    );
+
+    let roll = rand() * totalWeight;
+
+    for (const position of availablePositions) {
+      roll -= scarcityProfile[position];
+      if (roll <= 0) {
+        counts[position] += 1;
+        break;
+      }
+    }
+  }
+
+  return POSITIONS.flatMap((position) =>
+    Array.from({ length: counts[position] }, () => position)
+  );
 }
 
 function generateUniquePlayerName(rand: () => number, used: Set<string>) {
@@ -144,13 +167,6 @@ function getForty(position: Position, rand: () => number): number {
   }
 }
 
-function speedFromForty(forty: number) {
-  const minForty = 4.2;
-  const maxForty = 5.1;
-  const clamped = Math.max(minForty, Math.min(maxForty, forty));
-  return Math.round(((maxForty - clamped) / (maxForty - minForty)) * 100);
-}
-
 function baseTrueGradeByPosition(position: Position) {
   switch (position) {
     case "QB":
@@ -198,22 +214,87 @@ function archetypeGradeBonus(archetype: Archetype) {
   }
 }
 
+function archetypeTechnicalBonus(archetype: Archetype) {
+  switch (archetype) {
+    case "Field General":
+    case "Route Technician":
+    case "Possession TE":
+    case "Coverage LB":
+    case "Lockdown":
+      return 7;
+    case "Power Back":
+    case "Red Zone Target":
+    case "Run Stopper":
+    case "Run Support":
+      return 4;
+    case "Gunslinger":
+    case "Deep Threat":
+    case "Vertical Threat":
+    case "Pass Rusher":
+    case "Ball Hawk":
+      return 1;
+    case "Dual Threat":
+    case "Receiving Back":
+    case "YAC Specialist":
+    case "Playmaker":
+      return -1;
+    case "Elusive Back":
+      return 2;
+  }
+}
+
+function archetypeAthleticBonus(archetype: Archetype) {
+  switch (archetype) {
+    case "Dual Threat":
+    case "Receiving Back":
+    case "Deep Threat":
+    case "YAC Specialist":
+    case "Vertical Threat":
+    case "Pass Rusher":
+    case "Ball Hawk":
+    case "Playmaker":
+      return 5;
+    case "Gunslinger":
+    case "Elusive Back":
+    case "Red Zone Target":
+      return 2;
+    case "Field General":
+    case "Route Technician":
+    case "Possession TE":
+    case "Coverage LB":
+    case "Lockdown":
+      return -1;
+    case "Power Back":
+    case "Run Stopper":
+    case "Run Support":
+      return 1;
+  }
+}
+
+function scoutingErrorRange(trueGrade: number) {
+  if (trueGrade >= 86) return 3;
+  if (trueGrade >= 80) return 5;
+  if (trueGrade >= 74) return 7;
+  return 9;
+}
+
 export function generateProspects(seed: number): Prospect[] {
   const rand = makeRng(seed);
   const usedNames = new Set<string>();
+  const positionCounts = buildPositionCounts(rand);
 
-  const generated: GeneratedProspect[] = POSITION_COUNTS.map((position, index) => {
+  const generated: GeneratedProspect[] = positionCounts.map((position, index) => {
     const archetype = getArchetype(position, rand);
     const height = getHeight(position, rand);
     const forty = getForty(position, rand);
-    const speed = speedFromForty(forty);
+    const speed = speedRatingFromForty(position, forty);
 
     const name =
       position === "DL" || position === "LB" || position === "SEC"
         ? generateDefenseUnitName(rand, usedNames)
         : generateUniquePlayerName(rand, usedNames);
 
-    const athleticBonus =
+    const speedBonus =
       position === "WR" || position === "RB" || position === "SEC"
         ? Math.round((speed - 50) * 0.12)
         : position === "QB"
@@ -225,17 +306,48 @@ export function generateProspects(seed: number): Prospect[] {
         ? Math.round((height - 72) * 0.8)
         : Math.round((height - 72) * 0.3);
 
-    const trueGrade = clamp(
+    const athleticRating = clamp(
+      Math.round(
+        0.75 * speed +
+          heightBonus +
+          archetypeAthleticBonus(archetype) +
+          randomInt(-6, 6, rand)
+      ),
+      62,
+      95
+    );
+
+    const technicalRating = clamp(
       baseTrueGradeByPosition(position) +
-        archetypeGradeBonus(archetype) +
-        athleticBonus +
-        heightBonus +
+        archetypeTechnicalBonus(archetype) +
         randomInt(-8, 8, rand),
       52,
       95
     );
 
-    const scoutGrade = trueGrade + randomInt(-5, 5, rand);
+    const trueGrade = clamp(
+      Math.round(
+        baseTrueGradeByPosition(position) * 0.2 +
+          technicalRating * 0.45 +
+          athleticRating * 0.35 +
+          archetypeGradeBonus(archetype) +
+          speedBonus +
+          randomInt(-4, 4, rand)
+      ),
+      52,
+      95
+    );
+
+    const errorRange = scoutingErrorRange(trueGrade);
+    const scoutGrade = clamp(
+      Math.round(
+        trueGrade +
+          (technicalRating - athleticRating) * 0.08 +
+          randomInt(-errorRange, errorRange, rand)
+      ),
+      50,
+      97
+    );
 
     return {
       id: `p-${index + 1}`,
@@ -244,9 +356,11 @@ export function generateProspects(seed: number): Prospect[] {
       archetype,
       height,
       forty,
+      technicalRating,
       projectedRound: 12,
       trueGrade,
       scoutGrade,
+      athleticRating,
     };
   });
 
@@ -259,7 +373,13 @@ export function generateProspects(seed: number): Prospect[] {
     archetype: player.archetype,
     height: player.height,
     forty: player.forty,
+    technicalRating: player.technicalRating,
     projectedRound: Math.floor(index / 3) + 1,
     trueGrade: player.trueGrade,
+    careerStage: "Rook" as const,
+    acquisitionType: "draft" as const,
+    seriesSourceSeed: seed,
+    originalOverallPick: null,
+    freeAgencyTag: null,
   }));
 }

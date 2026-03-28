@@ -5,7 +5,18 @@ export const FIRST_NAMES = [
   "Devon","Avery","Rashad","Xavier","Isaiah","Noah",
   "Cam","Aaron","CJ","Trevor","Desmond","Keon",
   "Nico","Stefon","AJ","Ja'Marr","DeVonta","Quentin",
-  "Rome","Brock","Sam","Bo","Drake","Theo"
+  "Rome","Brock","Sam","Bo","Drake","Theo","Kendrick",
+  "Mason","Dre","Antoine","Ray","Khalil","Zion",
+  "Tariq","Javon","Mekhi","Emory","KJ","Tatum",
+  "Donovan","Micah","Nasir","Omari","Caden","Preston",
+  "Tobias","Kyler","Dallas","Kobe","Aidan","Joaquin",
+  "Rico","Cedric","Damari","Eli","Jace","Wes",
+  "Riley","Lance","Shane","Brandon","Colt","Hudson",
+  "Chance","Marcellus","Tahj","Kylan","Julian","Corbin",
+  "Dawson","Trent","Ashton","Kaden","Royce","Keenan",
+  "Terrance","Jabari","Elijah","Maddox","Bryson","Cooper",
+  "Miles","Logan","Carter","Sawyer","Bennett","Owen",
+  "Emmett","Tanner","Kash","Troy","Dillon","Jeremiah"
 ];
 
 export const LAST_NAMES = [
@@ -16,7 +27,18 @@ export const LAST_NAMES = [
   "Baker","Adams","Nelson","Hill","Campbell","Mitchell",
   "Carter","Roberts","Phillips","Evans","Turner",
   "Parker","Collins","Edwards","Stewart","Flores",
-  "Morris","Reed","Cook","Morgan","Bell","Murphy"
+  "Morris","Reed","Cook","Morgan","Bell","Murphy",
+  "Brooks","Bailey","Richardson","Ward","Cox","Howard",
+  "Wardlow","Peterson","Gray","James","Watson","Barnes",
+  "Ross","Henderson","Coleman","Jenkins","Perry","Powell",
+  "Long","Patterson","Hughes","Washington","Simmons","Foster",
+  "Butler","Gonzalez","Bryant","Alexander","Russell","Griffin",
+  "Diaz","Hayes","Myers","Ford","Hamilton","Graham",
+  "Sullivan","Wallace","Woods","Cole","West","Jordan",
+  "Owens","Reynolds","Fisher","Ellis","Porter","Hunter",
+  "Stephens","Payne","Bennett","Price","Sanders","Barnett",
+  "Black","Daniels","Schultz","Mendoza","Cunningham","Hawkins",
+  "Armstrong","Bishop","Goodwin","Knight","Arnold","Hudson"
 ];
 
 export const SCHOOL_PREFIXES = [
@@ -39,7 +61,36 @@ export const SCHOOL_PREFIXES = [
   "Virginia",
   "Indiana",
   "Colorado",
-  "Utah"
+  "Utah",
+  "Metro",
+  "Gulf Coast",
+  "Red River",
+  "Blue Ridge",
+  "Desert",
+  "Frontier",
+  "Heartland",
+  "Great Lakes",
+  "Bayou",
+  "Highland",
+  "Lowcountry",
+  "Ozark",
+  "Piedmont",
+  "River City",
+  "Sun Belt",
+  "Blackstone",
+  "Cumberland",
+  "Dakota",
+  "Magnolia",
+  "Nevada",
+  "Montana",
+  "Kansas",
+  "Tennessee",
+  "Phoenix",
+  "Cascade",
+  "Sierra",
+  "Golden Coast",
+  "Plains",
+  "Rocky Mountain"
 ];
 
 export const SCHOOL_SUFFIXES = [
@@ -50,5 +101,17 @@ export const SCHOOL_SUFFIXES = [
   "A&M",
   "A&T",
   "Institute",
-  "Polytechnic"
+  "Polytechnic",
+  "Academy",
+  "Union",
+  "Christian",
+  "Prep",
+  "Normal",
+  "Military Institute",
+  "Arts & Sciences",
+  "Technical College",
+  "Agricultural College",
+  "Maritime",
+  "Teachers College",
+  "State University"
 ];

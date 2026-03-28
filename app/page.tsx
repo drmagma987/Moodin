@@ -6,27 +6,10 @@ import { createRoom, joinRoom } from "@/lib/room";
 
 export default function Home() {
   const router = useRouter();
-
-  const [teamA, setTeamA] = useState("");
-  const [teamB, setTeamB] = useState("");
   const [onlineTeamName, setOnlineTeamName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  function startLocalDraft() {
-    const teamAName = teamA || "Team A";
-    const teamBName = teamB || "Team B";
-    const seed = Date.now();
-
-    const params = new URLSearchParams({
-      teamA: teamAName,
-      teamB: teamBName,
-      seed: seed.toString(),
-    });
-
-    router.push(`/draft?${params.toString()}`);
-  }
 
   async function handleCreateRoom() {
     try {
@@ -58,55 +41,33 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-8 p-6">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold">Moodin</h1>
-        <p className="opacity-70">Draft. Mongies. Forever.</p>
-      </div>
-
-      <div className="grid gap-8 md:grid-cols-2 w-full max-w-4xl">
-        <div className="rounded-lg border p-6 space-y-4">
-          <h2 className="text-2xl font-semibold">Local Draft</h2>
-
-          <input
-            type="text"
-            placeholder="Team A name"
-            value={teamA}
-            onChange={(e) => setTeamA(e.target.value)}
-            className="w-full border rounded-md px-3 py-2"
-          />
-
-          <input
-            type="text"
-            placeholder="Team B name"
-            value={teamB}
-            onChange={(e) => setTeamB(e.target.value)}
-            className="w-full border rounded-md px-3 py-2"
-          />
-
-          <button
-            onClick={startLocalDraft}
-            className="w-full border rounded-md px-4 py-2 hover:bg-gray-100"
-          >
-            Start Local Draft
-          </button>
+    <main className="min-h-screen px-4 py-8 sm:px-6 sm:py-10">
+      <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-4xl flex-col justify-center gap-6 sm:gap-8">
+        <div className="text-center">
+          <p className="text-xs font-medium uppercase tracking-[0.3em] opacity-60">
+            Mobile Draft Arena
+          </p>
+          <h1 className="mt-3 text-3xl font-bold sm:text-4xl md:text-5xl">Moodin</h1>
+          <p className="mx-auto mt-2 max-w-md text-sm opacity-70 sm:text-base">
+            Create a room, send the code, and run the whole draft from your phone.
+          </p>
         </div>
 
-        <div className="rounded-lg border p-6 space-y-4">
-          <h2 className="text-2xl font-semibold">Online 1v1</h2>
+        <div className="mx-auto w-full max-w-xl rounded-2xl border p-5 space-y-4 sm:p-6">
+          <h2 className="text-xl font-semibold sm:text-2xl">Online 1v1</h2>
 
           <input
             type="text"
             placeholder="Your team name"
             value={onlineTeamName}
             onChange={(e) => setOnlineTeamName(e.target.value)}
-            className="w-full border rounded-md px-3 py-2"
+            className="w-full rounded-xl border px-3 py-3 text-base"
           />
 
           <button
             onClick={handleCreateRoom}
             disabled={loading}
-            className="w-full border rounded-md px-4 py-2 hover:bg-gray-100"
+            className="w-full rounded-xl border px-4 py-3 font-medium hover:bg-gray-100"
           >
             Create Room
           </button>
@@ -117,13 +78,13 @@ export default function Home() {
               placeholder="Enter room code"
               value={joinCode}
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              className="w-full border rounded-md px-3 py-2"
+              className="w-full rounded-xl border px-3 py-3 text-base uppercase tracking-[0.2em]"
             />
 
             <button
               onClick={handleJoinRoom}
               disabled={loading}
-              className="w-full border rounded-md px-4 py-2 hover:bg-gray-100"
+              className="w-full rounded-xl border px-4 py-3 font-medium hover:bg-gray-100"
             >
               Join Room
             </button>

@@ -1,4 +1,6 @@
 export type Position = "QB" | "RB" | "WR" | "TE" | "DL" | "LB" | "SEC";
+export type CareerStage = "Rook" | "Prime" | "Unc";
+export type AcquisitionType = "draft" | "keeper" | "freeAgency";
 
 export type Archetype =
   | "Field General"
@@ -28,8 +30,14 @@ export type Prospect = {
   archetype: Archetype;
   height: number;
   forty: number;
+  technicalRating: number;
   projectedRound: number;
   trueGrade: number;
+  careerStage?: CareerStage;
+  acquisitionType?: AcquisitionType;
+  seriesSourceSeed?: number | null;
+  originalOverallPick?: number | null;
+  freeAgencyTag?: string | null;
 };
 
 export type DraftedPlayer = Prospect & {

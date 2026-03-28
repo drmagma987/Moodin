@@ -1,4 +1,5 @@
 import type { DraftedPlayer } from "./game/types";
+import { speedRatingFromForty } from "./game/speed";
 
 export type TeamRatings = {
   pass: number;
@@ -54,13 +55,6 @@ function mulberry32(seed: number) {
   };
 }
 
-function speedFromForty(forty: number) {
-  const minForty = 4.2;
-  const maxForty = 5.1;
-  const clamped = Math.max(minForty, Math.min(maxForty, forty));
-  return Math.round(((maxForty - clamped) / (maxForty - minForty)) * 100);
-}
-
 function topPlayerByPosition(
   team: DraftedPlayer[],
   position: DraftedPlayer["position"]
@@ -76,14 +70,39 @@ function topTwoWRs(team: DraftedPlayer[]) {
     .slice(0, 2);
 }
 
-function avgTrueGrade(players: DraftedPlayer[]) {
+function playersByPosition(
+  team: DraftedPlayer[],
+  position: DraftedPlayer["position"]
+) {
+  return [...team.filter((player) => player.position === position)].sort(
+    (a, b) => b.trueGrade - a.trueGrade
+  );
+}
+
+function weightedPlayerAverage(
+  players: DraftedPlayer[],
+  weights: number[],
+  selector: (player: DraftedPlayer) => number
+) {
   if (players.length === 0) return 60;
-  return players.reduce((sum, p) => sum + p.trueGrade, 0) / players.length;
+
+  const selected = players.slice(0, weights.length);
+  const appliedWeights = selected.map((_, index) => weights[index] ?? 0);
+  const totalWeight = appliedWeights.reduce((sum, weight) => sum + weight, 0);
+
+  if (totalWeight === 0) return 60;
+
+  const total = selected.reduce(
+    (sum, player, index) => sum + selector(player) * appliedWeights[index],
+    0
+  );
+
+  return total / totalWeight;
 }
 
 function qbRunValue(qb: DraftedPlayer | null) {
   if (!qb) return 40;
-  const speed = speedFromForty(qb.forty);
+  const speed = speedRatingFromForty(qb.position, qb.forty);
 
   let factor = 0.15;
   if (qb.archetype === "Dual Threat") factor = 1.0;
@@ -93,56 +112,164 @@ function qbRunValue(qb: DraftedPlayer | null) {
   return speed * factor;
 }
 
+function tendencyForOffense(strategy: string) {
+  switch (strategy) {
+    case "Pass Heavy":
+      return 0.68;
+    case "Run Heavy":
+      return 0.38;
+    default:
+      return 0.53;
+  }
+}
+
+function offenseFitBonus(strategy: string, ratings: TeamRatings) {
+  const passAdvantage = ratings.pass - ratings.run;
+  const runAdvantage = ratings.run - ratings.pass;
+
+  switch (strategy) {
+    case "Pass Heavy":
+      return clamp(passAdvantage * 0.22, -4, 6);
+    case "Run Heavy":
+      return clamp(runAdvantage * 0.22, -4, 6);
+    default:
+      return clamp((4 - Math.abs(passAdvantage)) * 0.35, -1, 2);
+  }
+}
+
 function offenseStrategyModifier(strategy: string, ratings: TeamRatings) {
+  const fitBonus = offenseFitBonus(strategy, ratings);
+
   switch (strategy) {
     case "Pass Heavy":
       return {
-        pass: ratings.pass + 7,
+        pass: ratings.pass + 5 + fitBonus,
         run: ratings.run - 5,
-        bigPlay: ratings.bigPlay + 6,
+        bigPlay: ratings.bigPlay + 4 + fitBonus * 0.6,
         ballSecurity: ratings.ballSecurity - 3,
       };
     case "Run Heavy":
       return {
-        pass: ratings.pass - 5,
-        run: ratings.run + 7,
+        pass: ratings.pass - 4,
+        run: ratings.run + 5 + fitBonus,
         bigPlay: ratings.bigPlay - 2,
-        ballSecurity: ratings.ballSecurity + 4,
+        ballSecurity: ratings.ballSecurity + 3 + fitBonus * 0.4,
       };
     default:
       return {
-        pass: ratings.pass,
-        run: ratings.run,
+        pass: ratings.pass + fitBonus * 0.3,
+        run: ratings.run + fitBonus * 0.3,
         bigPlay: ratings.bigPlay,
-        ballSecurity: ratings.ballSecurity,
+        ballSecurity: ratings.ballSecurity + 1,
       };
   }
 }
 
+function defenseFitBonus(strategy: string, ratings: TeamRatings) {
+  switch (strategy) {
+    case "Pressure":
+      return clamp((ratings.pressure - ratings.passD) * 0.2, -3, 5);
+    case "Coverage":
+      return clamp((ratings.passD - ratings.pressure) * 0.2, -3, 5);
+    default:
+      return clamp((ratings.runD - 70) * 0.08, -1, 2);
+  }
+}
+
 function defenseStrategyModifier(strategy: string, ratings: TeamRatings) {
+  const fitBonus = defenseFitBonus(strategy, ratings);
+
   switch (strategy) {
     case "Pressure":
       return {
-        passD: ratings.passD - 3,
-        runD: ratings.runD,
-        pressure: ratings.pressure + 7,
-        takeaways: ratings.takeaways + 4,
+        passD: ratings.passD - 2,
+        runD: ratings.runD - 1,
+        pressure: ratings.pressure + 5 + fitBonus,
+        takeaways: ratings.takeaways + 2 + fitBonus * 0.6,
       };
     case "Coverage":
       return {
-        passD: ratings.passD + 7,
-        runD: ratings.runD - 2,
-        pressure: ratings.pressure - 4,
-        takeaways: ratings.takeaways + 1,
+        passD: ratings.passD + 5 + fitBonus,
+        runD: ratings.runD - 3,
+        pressure: ratings.pressure - 3,
+        takeaways: ratings.takeaways + 1 + fitBonus * 0.5,
       };
     default:
       return {
         passD: ratings.passD,
-        runD: ratings.runD,
+        runD: ratings.runD + fitBonus * 0.4,
         pressure: ratings.pressure,
-        takeaways: ratings.takeaways,
+        takeaways: ratings.takeaways + fitBonus * 0.2,
       };
   }
+}
+
+function strategyMatchupBonus(
+  offenseStyle: string,
+  defenseStyle: string,
+  offense: ReturnType<typeof buildTeamProfile>,
+  defense: ReturnType<typeof buildTeamProfile>
+) {
+  let offenseBonus = 0;
+  let defenseBonus = 0;
+
+  if (offenseStyle === "Pass Heavy") {
+    offenseBonus += clamp((offense.passAttack - offense.runAttack) * 0.04, -1.5, 3);
+    if (defenseStyle === "Pressure") {
+      defenseBonus += clamp((defense.pressure - offense.ballSecurity) * 0.05, -1, 3.5);
+    }
+    if (defenseStyle === "Coverage") {
+      defenseBonus += clamp((defense.passDefense - offense.bigPlayAttack) * 0.04, -1, 2.5);
+    }
+  } else if (offenseStyle === "Run Heavy") {
+    offenseBonus += clamp((offense.runAttack - offense.passAttack) * 0.04, -1.5, 3);
+    if (defenseStyle === "Pressure") {
+      offenseBonus += 1.2;
+      defenseBonus -= 0.5;
+    }
+    if (defenseStyle === "Coverage") {
+      offenseBonus += clamp((offense.runAttack - defense.runDefense) * 0.04, -0.5, 2.5);
+    }
+  } else {
+    offenseBonus += 0.5;
+  }
+
+  if (defenseStyle === "Pressure" && offenseStyle !== "Run Heavy") {
+    defenseBonus += clamp((defense.pressure - 72) * 0.03, 0, 1.6);
+  }
+
+  if (defenseStyle === "Coverage" && offenseStyle !== "Run Heavy") {
+    defenseBonus += clamp((defense.passDefense - 72) * 0.03, 0, 1.6);
+  }
+
+  return { offenseBonus, defenseBonus };
+}
+
+function strategyVolatility(
+  offenseStyle: string,
+  defenseStyle: string,
+  offense: ReturnType<typeof buildTeamProfile>,
+  defense: ReturnType<typeof buildTeamProfile>
+) {
+  let offenseVolatility = 0;
+  let defenseVolatility = 0;
+
+  if (offenseStyle === "Pass Heavy") {
+    offenseVolatility += 0.05 + clamp((offense.bigPlayAttack - offense.ballSecurity) * 0.0008, -0.01, 0.025);
+  } else if (offenseStyle === "Run Heavy") {
+    offenseVolatility -= 0.015;
+  }
+
+  if (defenseStyle === "Pressure") {
+    defenseVolatility += 0.04 + clamp((defense.pressure - defense.passDefense) * 0.0008, -0.005, 0.02);
+  } else if (defenseStyle === "Coverage") {
+    defenseVolatility += 0.015;
+  }
+
+  return {
+    offenseVolatility: clamp(offenseVolatility, -0.03, 0.08),
+    defenseVolatility: clamp(defenseVolatility, 0, 0.07),
+  };
 }
 
 function buildTeamProfile(
@@ -153,10 +280,13 @@ function buildTeamProfile(
   const qb = topPlayerByPosition(team, "QB");
   const rb = topPlayerByPosition(team, "RB");
   const te = topPlayerByPosition(team, "TE");
-  const dl = topPlayerByPosition(team, "DL");
-  const lb = topPlayerByPosition(team, "LB");
-  const sec = topPlayerByPosition(team, "SEC");
   const wrs = topTwoWRs(team);
+  const qbs = playersByPosition(team, "QB");
+  const rbs = playersByPosition(team, "RB");
+  const tes = playersByPosition(team, "TE");
+  const dls = playersByPosition(team, "DL");
+  const lbs = playersByPosition(team, "LB");
+  const secs = playersByPosition(team, "SEC");
 
   const wr1 = wrs[0] ?? null;
   const wr2 = wrs[1] ?? null;
@@ -164,21 +294,29 @@ function buildTeamProfile(
   const adjOff = offenseStrategyModifier(strategy.offense, ratings);
   const adjDef = defenseStrategyModifier(strategy.defense, ratings);
 
-  const qbGrade = qb?.trueGrade ?? 60;
-  const rbGrade = rb?.trueGrade ?? 60;
-  const teGrade = te?.trueGrade ?? 60;
-  const dlGrade = dl?.trueGrade ?? 60;
-  const lbGrade = lb?.trueGrade ?? 60;
-  const secGrade = sec?.trueGrade ?? 60;
+  const qbGrade = weightedPlayerAverage(qbs, [1, 0.18], (player) => player.trueGrade);
+  const rbGrade = weightedPlayerAverage(rbs, [1, 0.5, 0.22], (player) => player.trueGrade);
+  const teGrade = weightedPlayerAverage(tes, [1, 0.35], (player) => player.trueGrade);
+  const dlGrade = weightedPlayerAverage(dls, [1, 0.72, 0.45], (player) => player.trueGrade);
+  const lbGrade = weightedPlayerAverage(lbs, [1, 0.72, 0.45], (player) => player.trueGrade);
+  const secGrade = weightedPlayerAverage(secs, [1, 0.72, 0.45], (player) => player.trueGrade);
 
-  const wrAvgGrade = avgTrueGrade(wrs.length ? wrs : []);
-  const wrAvgSpeed = avgTrueGrade(
-    wrs.map((w) => ({
-      ...w,
-      trueGrade: speedFromForty(w.forty),
-    }))
+  const wrGroup = playersByPosition(team, "WR");
+  const wrAvgGrade = weightedPlayerAverage(
+    wrGroup,
+    [1, 0.8, 0.5],
+    (player) => player.trueGrade
   );
-  const rbSpeed = rb ? speedFromForty(rb.forty) : 60;
+  const wrAvgSpeed = weightedPlayerAverage(
+    wrGroup,
+    [1, 0.8, 0.5],
+    (player) => speedRatingFromForty(player.position, player.forty)
+  );
+  const rbSpeed = weightedPlayerAverage(
+    rbs,
+    [1, 0.4, 0.15],
+    (player) => speedRatingFromForty(player.position, player.forty)
+  );
   const qbMobility = qbRunValue(qb);
 
   const passAttack =
@@ -238,6 +376,7 @@ function buildTeamProfile(
     runDefense,
     pressure,
     takeaways,
+    passLean: tendencyForOffense(strategy.offense),
     offenseStyle: strategy.offense,
     defenseStyle: strategy.defense,
   };
@@ -325,21 +464,46 @@ function simulateQuarterTeamPoints(
       offense.bigPlayAttack - (defense.passDefense * 0.7 + defense.takeaways * 0.3);
     const turnoverPressure =
       defense.pressure * 0.55 + defense.takeaways * 0.45 - offense.ballSecurity;
+    const { offenseBonus, defenseBonus } = strategyMatchupBonus(
+      offense.offenseStyle,
+      defense.defenseStyle,
+      offense,
+      defense
+    );
+    const { offenseVolatility, defenseVolatility } = strategyVolatility(
+      offense.offenseStyle,
+      defense.defenseStyle,
+      offense,
+      defense
+    );
+    const passLean = clamp(
+      offense.passLean + clamp((passEdge - runEdge) * 0.004, -0.08, 0.08),
+      0.3,
+      0.75
+    );
+    const runLean = 1 - passLean;
+    const baseAttackEdge = passEdge * passLean + runEdge * runLean;
 
     const overallEdge =
-      0.45 * passEdge +
-      0.3 * runEdge +
+      0.58 * baseAttackEdge +
       0.15 * bigPlayEdge -
-      0.1 * turnoverPressure;
+      0.12 * turnoverPressure +
+      offenseBonus -
+      defenseBonus;
 
-    const scoreChance = clamp(0.42 + overallEdge * 0.004, 0.16, 0.78);
+    const swingFactor = (rand() - 0.5) * 2 * (offenseVolatility + defenseVolatility);
+    const scoreChance = clamp(0.42 + overallEdge * 0.004 + swingFactor, 0.14, 0.8);
 
     if (rand() < scoreChance) {
       const tdChance = clamp(
         0.56 +
           bigPlayEdge * 0.0025 +
+          passEdge * passLean * 0.0015 +
+          runEdge * runLean * 0.0015 +
           (offense.offenseStyle === "Pass Heavy" ? 0.03 : 0) +
-          (offense.offenseStyle === "Run Heavy" ? -0.02 : 0),
+          (offense.offenseStyle === "Run Heavy" ? -0.01 : 0) -
+          defenseBonus * 0.01 +
+          swingFactor * 0.6,
         0.28,
         0.84
       );
@@ -352,7 +516,16 @@ function simulateQuarterTeamPoints(
         plays.push("Field goal caps the drive.");
       }
     } else {
-      const turnoverChance = clamp(0.12 + turnoverPressure * 0.002, 0.05, 0.32);
+      const turnoverChance = clamp(
+        0.11 +
+          turnoverPressure * 0.002 +
+          (defense.defenseStyle === "Pressure" ? 0.015 : 0) +
+          (offense.offenseStyle === "Pass Heavy" ? 0.01 : 0) -
+          (offense.offenseStyle === "Run Heavy" ? 0.01 : 0) +
+          defenseVolatility * 0.4,
+        0.04,
+        0.34
+      );
       if (rand() < turnoverChance && plays.length < 3) {
         plays.push("Pressure forces a drive-killing mistake.");
       }

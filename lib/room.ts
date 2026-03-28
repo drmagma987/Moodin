@@ -9,9 +9,15 @@ import {
 } from "firebase/firestore";
 import { auth, db, ensureAnonymousAuth } from "./firebase";
 import type { DraftedPlayer, Prospect } from "./game/types";
+import { agePlayerForSeries, buildFreeAgencyPool, willRetireAfterGame } from "./series";
 import type { SimResult } from "./sim";
 
-export type RoomStatus = "lobby" | "draft" | "recap" | "results";
+export type RoomStatus = "lobby" | "draft" | "recap" | "results" | "betweenGames";
+export type BetweenGamePhase =
+  | "none"
+  | "keepers"
+  | "freeAgency"
+  | "freeAgencyResolution";
 
 export type RoomData = {
   roomId: string;
@@ -29,6 +35,8 @@ export type RoomData = {
   readyA: boolean;
   readyB: boolean;
 
+  draftFirstSide: "A" | "B";
+  totalDraftPicks: number;
   pickNumber: number;
   draftedIds: string[];
   teamA: DraftedPlayer[];
@@ -47,7 +55,84 @@ export type RoomData = {
   };
 
   simResult: SimResult | null;
+
+  seriesGameNumber: number;
+  seriesWinsA: number;
+  seriesWinsB: number;
+  seriesWinner: "A" | "B" | null;
+  seriesLastProcessedGame: number;
+
+  betweenGamePhase: BetweenGamePhase;
+  keepersA: string[];
+  keepersB: string[];
+  keepersLockedA: boolean;
+  keepersLockedB: boolean;
+  carriedPlayersA: DraftedPlayer[];
+  carriedPlayersB: DraftedPlayer[];
+  freeAgencyPool: DraftedPlayer[];
+  freeAgencyChoiceA: string | null;
+  freeAgencyChoiceB: string | null;
+  freeAgencyLockedA: boolean;
+  freeAgencyLockedB: boolean;
+  freeAgencyResolved: boolean;
+  freeAgencyReplacementSide: "A" | "B" | null;
+  freeAgencyAwardedSide: "A" | "B" | null;
+  freeAgencyContestedPlayerId: string | null;
+  freeAgencyResolutionText: string;
+
+  rematchAcceptedA: boolean;
+  rematchAcceptedB: boolean;
 };
+
+function emptyBetweenGameState() {
+  return {
+    betweenGamePhase: "none" as const,
+    keepersA: [] as string[],
+    keepersB: [] as string[],
+    keepersLockedA: false,
+    keepersLockedB: false,
+    carriedPlayersA: [] as DraftedPlayer[],
+    carriedPlayersB: [] as DraftedPlayer[],
+    freeAgencyPool: [] as DraftedPlayer[],
+    freeAgencyChoiceA: null as string | null,
+    freeAgencyChoiceB: null as string | null,
+    freeAgencyLockedA: false,
+    freeAgencyLockedB: false,
+    freeAgencyResolved: false,
+    freeAgencyReplacementSide: null as "A" | "B" | null,
+    freeAgencyAwardedSide: null as "A" | "B" | null,
+    freeAgencyContestedPlayerId: null as string | null,
+    freeAgencyResolutionText: "",
+  };
+}
+
+function createFreshSeriesState() {
+  return {
+    seriesGameNumber: 1,
+    seriesWinsA: 0,
+    seriesWinsB: 0,
+    seriesWinner: null as "A" | "B" | null,
+    seriesLastProcessedGame: 0,
+    ...emptyBetweenGameState(),
+    rematchAcceptedA: false,
+    rematchAcceptedB: false,
+  };
+}
+
+export function getRoomStatusHref(room: Pick<RoomData, "roomId" | "status">) {
+  switch (room.status) {
+    case "lobby":
+      return `/room/${room.roomId}`;
+    case "draft":
+      return `/draft?roomId=${room.roomId}`;
+    case "recap":
+      return `/recap?roomId=${room.roomId}`;
+    case "results":
+      return `/results?roomId=${room.roomId}`;
+    case "betweenGames":
+      return `/series?roomId=${room.roomId}`;
+  }
+}
 
 function randomRoomCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -60,15 +145,134 @@ function randomRoomCode() {
   return code;
 }
 
-function currentPicker2P(pickNumber: number): "A" | "B" {
+function randomFirstSide() {
+  return Math.random() < 0.5 ? "A" : "B";
+}
+
+function currentPicker2P(pickNumber: number, firstSide: "A" | "B"): "A" | "B" {
   const round = Math.floor(pickNumber / 2) + 1;
   const pickInRound = pickNumber % 2;
 
   if (round % 2 === 1) {
-    return pickInRound === 0 ? "A" : "B";
-  } else {
-    return pickInRound === 0 ? "B" : "A";
+    return pickInRound === 0 ? firstSide : firstSide === "A" ? "B" : "A";
   }
+
+  return pickInRound === 0 ? (firstSide === "A" ? "B" : "A") : firstSide;
+}
+
+function resetStrategyState() {
+  return {
+    teamAStrategy: {
+      offense: "Balanced",
+      defense: "Balanced",
+      locked: false,
+    },
+    teamBStrategy: {
+      offense: "Balanced",
+      defense: "Balanced",
+      locked: false,
+    },
+  };
+}
+
+function buildDraftReset(
+  room: RoomData,
+  options?: {
+    carriedPlayersA?: DraftedPlayer[];
+    carriedPlayersB?: DraftedPlayer[];
+    seriesGameNumber?: number;
+    resetSeries?: boolean;
+  }
+) {
+  if (!room.playerAId || !room.playerBId) {
+    throw new Error("Both players must be in the room for a draft reset");
+  }
+
+  const carriedPlayersA = options?.carriedPlayersA ?? [];
+  const carriedPlayersB = options?.carriedPlayersB ?? [];
+
+  return {
+    status: "draft" as const,
+    seed: Date.now(),
+    readyA: false,
+    readyB: false,
+    draftFirstSide: randomFirstSide(),
+    totalDraftPicks: Math.max(0, 24 - carriedPlayersA.length - carriedPlayersB.length),
+    pickNumber: 0,
+    draftedIds: [] as string[],
+    teamA: carriedPlayersA,
+    teamB: carriedPlayersB,
+    simResult: null,
+    ...(options?.resetSeries
+      ? createFreshSeriesState()
+      : {
+          seriesGameNumber: options?.seriesGameNumber ?? room.seriesGameNumber,
+          seriesWinsA: room.seriesWinsA,
+          seriesWinsB: room.seriesWinsB,
+          seriesWinner: null,
+          seriesLastProcessedGame: room.seriesLastProcessedGame,
+          ...emptyBetweenGameState(),
+          rematchAcceptedA: false,
+          rematchAcceptedB: false,
+        }),
+    ...resetStrategyState(),
+  };
+}
+
+function buildInitialRoomData(roomId: string, hostId: string, teamName: string): RoomData {
+  return {
+    roomId,
+    status: "lobby",
+    seed: Date.now(),
+    hostId,
+    createdAt: serverTimestamp(),
+    teamAName: teamName || "Team A",
+    teamBName: "",
+    playerAId: hostId,
+    playerBId: null,
+    readyA: false,
+    readyB: false,
+    draftFirstSide: "A",
+    totalDraftPicks: 24,
+    pickNumber: 0,
+    draftedIds: [],
+    teamA: [],
+    teamB: [],
+    ...resetStrategyState(),
+    simResult: null,
+    ...createFreshSeriesState(),
+  };
+}
+
+function getGameWinner(room: RoomData, simResult: SimResult): "A" | "B" {
+  if (simResult.finalA > simResult.finalB) return "A";
+  if (simResult.finalB > simResult.finalA) return "B";
+
+  return room.seed % 2 === 0 ? "A" : "B";
+}
+
+function getPlayerSide(room: RoomData, uid: string): "A" | "B" | null {
+  if (room.playerAId === uid) return "A";
+  if (room.playerBId === uid) return "B";
+  return null;
+}
+
+function selectKeepers(players: DraftedPlayer[], keeperIds: string[]) {
+  const keeperIdSet = new Set(keeperIds);
+  return players.filter((player) => keeperIdSet.has(player.id));
+}
+
+function getFreeAgencyTarget(pool: DraftedPlayer[], playerId: string | null) {
+  if (!playerId) return null;
+  return pool.find((candidate) => candidate.id === playerId) ?? null;
+}
+
+function buildNextSeriesDraft(room: RoomData, carriedPlayersA: DraftedPlayer[], carriedPlayersB: DraftedPlayer[]) {
+  return buildDraftReset(room, {
+    carriedPlayersA,
+    carriedPlayersB,
+    seriesGameNumber: room.seriesGameNumber + 1,
+  });
 }
 
 export async function createRoom(teamName: string) {
@@ -79,42 +283,7 @@ export async function createRoom(teamName: string) {
 
   const roomId = randomRoomCode();
   const roomRef = doc(db, "rooms", roomId);
-
-  const roomData: RoomData = {
-    roomId,
-    status: "lobby",
-    seed: Date.now(),
-    hostId: user.uid,
-    createdAt: serverTimestamp(),
-
-    teamAName: teamName || "Team A",
-    teamBName: "",
-
-    playerAId: user.uid,
-    playerBId: null,
-
-    readyA: false,
-    readyB: false,
-
-    pickNumber: 0,
-    draftedIds: [],
-    teamA: [],
-    teamB: [],
-
-    teamAStrategy: {
-      offense: "Balanced",
-      defense: "Balanced",
-      locked: false,
-    },
-
-    teamBStrategy: {
-      offense: "Balanced",
-      defense: "Balanced",
-      locked: false,
-    },
-
-    simResult: null,
-  };
+  const roomData = buildInitialRoomData(roomId, user.uid, teamName);
 
   await setDoc(roomRef, roomData);
   return roomId;
@@ -197,47 +366,7 @@ export async function startDraft(roomId: string) {
     throw new Error("Both players must be ready before starting the draft");
   }
 
-  const hostPlayerId = room.playerAId;
-  const joinerPlayerId = room.playerBId;
-  const hostTeamName = room.teamAName || "Team A";
-  const joinerTeamName = room.teamBName || "Team B";
-
-  const hostGetsFirstPick = Math.random() < 0.5;
-
-  const randomizedPlayerAId = hostGetsFirstPick ? hostPlayerId : joinerPlayerId;
-  const randomizedPlayerBId = hostGetsFirstPick ? joinerPlayerId : hostPlayerId;
-
-  const randomizedTeamAName = hostGetsFirstPick ? hostTeamName : joinerTeamName;
-  const randomizedTeamBName = hostGetsFirstPick ? joinerTeamName : hostTeamName;
-
-  await updateDoc(roomRef, {
-    status: "draft",
-    seed: Date.now(),
-
-    playerAId: randomizedPlayerAId,
-    playerBId: randomizedPlayerBId,
-    teamAName: randomizedTeamAName,
-    teamBName: randomizedTeamBName,
-
-    pickNumber: 0,
-    draftedIds: [],
-    teamA: [],
-    teamB: [],
-
-    teamAStrategy: {
-      offense: "Balanced",
-      defense: "Balanced",
-      locked: false,
-    },
-
-    teamBStrategy: {
-      offense: "Balanced",
-      defense: "Balanced",
-      locked: false,
-    },
-
-    simResult: null,
-  });
+  await updateDoc(roomRef, buildDraftReset(room));
 }
 
 export async function makeDraftPick(roomId: string, player: Prospect) {
@@ -261,11 +390,15 @@ export async function makeDraftPick(roomId: string, player: Prospect) {
       throw new Error("Draft is not active");
     }
 
+    if (room.pickNumber >= room.totalDraftPicks) {
+      throw new Error("Draft is complete");
+    }
+
     if (room.draftedIds.includes(player.id)) {
       throw new Error("Player already drafted");
     }
 
-    const currentTeam = currentPicker2P(room.pickNumber);
+    const currentTeam = currentPicker2P(room.pickNumber, room.draftFirstSide ?? "A");
     const expectedUserId = currentTeam === "A" ? room.playerAId : room.playerBId;
 
     if (user.uid !== expectedUserId) {
@@ -275,6 +408,11 @@ export async function makeDraftPick(roomId: string, player: Prospect) {
     const draftedPlayer: DraftedPlayer = {
       ...player,
       overallPick: room.pickNumber + 1,
+      careerStage: player.careerStage ?? "Rook",
+      acquisitionType: player.acquisitionType ?? "draft",
+      seriesSourceSeed: player.seriesSourceSeed ?? room.seed,
+      originalOverallPick: player.originalOverallPick ?? room.pickNumber + 1,
+      freeAgencyTag: null,
     };
 
     const nextDraftedIds = [...room.draftedIds, player.id];
@@ -321,7 +459,414 @@ export async function saveTeamStrategy(
   }
 }
 
-export async function saveSimResult(roomId: string, simResult: SimResult) {
+export async function finalizeSeriesGame(roomId: string, simResult: SimResult) {
   const roomRef = doc(db, "rooms", roomId);
-  await updateDoc(roomRef, { simResult });
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+
+    if (room.seriesLastProcessedGame >= room.seriesGameNumber && room.simResult) {
+      transaction.update(roomRef, { status: "results", simResult });
+      return;
+    }
+
+    const winnerSide = getGameWinner(room, simResult);
+    const nextWinsA = room.seriesWinsA + (winnerSide === "A" ? 1 : 0);
+    const nextWinsB = room.seriesWinsB + (winnerSide === "B" ? 1 : 0);
+    const seriesWinner =
+      nextWinsA >= 2 ? "A" : nextWinsB >= 2 ? "B" : null;
+
+    transaction.update(roomRef, {
+      simResult,
+      status: "results",
+      seriesWinsA: nextWinsA,
+      seriesWinsB: nextWinsB,
+      seriesWinner,
+      seriesLastProcessedGame: room.seriesGameNumber,
+      rematchAcceptedA: false,
+      rematchAcceptedB: false,
+    });
+  });
+}
+
+export async function beginBetweenGamePhase(roomId: string) {
+  const roomRef = doc(db, "rooms", roomId);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+
+    if (room.status !== "results" || !room.simResult) {
+      throw new Error("Between-games flow can only start after results");
+    }
+
+    if (room.seriesWinner) {
+      throw new Error("Series is already complete");
+    }
+
+    if (room.seriesLastProcessedGame < room.seriesGameNumber) {
+      throw new Error("Series result has not been finalized yet");
+    }
+
+    transaction.update(roomRef, {
+      status: "betweenGames",
+      betweenGamePhase: "keepers",
+      keepersA: [],
+      keepersB: [],
+      keepersLockedA: false,
+      keepersLockedB: false,
+      carriedPlayersA: [],
+      carriedPlayersB: [],
+      freeAgencyPool: [],
+      freeAgencyChoiceA: null,
+      freeAgencyChoiceB: null,
+      freeAgencyLockedA: false,
+      freeAgencyLockedB: false,
+      freeAgencyResolved: false,
+      freeAgencyReplacementSide: null,
+      freeAgencyAwardedSide: null,
+      freeAgencyContestedPlayerId: null,
+      freeAgencyResolutionText: "",
+    });
+  });
+}
+
+export async function saveKeeperSelection(
+  roomId: string,
+  side: "A" | "B",
+  keeperIds: string[]
+) {
+  await ensureAnonymousAuth();
+
+  const user = auth.currentUser;
+  if (!user) throw new Error("No authenticated user");
+
+  const roomRef = doc(db, "rooms", roomId);
+  const uniqueKeeperIds = [...new Set(keeperIds)].slice(0, 2);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+    const actualSide = getPlayerSide(room, user.uid);
+
+    if (!actualSide || actualSide !== side) {
+      throw new Error("You can only edit your own keepers");
+    }
+
+    if (room.status !== "betweenGames" || room.betweenGamePhase !== "keepers") {
+      throw new Error("Keeper phase is not active");
+    }
+
+    if (actualSide === "A" && room.keepersLockedA) {
+      throw new Error("Your keepers are already locked");
+    }
+
+    if (actualSide === "B" && room.keepersLockedB) {
+      throw new Error("Your keepers are already locked");
+    }
+
+    if (actualSide === "A") {
+      transaction.update(roomRef, { keepersA: uniqueKeeperIds });
+    } else {
+      transaction.update(roomRef, { keepersB: uniqueKeeperIds });
+    }
+  });
+}
+
+export async function lockKeepers(roomId: string, side: "A" | "B") {
+  await ensureAnonymousAuth();
+
+  const user = auth.currentUser;
+  if (!user) throw new Error("No authenticated user");
+
+  const roomRef = doc(db, "rooms", roomId);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+    const actualSide = getPlayerSide(room, user.uid);
+
+    if (!actualSide || actualSide !== side) {
+      throw new Error("You can only lock your own keepers");
+    }
+
+    if (room.status !== "betweenGames" || room.betweenGamePhase !== "keepers") {
+      throw new Error("Keeper phase is not active");
+    }
+
+    const ownTeam = side === "A" ? room.teamA : room.teamB;
+    const keeperIds = side === "A" ? room.keepersA : room.keepersB;
+
+    if (keeperIds.length !== 2) {
+      throw new Error("You must select exactly 2 keepers");
+    }
+
+    const ownIds = new Set(ownTeam.map((player) => player.id));
+    if (!keeperIds.every((keeperId) => ownIds.has(keeperId))) {
+      throw new Error("Keepers must come from your own roster");
+    }
+
+    const selectedKeepers = selectKeepers(ownTeam, keeperIds);
+    if (selectedKeepers.some((player) => willRetireAfterGame(player))) {
+      throw new Error("Retiring players cannot be kept");
+    }
+
+    const updates =
+      side === "A"
+        ? { keepersLockedA: true }
+        : { keepersLockedB: true };
+
+    const nextLockedA = side === "A" ? true : room.keepersLockedA;
+    const nextLockedB = side === "B" ? true : room.keepersLockedB;
+
+    if (nextLockedA && nextLockedB) {
+      const nextGameNumber = room.seriesGameNumber + 1;
+      const carriedPlayersA = selectKeepers(room.teamA, room.keepersA)
+        .map((player) => agePlayerForSeries(player, nextGameNumber, "A", "keeper"))
+        .filter((player): player is DraftedPlayer => player !== null);
+      const carriedPlayersB = selectKeepers(room.teamB, room.keepersB)
+        .map((player) => agePlayerForSeries(player, nextGameNumber, "B", "keeper"))
+        .filter((player): player is DraftedPlayer => player !== null);
+      const freeAgencyPool = buildFreeAgencyPool({
+        previousSeed: room.seed,
+        previousTeamA: room.teamA,
+        previousTeamB: room.teamB,
+        keeperIdsA: room.keepersA,
+        keeperIdsB: room.keepersB,
+        nextGameNumber,
+      });
+
+      transaction.update(roomRef, {
+        ...updates,
+        carriedPlayersA,
+        carriedPlayersB,
+        betweenGamePhase: "freeAgency",
+        freeAgencyPool,
+        freeAgencyChoiceA: null,
+        freeAgencyChoiceB: null,
+        freeAgencyLockedA: false,
+        freeAgencyLockedB: false,
+        freeAgencyResolved: false,
+        freeAgencyReplacementSide: null,
+        freeAgencyAwardedSide: null,
+        freeAgencyContestedPlayerId: null,
+        freeAgencyResolutionText: "",
+      });
+      return;
+    }
+
+    transaction.update(roomRef, updates);
+  });
+}
+
+export async function submitFreeAgencyChoice(
+  roomId: string,
+  side: "A" | "B",
+  playerId: string
+) {
+  await ensureAnonymousAuth();
+
+  const user = auth.currentUser;
+  if (!user) throw new Error("No authenticated user");
+
+  const roomRef = doc(db, "rooms", roomId);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+    const actualSide = getPlayerSide(room, user.uid);
+
+    if (!actualSide || actualSide !== side) {
+      throw new Error("You can only submit free agency choices for your own side");
+    }
+
+    if (room.status !== "betweenGames") {
+      throw new Error("Between-games flow is not active");
+    }
+
+    if (
+      room.betweenGamePhase !== "freeAgency" &&
+      room.betweenGamePhase !== "freeAgencyResolution"
+    ) {
+      throw new Error("Free agency is not active");
+    }
+
+    const target = getFreeAgencyTarget(room.freeAgencyPool, playerId);
+
+    if (!target) {
+      throw new Error("Selected free agent is unavailable");
+    }
+
+    if (
+      room.betweenGamePhase === "freeAgencyResolution" &&
+      room.freeAgencyReplacementSide !== side
+    ) {
+      throw new Error("Only the replacement side can make this pick");
+    }
+
+    if (
+      room.betweenGamePhase === "freeAgencyResolution" &&
+      playerId === room.freeAgencyContestedPlayerId
+    ) {
+      throw new Error("You must choose a different free agent");
+    }
+
+    if (room.betweenGamePhase === "freeAgency") {
+      if (side === "A" && room.freeAgencyLockedA) {
+        throw new Error("Your free agency choice is already locked");
+      }
+
+      if (side === "B" && room.freeAgencyLockedB) {
+        throw new Error("Your free agency choice is already locked");
+      }
+    }
+
+    if (room.betweenGamePhase === "freeAgencyResolution") {
+      const nextCarriedA = [...room.carriedPlayersA];
+      const nextCarriedB = [...room.carriedPlayersB];
+
+      if (side === "A") {
+        nextCarriedA.push(target);
+      } else {
+        nextCarriedB.push(target);
+      }
+
+      transaction.update(roomRef, buildNextSeriesDraft(room, nextCarriedA, nextCarriedB));
+      return;
+    }
+
+    const nextChoiceA = side === "A" ? playerId : room.freeAgencyChoiceA;
+    const nextChoiceB = side === "B" ? playerId : room.freeAgencyChoiceB;
+    const nextLockedA = side === "A" ? true : room.freeAgencyLockedA;
+    const nextLockedB = side === "B" ? true : room.freeAgencyLockedB;
+
+    if (!(nextLockedA && nextLockedB && nextChoiceA && nextChoiceB)) {
+      transaction.update(roomRef, {
+        freeAgencyChoiceA: nextChoiceA,
+        freeAgencyChoiceB: nextChoiceB,
+        freeAgencyLockedA: nextLockedA,
+        freeAgencyLockedB: nextLockedB,
+      });
+      return;
+    }
+
+    const choiceA = getFreeAgencyTarget(room.freeAgencyPool, nextChoiceA);
+    const choiceB = getFreeAgencyTarget(room.freeAgencyPool, nextChoiceB);
+
+    if (!choiceA || !choiceB) {
+      throw new Error("Free agency choices could not be resolved");
+    }
+
+    if (choiceA.id !== choiceB.id) {
+      transaction.update(
+        roomRef,
+        buildNextSeriesDraft(room, [...room.carriedPlayersA, choiceA], [...room.carriedPlayersB, choiceB])
+      );
+      return;
+    }
+
+    const contestedPlayerId = choiceA.id;
+    const seriesTied = room.seriesWinsA === room.seriesWinsB;
+    const awardedSide = seriesTied
+      ? Math.random() < 0.5
+        ? "A"
+        : "B"
+      : room.seriesWinsA > room.seriesWinsB
+        ? "B"
+        : "A";
+    const replacementSide = awardedSide === "A" ? "B" : "A";
+    const nextCarriedA = [...room.carriedPlayersA];
+    const nextCarriedB = [...room.carriedPlayersB];
+
+    if (awardedSide === "A") {
+      nextCarriedA.push(choiceA);
+    } else {
+      nextCarriedB.push(choiceA);
+    }
+
+    transaction.update(roomRef, {
+      carriedPlayersA: nextCarriedA,
+      carriedPlayersB: nextCarriedB,
+      betweenGamePhase: "freeAgencyResolution",
+      freeAgencyChoiceA: awardedSide === "A" ? contestedPlayerId : null,
+      freeAgencyChoiceB: awardedSide === "B" ? contestedPlayerId : null,
+      freeAgencyLockedA: awardedSide === "A",
+      freeAgencyLockedB: awardedSide === "B",
+      freeAgencyResolved: true,
+      freeAgencyReplacementSide: replacementSide,
+      freeAgencyAwardedSide: awardedSide,
+      freeAgencyContestedPlayerId: contestedPlayerId,
+      freeAgencyResolutionText: seriesTied
+        ? `Both coaches went after ${choiceA.name}. Contested signing resolved by coin flip. Losing player receives a consolation pick.`
+        : `Both coaches went after ${choiceA.name}. Game 1 loser has priority in contested free agency.`,
+    });
+  });
+}
+
+export async function acceptRematch(roomId: string) {
+  await ensureAnonymousAuth();
+
+  const user = auth.currentUser;
+  if (!user) throw new Error("No authenticated user");
+
+  const roomRef = doc(db, "rooms", roomId);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+
+    if (room.status !== "results" || !room.simResult || !room.seriesWinner) {
+      throw new Error("Rematch is only available after the series ends");
+    }
+
+    const side = getPlayerSide(room, user.uid);
+
+    if (!side) {
+      throw new Error("You are not a player in this room");
+    }
+
+    const nextAcceptedA = side === "A" ? true : room.rematchAcceptedA;
+    const nextAcceptedB = side === "B" ? true : room.rematchAcceptedB;
+
+    if (nextAcceptedA && nextAcceptedB) {
+      transaction.update(roomRef, buildDraftReset(room, { resetSeries: true }));
+      return;
+    }
+
+    transaction.update(roomRef, {
+      rematchAcceptedA: nextAcceptedA,
+      rematchAcceptedB: nextAcceptedB,
+    });
+  });
 }
