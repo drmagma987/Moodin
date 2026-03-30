@@ -12,6 +12,10 @@ import type { DraftedPlayer, Prospect } from "./game/types";
 import { agePlayerForSeries, buildFreeAgencyPool, willRetireAfterGame } from "./series";
 import type { SimResult } from "./sim";
 
+function notNull<T>(value: T | null): value is T {
+  return value !== null;
+}
+
 export type RoomStatus = "lobby" | "draft" | "recap" | "results" | "betweenGames";
 export type BetweenGamePhase =
   | "none"
@@ -644,10 +648,10 @@ export async function lockKeepers(roomId: string, side: "A" | "B") {
       const nextGameNumber = room.seriesGameNumber + 1;
       const carriedPlayersA = selectKeepers(room.teamA, room.keepersA)
         .map((player) => agePlayerForSeries(player, nextGameNumber, "A", "keeper"))
-        .filter((player): player is DraftedPlayer => player !== null);
+        .filter(notNull);
       const carriedPlayersB = selectKeepers(room.teamB, room.keepersB)
         .map((player) => agePlayerForSeries(player, nextGameNumber, "B", "keeper"))
-        .filter((player): player is DraftedPlayer => player !== null);
+        .filter(notNull);
       const freeAgencyPool = buildFreeAgencyPool({
         previousSeed: room.seed,
         previousTeamA: room.teamA,

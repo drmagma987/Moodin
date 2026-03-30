@@ -126,13 +126,14 @@ export default function DraftPage() {
   useEffect(() => {
     if (!roomId) return;
 
+    const currentRoomId = roomId;
     let unsub: (() => void) | undefined;
 
     async function setup() {
       await ensureAnonymousAuth();
       setUid(auth.currentUser?.uid ?? null);
 
-      unsub = subscribeToRoom(roomId, (nextRoom) => {
+      unsub = subscribeToRoom(currentRoomId, (nextRoom) => {
         setRoom(nextRoom);
         if (nextRoom && nextRoom.status !== "draft") {
           router.replace(getRoomStatusHref(nextRoom));

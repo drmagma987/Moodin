@@ -44,13 +44,14 @@ export default function SeriesPage() {
   useEffect(() => {
     if (!roomId) return;
 
+    const currentRoomId = roomId;
     let unsub: (() => void) | undefined;
 
     async function syncRoom() {
       await ensureAnonymousAuth();
       setUid(auth.currentUser?.uid ?? null);
 
-      unsub = subscribeToRoom(roomId, (nextRoom) => {
+      unsub = subscribeToRoom(currentRoomId, (nextRoom) => {
         setRoom(nextRoom);
       });
     }

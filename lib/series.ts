@@ -5,6 +5,10 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function notNull<T>(value: T | null): value is T {
+  return value !== null;
+}
+
 export function currentCareerStage(player: Pick<DraftedPlayer, "careerStage">) {
   return player.careerStage ?? "Rook";
 }
@@ -191,7 +195,7 @@ export function buildFreeAgencyPool({
         freeAgencyTag: null,
       };
     })
-    .filter((player): player is DraftedPlayer => player !== null);
+    .filter(notNull);
 
   const undraftedCandidates = fullDraftClass
     .filter((player) => !rosterIds.has(player.id))
