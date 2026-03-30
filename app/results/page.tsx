@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { getSeriesPressureMessage } from "@/lib/series";
@@ -90,7 +90,7 @@ function ResultsTimeline({
   );
 }
 
-export default function ResultsPage() {
+function ResultsPageContent() {
   const searchParams = useSearchParams();
   const roomId = searchParams.get("roomId");
   const router = useRouter();
@@ -340,5 +340,13 @@ export default function ResultsPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen px-4 py-8 sm:px-6 sm:py-10"><div className="mx-auto w-full max-w-5xl"><h1 className="text-2xl font-bold sm:text-3xl">Game Results</h1><p className="mt-4 opacity-70">Loading game results...</p></div></main>}>
+      <ResultsPageContent />
+    </Suspense>
   );
 }

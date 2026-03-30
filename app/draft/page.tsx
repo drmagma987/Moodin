@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { generateProspects } from "@/lib/game/prospects";
@@ -112,7 +112,7 @@ function scarcityTone(count: number) {
   return "border-gray-200 bg-gray-50 text-gray-700";
 }
 
-export default function DraftPage() {
+function DraftPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -508,5 +508,13 @@ export default function DraftPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function DraftPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen px-4 py-8 sm:px-6 sm:py-10"><div className="mx-auto w-full max-w-6xl"><h1 className="text-2xl font-bold sm:text-3xl">Moodin Draft Board</h1><p className="mt-4 opacity-70">Loading draft room...</p></div></main>}>
+      <DraftPageContent />
+    </Suspense>
   );
 }

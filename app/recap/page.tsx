@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { generateProspects } from "@/lib/game/prospects";
@@ -272,7 +272,7 @@ function strategyStatusClasses(locked: boolean) {
     : "border-amber-200 bg-amber-50 text-amber-700";
 }
 
-export default function RecapPage() {
+function RecapPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roomId = searchParams.get("roomId");
@@ -697,5 +697,13 @@ export default function RecapPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function RecapPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen px-4 py-8 sm:px-6 sm:py-10"><div className="mx-auto w-full max-w-6xl"><h1 className="text-2xl font-bold sm:text-3xl">Draft Recap</h1><p className="mt-4 opacity-70">Loading draft recap...</p></div></main>}>
+      <RecapPageContent />
+    </Suspense>
   );
 }

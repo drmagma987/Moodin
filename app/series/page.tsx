@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import {
@@ -30,7 +30,7 @@ function cardClasses(selected: boolean, disabled: boolean) {
   return "border-gray-200 bg-white";
 }
 
-export default function SeriesPage() {
+function SeriesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roomId = searchParams.get("roomId");
@@ -463,5 +463,13 @@ export default function SeriesPage() {
         {actionError && <p className="text-sm text-red-600">{actionError}</p>}
       </div>
     </main>
+  );
+}
+
+export default function SeriesPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen px-4 py-8 sm:px-6 sm:py-10"><div className="mx-auto w-full max-w-5xl"><h1 className="text-2xl font-bold sm:text-3xl">Run It Back</h1><p className="mt-4 opacity-70">Loading between-games flow...</p></div></main>}>
+      <SeriesPageContent />
+    </Suspense>
   );
 }
