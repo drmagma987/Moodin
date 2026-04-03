@@ -272,6 +272,14 @@ function strategyStatusClasses(locked: boolean) {
     : "border-amber-200 bg-amber-50 text-amber-700";
 }
 
+function HiddenStrategyState({ locked }: { locked: boolean }) {
+  return (
+    <div className="rounded-xl border bg-gray-50 p-3 text-sm opacity-80">
+      {locked ? "Locked. Hidden until kickoff." : "Waiting on this coach to lock a strategy."}
+    </div>
+  );
+}
+
 function RecapPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -601,30 +609,38 @@ function RecapPageContent() {
 
             <div className="space-y-2">
               <label className="block text-sm font-medium">Offense Strategy</label>
-              <select
-                value={selectedTeamAOffense}
-                onChange={(e) => setTeamAOffenseStrategy(e.target.value)}
-                disabled={mySide !== "A" || teamALocked}
-                className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
-              >
-                <option>Balanced</option>
-                <option>Pass Heavy</option>
-                <option>Run Heavy</option>
-              </select>
+              {mySide === "A" ? (
+                <select
+                  value={selectedTeamAOffense}
+                  onChange={(e) => setTeamAOffenseStrategy(e.target.value)}
+                  disabled={teamALocked}
+                  className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
+                >
+                  <option>Balanced</option>
+                  <option>Pass Heavy</option>
+                  <option>Run Heavy</option>
+                </select>
+              ) : (
+                <HiddenStrategyState locked={teamALocked} />
+              )}
             </div>
 
             <div className="space-y-2">
               <label className="block text-sm font-medium">Defense Strategy</label>
-              <select
-                value={selectedTeamADefense}
-                onChange={(e) => setTeamADefenseStrategy(e.target.value)}
-                disabled={mySide !== "A" || teamALocked}
-                className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
-              >
-                <option>Balanced</option>
-                <option>Pressure</option>
-                <option>Coverage</option>
-              </select>
+              {mySide === "A" ? (
+                <select
+                  value={selectedTeamADefense}
+                  onChange={(e) => setTeamADefenseStrategy(e.target.value)}
+                  disabled={teamALocked}
+                  className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
+                >
+                  <option>Balanced</option>
+                  <option>Pressure</option>
+                  <option>Coverage</option>
+                </select>
+              ) : (
+                <HiddenStrategyState locked={teamALocked} />
+              )}
             </div>
           </div>
 
@@ -642,30 +658,38 @@ function RecapPageContent() {
 
             <div className="space-y-2">
               <label className="block text-sm font-medium">Offense Strategy</label>
-              <select
-                value={selectedTeamBOffense}
-                onChange={(e) => setTeamBOffenseStrategy(e.target.value)}
-                disabled={mySide !== "B" || teamBLocked}
-                className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
-              >
-                <option>Balanced</option>
-                <option>Pass Heavy</option>
-                <option>Run Heavy</option>
-              </select>
+              {mySide === "B" ? (
+                <select
+                  value={selectedTeamBOffense}
+                  onChange={(e) => setTeamBOffenseStrategy(e.target.value)}
+                  disabled={teamBLocked}
+                  className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
+                >
+                  <option>Balanced</option>
+                  <option>Pass Heavy</option>
+                  <option>Run Heavy</option>
+                </select>
+              ) : (
+                <HiddenStrategyState locked={teamBLocked} />
+              )}
             </div>
 
             <div className="space-y-2">
               <label className="block text-sm font-medium">Defense Strategy</label>
-              <select
-                value={selectedTeamBDefense}
-                onChange={(e) => setTeamBDefenseStrategy(e.target.value)}
-                disabled={mySide !== "B" || teamBLocked}
-                className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
-              >
-                <option>Balanced</option>
-                <option>Pressure</option>
-                <option>Coverage</option>
-              </select>
+              {mySide === "B" ? (
+                <select
+                  value={selectedTeamBDefense}
+                  onChange={(e) => setTeamBDefenseStrategy(e.target.value)}
+                  disabled={teamBLocked}
+                  className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
+                >
+                  <option>Balanced</option>
+                  <option>Pressure</option>
+                  <option>Coverage</option>
+                </select>
+              ) : (
+                <HiddenStrategyState locked={teamBLocked} />
+              )}
             </div>
           </div>
         </div>

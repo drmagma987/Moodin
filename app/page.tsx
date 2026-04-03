@@ -55,6 +55,9 @@ export default function Home() {
 
         <div className="mx-auto w-full max-w-xl rounded-2xl border p-5 space-y-4 sm:p-6">
           <h2 className="text-xl font-semibold sm:text-2xl">Online 1v1</h2>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Quick heads-up: confirm with your opponent who is creating the room and who is joining before you start.
+          </div>
 
           <input
             type="text"

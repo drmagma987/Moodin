@@ -34,12 +34,38 @@ export type QuarterResult = {
   scoreA: number;
   scoreB: number;
   plays: string[];
+  highlights: QuarterHighlight[];
+};
+
+export type QuarterHighlight = {
+  id: string;
+  text: string;
+  scoreA: number;
+  scoreB: number;
+  isScore: boolean;
+};
+
+export type PlayerGameStats = {
+  playerId: string;
+  name: string;
+  position: DraftedPlayer["position"];
+  passingYards: number;
+  passingTD: number;
+  interceptions: number;
+  rushYards: number;
+  rushTD: number;
+  carries: number;
+  receivingYards: number;
+  receivingTD: number;
+  receptions: number;
 };
 
 export type SimResult = {
   finalA: number;
   finalB: number;
   quarters: QuarterResult[];
+  teamAStats: PlayerGameStats[];
+  teamBStats: PlayerGameStats[];
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -410,52 +436,283 @@ function chooseTouchdownScorer(
   return candidates[0];
 }
 
-function buildQuarterPlays(
-  scoringTeamName: string,
-  defendingTeamName: string,
-  scoringTeamProfile: ReturnType<typeof buildTeamProfile>,
-  scoringPoints: number,
-  rand: () => number
+function chooseBigPlayMaker(
+  profile: ReturnType<typeof buildTeamProfile>,
+  rand: () => number,
+  preferPass: boolean
 ) {
-  const plays: string[] = [];
+  const candidates: { name: string; weight: number; kind: "pass" | "run" }[] = [];
 
-  if (scoringPoints >= 7) {
-    const scorer = chooseTouchdownScorer(
-      scoringTeamProfile,
-      rand,
-      scoringTeamProfile.offenseStyle === "Pass Heavy"
-    );
+  if (profile.wr1) candidates.push({ name: profile.wr1.name, weight: preferPass ? 34 : 14, kind: "pass" });
+  if (profile.wr2) candidates.push({ name: profile.wr2.name, weight: preferPass ? 24 : 10, kind: "pass" });
+  if (profile.te) candidates.push({ name: profile.te.name, weight: preferPass ? 12 : 6, kind: "pass" });
+  if (profile.rb) candidates.push({ name: profile.rb.name, weight: preferPass ? 10 : 28, kind: "run" });
+  if (profile.qb) candidates.push({ name: profile.qb.name, weight: preferPass ? 8 : 10, kind: "run" });
 
-    if (scorer.kind === "pass") {
-      plays.push(`${scoringTeamName}: Touchdown pass finished by ${scorer.name}.`);
-    } else {
-      plays.push(`${scoringTeamName}: Rushing touchdown by ${scorer.name}.`);
-    }
-  } else if (scoringPoints >= 3) {
-    plays.push(`${scoringTeamName}: Field goal caps the drive.`);
+  const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);
+  let roll = rand() * totalWeight;
+
+  for (const candidate of candidates) {
+    roll -= candidate.weight;
+    if (roll <= 0) return candidate;
   }
 
-  const fillerTemplates = [
-    `${defendingTeamName}: Coverage tightens up late in the quarter.`,
-    `${defendingTeamName}: Pressure forces a tough third-down decision.`,
-    `${scoringTeamName}: Big play flips field position.`,
-    `${scoringTeamName}: Sustained drive keeps the chains moving.`,
-    `${scoringTeamName}: Red-zone execution turns momentum their way.`,
-  ];
+  return candidates[0] ?? { name: "Unknown Player", kind: "pass" as const };
+}
 
-  const filler = fillerTemplates[Math.floor(rand() * fillerTemplates.length)];
-  plays.push(filler);
+function initPlayerStats(team: DraftedPlayer[]) {
+  return new Map(
+    team.map((player) => [
+      player.id,
+      {
+        playerId: player.id,
+        name: player.name,
+        position: player.position,
+        passingYards: 0,
+        passingTD: 0,
+        interceptions: 0,
+        rushYards: 0,
+        rushTD: 0,
+        carries: 0,
+        receivingYards: 0,
+        receivingTD: 0,
+        receptions: 0,
+      },
+    ])
+  );
+}
 
-  return plays;
+function distributeIntegerTotal(
+  recipients: Array<{ id: string; weight: number }>,
+  total: number
+) {
+  if (total <= 0 || recipients.length === 0) return new Map<string, number>();
+
+  const validRecipients = recipients.filter((recipient) => recipient.weight > 0);
+  if (validRecipients.length === 0) return new Map<string, number>();
+
+  const totalWeight = validRecipients.reduce((sum, recipient) => sum + recipient.weight, 0);
+  const rawShares = validRecipients.map((recipient) => ({
+    id: recipient.id,
+    value: (recipient.weight / totalWeight) * total,
+  }));
+  const shares = new Map<string, number>();
+
+  let assigned = 0;
+  for (const share of rawShares) {
+    const base = Math.floor(share.value);
+    shares.set(share.id, base);
+    assigned += base;
+  }
+
+  const remainders = rawShares
+    .map((share) => ({
+      id: share.id,
+      remainder: share.value - Math.floor(share.value),
+    }))
+    .sort((a, b) => b.remainder - a.remainder);
+
+  for (let index = 0; index < total - assigned; index += 1) {
+    const next = remainders[index % remainders.length];
+    shares.set(next.id, (shares.get(next.id) ?? 0) + 1);
+  }
+
+  return shares;
+}
+
+function buildTeamGameStats(
+  team: DraftedPlayer[],
+  profile: ReturnType<typeof buildTeamProfile>,
+  finalPoints: number,
+  rand: () => number
+) {
+  const stats = initPlayerStats(team);
+  const touchdowns = Math.max(0, Math.floor(finalPoints / 7));
+  const totalYards = clamp(
+    Math.round(
+      195 +
+        finalPoints * 13 +
+        (profile.passAttack + profile.runAttack) * 0.9 +
+        (rand() - 0.5) * 50
+    ),
+    150,
+    520
+  );
+  const passShare = clamp(
+    profile.passLean + (profile.offenseStyle === "Pass Heavy" ? 0.05 : profile.offenseStyle === "Run Heavy" ? -0.08 : 0),
+    0.28,
+    0.78
+  );
+  const passingYards = Math.round(totalYards * passShare);
+  const rushingYards = Math.max(0, totalYards - passingYards);
+  const passTouchdowns = clamp(
+    Math.round(touchdowns * (passShare + (profile.offenseStyle === "Pass Heavy" ? 0.08 : 0))),
+    0,
+    touchdowns
+  );
+  const rushTouchdowns = Math.max(0, touchdowns - passTouchdowns);
+  const totalReceptions = clamp(Math.round(passingYards / 11.2), 8, 34);
+  const totalCarries = clamp(Math.round(rushingYards / 4.4), 12, 32);
+  const interceptions = clamp(
+    Math.round(
+      (100 - profile.ballSecurity) * 0.03 +
+        (profile.offenseStyle === "Pass Heavy" ? 0.4 : 0) +
+        (rand() < 0.3 ? 1 : 0)
+    ),
+    0,
+    3
+  );
+
+  const qb = profile.qb;
+  const rb = profile.rb;
+  const te = profile.te;
+  const wr1 = profile.wr1;
+  const wr2 = profile.wr2;
+
+  if (qb) {
+    const qbStats = stats.get(qb.id);
+    if (qbStats) {
+      qbStats.passingYards = passingYards;
+      qbStats.passingTD = passTouchdowns;
+      qbStats.interceptions = interceptions;
+    }
+  }
+
+  const receptionShares = distributeIntegerTotal(
+    [
+      ...(wr1 ? [{ id: wr1.id, weight: 34 }] : []),
+      ...(wr2 ? [{ id: wr2.id, weight: 26 }] : []),
+      ...(te ? [{ id: te.id, weight: 18 }] : []),
+      ...(rb ? [{ id: rb.id, weight: 12 }] : []),
+    ],
+    totalReceptions
+  );
+  const receivingYardShares = distributeIntegerTotal(
+    [
+      ...(wr1 ? [{ id: wr1.id, weight: 38 }] : []),
+      ...(wr2 ? [{ id: wr2.id, weight: 28 }] : []),
+      ...(te ? [{ id: te.id, weight: 18 }] : []),
+      ...(rb ? [{ id: rb.id, weight: 16 }] : []),
+    ],
+    passingYards
+  );
+  const receivingTDShares = distributeIntegerTotal(
+    [
+      ...(wr1 ? [{ id: wr1.id, weight: 36 }] : []),
+      ...(wr2 ? [{ id: wr2.id, weight: 24 }] : []),
+      ...(te ? [{ id: te.id, weight: 20 }] : []),
+      ...(rb ? [{ id: rb.id, weight: 10 }] : []),
+    ],
+    passTouchdowns
+  );
+  const carryShares = distributeIntegerTotal(
+    [
+      ...(rb ? [{ id: rb.id, weight: 34 }] : []),
+      ...(qb ? [{ id: qb.id, weight: 12 }] : []),
+      ...(te ? [{ id: te.id, weight: 3 }] : []),
+    ],
+    totalCarries
+  );
+  const rushingYardShares = distributeIntegerTotal(
+    [
+      ...(rb ? [{ id: rb.id, weight: 36 }] : []),
+      ...(qb ? [{ id: qb.id, weight: 14 }] : []),
+      ...(te ? [{ id: te.id, weight: 3 }] : []),
+    ],
+    rushingYards
+  );
+  const rushingTDShares = distributeIntegerTotal(
+    [
+      ...(rb ? [{ id: rb.id, weight: 32 }] : []),
+      ...(qb ? [{ id: qb.id, weight: 12 }] : []),
+    ],
+    rushTouchdowns
+  );
+
+  for (const [playerId, receptions] of receptionShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.receptions = receptions;
+  }
+
+  for (const [playerId, yards] of receivingYardShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.receivingYards = yards;
+  }
+
+  for (const [playerId, touchdownsForPlayer] of receivingTDShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.receivingTD = touchdownsForPlayer;
+  }
+
+  for (const [playerId, carries] of carryShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.carries = carries;
+  }
+
+  for (const [playerId, yards] of rushingYardShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.rushYards = yards;
+  }
+
+  for (const [playerId, touchdownsForPlayer] of rushingTDShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.rushTD = touchdownsForPlayer;
+  }
+
+  return [...stats.values()].sort((a, b) => {
+    const aImpact =
+      a.passingTD * 12 +
+      a.receivingTD * 8 +
+      a.rushTD * 8 +
+      a.passingYards * 0.08 +
+      a.receivingYards * 0.1 +
+      a.rushYards * 0.1;
+    const bImpact =
+      b.passingTD * 12 +
+      b.receivingTD * 8 +
+      b.rushTD * 8 +
+      b.passingYards * 0.08 +
+      b.receivingYards * 0.1 +
+      b.rushYards * 0.1;
+    return bImpact - aImpact;
+  });
+}
+
+function bigPlayText(
+  scoringTeamName: string,
+  playerName: string,
+  playKind: "pass" | "run",
+  yardage: number
+) {
+  return playKind === "pass"
+    ? `${scoringTeamName}: ${playerName} rips off a ${yardage}-yard catch-and-run to flip the quarter.`
+    : `${scoringTeamName}: ${playerName} bursts loose for ${yardage} yards and swings field position.`;
+}
+
+function touchdownText(
+  scoringTeamName: string,
+  scorer: { name: string; kind: "pass" | "run" },
+  yardage: number
+) {
+  return scorer.kind === "pass"
+    ? `${scoringTeamName}: Touchdown on a ${yardage}-yard strike finished by ${scorer.name}.`
+    : `${scoringTeamName}: ${scorer.name} punches in a ${yardage}-yard rushing touchdown.`;
+}
+
+function fieldGoalText(scoringTeamName: string, yardage: number) {
+  return `${scoringTeamName}: ${yardage}-yard field goal is good, and the scoreboard moves.`;
 }
 
 function simulateQuarterTeamPoints(
+  offenseTeamName: string,
+  defenseTeamName: string,
+  side: "A" | "B",
   offense: ReturnType<typeof buildTeamProfile>,
   defense: ReturnType<typeof buildTeamProfile>,
   rand: () => number
 ) {
   let points = 0;
-  const plays: string[] = [];
+  const highlights: Array<{ text: string; pointsA: number; pointsB: number; isScore: boolean }> = [];
 
   for (let drive = 0; drive < 3; drive++) {
     const passEdge = offense.passAttack - defense.passDefense;
@@ -509,11 +766,48 @@ function simulateQuarterTeamPoints(
       );
 
       if (rand() < tdChance) {
+        if (rand() < clamp(0.33 + bigPlayEdge * 0.002, 0.2, 0.7)) {
+          const playmaker = chooseBigPlayMaker(offense, rand, passLean >= runLean);
+          const yardage = clamp(
+            Math.round(28 + rand() * 30 + Math.max(bigPlayEdge, 0) * 0.12),
+            21,
+            61
+          );
+          highlights.push({
+            text: bigPlayText(offenseTeamName, playmaker.name, playmaker.kind, yardage),
+            pointsA: 0,
+            pointsB: 0,
+            isScore: false,
+          });
+        }
+
         points += 7;
-        plays.push(...buildQuarterPlays("OFFENSE", "DEFENSE", offense, 7, rand));
+        const scorer = chooseTouchdownScorer(
+          offense,
+          rand,
+          offense.offenseStyle === "Pass Heavy" || passLean >= runLean
+        );
+        const yardage = scorer.kind === "pass"
+          ? clamp(Math.round(10 + rand() * 28), 7, 38)
+          : clamp(Math.round(2 + rand() * 13), 1, 15);
+
+        highlights.push({
+          text: touchdownText(offenseTeamName, scorer, yardage),
+          pointsA: side === "A" ? 7 : 0,
+          pointsB: side === "B" ? 7 : 0,
+          isScore: true,
+        });
       } else {
         points += 3;
-        plays.push("Field goal caps the drive.");
+        highlights.push({
+          text: fieldGoalText(
+            offenseTeamName,
+            clamp(Math.round(31 + rand() * 22), 29, 53)
+          ),
+          pointsA: side === "A" ? 3 : 0,
+          pointsB: side === "B" ? 3 : 0,
+          isScore: true,
+        });
       }
     } else {
       const turnoverChance = clamp(
@@ -526,13 +820,21 @@ function simulateQuarterTeamPoints(
         0.04,
         0.34
       );
-      if (rand() < turnoverChance && plays.length < 3) {
-        plays.push("Pressure forces a drive-killing mistake.");
+      if (rand() < turnoverChance && highlights.length < 4) {
+        highlights.push({
+          text:
+            rand() < 0.5
+              ? `${defenseTeamName}: pressure blows up the drive and forces a brutal mistake.`
+              : `${defenseTeamName}: a takeaway wipes out a promising possession.`,
+          pointsA: 0,
+          pointsB: 0,
+          isScore: false,
+        });
       }
     }
   }
 
-  return { points, plays };
+  return { points, highlights };
 }
 
 export function simulateGame(setup: GameSetup): SimResult {
@@ -555,39 +857,67 @@ export function simulateGame(setup: GameSetup): SimResult {
   const quarters: QuarterResult[] = [];
 
   for (let i = 0; i < 4; i++) {
-    const aQuarter = simulateQuarterTeamPoints(teamAProfile, teamBProfile, rand);
-    const bQuarter = simulateQuarterTeamPoints(teamBProfile, teamAProfile, rand);
+    const aQuarter = simulateQuarterTeamPoints(
+      setup.teamAName,
+      setup.teamBName,
+      "A",
+      teamAProfile,
+      teamBProfile,
+      rand
+    );
+    const bQuarter = simulateQuarterTeamPoints(
+      setup.teamBName,
+      setup.teamAName,
+      "B",
+      teamBProfile,
+      teamAProfile,
+      rand
+    );
 
     runningA += aQuarter.points;
     runningB += bQuarter.points;
 
     const quarterPlays: string[] = [];
+    const mergedHighlights: QuarterHighlight[] = [];
+    const aHighlights = [...aQuarter.highlights];
+    const bHighlights = [...bQuarter.highlights];
+    let quarterRunningA = i > 0 ? quarters[i - 1].scoreA : 0;
+    let quarterRunningB = i > 0 ? quarters[i - 1].scoreB : 0;
+    let highlightIndex = 0;
+    const startWithA = rand() < 0.5;
 
-    if (aQuarter.points > 0) {
-      quarterPlays.push(
-        ...buildQuarterPlays(
-          setup.teamAName,
-          setup.teamBName,
-          teamAProfile,
-          aQuarter.points,
-          rand
-        )
-      );
+    while (aHighlights.length > 0 || bHighlights.length > 0) {
+      const pullFromA =
+        aHighlights.length === 0
+          ? false
+          : bHighlights.length === 0
+            ? true
+            : (mergedHighlights.length % 2 === 0 ? startWithA : !startWithA);
+
+      const next = pullFromA ? aHighlights.shift() : bHighlights.shift();
+      if (!next) continue;
+
+      quarterRunningA += next.pointsA;
+      quarterRunningB += next.pointsB;
+      quarterPlays.push(next.text);
+      mergedHighlights.push({
+        id: `q${i + 1}-h${highlightIndex + 1}`,
+        text: next.text,
+        scoreA: quarterRunningA,
+        scoreB: quarterRunningB,
+        isScore: next.isScore,
+      });
+      highlightIndex += 1;
     }
 
-    if (bQuarter.points > 0) {
-      quarterPlays.push(
-        ...buildQuarterPlays(
-          setup.teamBName,
-          setup.teamAName,
-          teamBProfile,
-          bQuarter.points,
-          rand
-        )
-      );
-    }
-
-    while (quarterPlays.length < 2) {
+    if (mergedHighlights.length === 0) {
+      mergedHighlights.push({
+        id: `q${i + 1}-h1`,
+        text: "Both defenses hold firm for long stretches.",
+        scoreA: runningA,
+        scoreB: runningB,
+        isScore: false,
+      });
       quarterPlays.push("Both defenses hold firm for long stretches.");
     }
 
@@ -595,7 +925,8 @@ export function simulateGame(setup: GameSetup): SimResult {
       quarter: i + 1,
       scoreA: runningA,
       scoreB: runningB,
-      plays: quarterPlays.slice(0, 3),
+      plays: quarterPlays.slice(0, 4),
+      highlights: mergedHighlights,
     });
   }
 
@@ -603,5 +934,7 @@ export function simulateGame(setup: GameSetup): SimResult {
     finalA: runningA,
     finalB: runningB,
     quarters,
+    teamAStats: buildTeamGameStats(setup.teamA, teamAProfile, runningA, rand),
+    teamBStats: buildTeamGameStats(setup.teamB, teamBProfile, runningB, rand),
   };
 }

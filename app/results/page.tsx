@@ -11,7 +11,47 @@ import {
   subscribeToRoom,
   RoomData,
 } from "@/lib/room";
-import { SimResult } from "@/lib/sim";
+import { PlayerGameStats, type QuarterHighlight, SimResult } from "@/lib/sim";
+
+function statSummary(statLine: PlayerGameStats) {
+  const chunks: string[] = [];
+
+  if (statLine.passingYards > 0) chunks.push(`${statLine.passingYards} pass yds`);
+  if (statLine.passingTD > 0) chunks.push(`${statLine.passingTD} pass TD`);
+  if (statLine.interceptions > 0) chunks.push(`${statLine.interceptions} INT`);
+  if (statLine.carries > 0) chunks.push(`${statLine.carries} car`);
+  if (statLine.rushYards > 0) chunks.push(`${statLine.rushYards} rush yds`);
+  if (statLine.rushTD > 0) chunks.push(`${statLine.rushTD} rush TD`);
+  if (statLine.receptions > 0) chunks.push(`${statLine.receptions} rec`);
+  if (statLine.receivingYards > 0) chunks.push(`${statLine.receivingYards} rec yds`);
+  if (statLine.receivingTD > 0) chunks.push(`${statLine.receivingTD} rec TD`);
+
+  return chunks.length > 0 ? chunks.join(" • ") : "No touches recorded.";
+}
+
+function TeamBoxScore({
+  title,
+  stats,
+}: {
+  title: string;
+  stats: PlayerGameStats[];
+}) {
+  return (
+    <div className="rounded-2xl border p-4 sm:p-5">
+      <h2 className="text-lg font-semibold sm:text-xl">{title}</h2>
+      <div className="mt-3 space-y-3">
+        {stats.map((statLine) => (
+          <div key={statLine.playerId} className="rounded-xl border p-3">
+            <div className="font-medium">
+              {statLine.position} — {statLine.name}
+            </div>
+            <p className="mt-1 text-sm opacity-80">{statSummary(statLine)}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function ResultsTimeline({
   result,
@@ -41,44 +81,81 @@ function ResultsTimeline({
     };
   }, []);
 
-  const elapsed = now - startedAt;
-  const revealedQuarters =
-    elapsed >= 15500 ? 4 : elapsed >= 10500 ? 3 : elapsed >= 5500 ? 2 : elapsed >= 500 ? 1 : 0;
+  const revealPlan = useMemo(() => {
+    const steps: Array<{ quarter: number; highlight: QuarterHighlight }> = [];
 
+    result.quarters.forEach((quarter) => {
+      quarter.highlights.forEach((highlight) => {
+        steps.push({ quarter: quarter.quarter, highlight });
+      });
+    });
+
+    return steps;
+  }, [result]);
+
+  const elapsed = now - startedAt;
+  const revealedHighlights = clamp(Math.floor(Math.max(0, elapsed - 500) / 1200) + 1, 0, revealPlan.length);
+  const visibleHighlights = revealPlan.slice(0, revealedHighlights);
   const visibleScore =
-    revealedQuarters > 0
-      ? result.quarters[revealedQuarters - 1]
+    visibleHighlights.length > 0
+      ? visibleHighlights[visibleHighlights.length - 1].highlight
       : { scoreA: 0, scoreB: 0 };
+  const revealedQuarterMap = new Map<number, QuarterHighlight[]>();
+
+  visibleHighlights.forEach(({ quarter, highlight }) => {
+    const current = revealedQuarterMap.get(quarter) ?? [];
+    current.push(highlight);
+    revealedQuarterMap.set(quarter, current);
+  });
+
+  const allHighlightsRevealed = revealedHighlights >= revealPlan.length;
 
   return (
     <>
       <div className="rounded-2xl border p-4 sm:p-5">
         <div className="flex items-center justify-between gap-4 text-base font-semibold sm:text-lg">
           <span className="truncate pr-3">{teamAName}</span>
-          <span>{revealedQuarters === 4 ? result.finalA : visibleScore.scoreA}</span>
+          <span>{allHighlightsRevealed ? result.finalA : visibleScore.scoreA}</span>
         </div>
         <div className="mt-2 flex items-center justify-between gap-4 text-base font-semibold sm:text-lg">
           <span className="truncate pr-3">{teamBName}</span>
-          <span>{revealedQuarters === 4 ? result.finalB : visibleScore.scoreB}</span>
+          <span>{allHighlightsRevealed ? result.finalB : visibleScore.scoreB}</span>
         </div>
       </div>
 
       <div className="space-y-3 sm:space-y-4">
-        {result.quarters.slice(0, revealedQuarters).map((quarter) => (
-          <div key={quarter.quarter} className="rounded-2xl border p-4 sm:p-5">
-            <h2 className="text-lg font-semibold sm:text-xl">
-              Q{quarter.quarter} — {teamAName} {quarter.scoreA}, {teamBName} {quarter.scoreB}
-            </h2>
-            <ul className="mt-3 space-y-1 text-sm opacity-80">
-              {quarter.plays.map((play, idx) => (
-                <li key={idx}>• {play}</li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {result.quarters.map((quarter) => {
+          const quarterHighlights = revealedQuarterMap.get(quarter.quarter) ?? [];
+          if (quarterHighlights.length === 0) return null;
+
+          const quarterScore = quarterHighlights[quarterHighlights.length - 1];
+
+          return (
+            <div key={quarter.quarter} className="rounded-2xl border p-4 sm:p-5">
+              <h2 className="text-lg font-semibold sm:text-xl">
+                Q{quarter.quarter} — {teamAName} {quarterScore.scoreA}, {teamBName} {quarterScore.scoreB}
+              </h2>
+              <ul className="mt-3 space-y-2 text-sm opacity-90">
+                {quarterHighlights.map((highlight) => (
+                  <li
+                    key={highlight.id}
+                    className={highlight.isScore ? "font-medium text-slate-950" : ""}
+                  >
+                    • {highlight.text}
+                    {highlight.isScore && (
+                      <span className="ml-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                        Score update
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
       </div>
 
-      {revealedQuarters === 4 && (
+      {allHighlightsRevealed && (
         <div className="rounded-2xl border bg-gray-50 p-4 sm:p-5">
           <h2 className="text-xl font-bold sm:text-2xl">Final</h2>
           <p className="mt-2 text-base sm:text-lg">
@@ -88,6 +165,10 @@ function ResultsTimeline({
       )}
     </>
   );
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function ResultsPageContent() {
@@ -264,6 +345,11 @@ function ResultsPageContent() {
           teamAName={teamAName}
           teamBName={teamBName}
         />
+
+        <div className="grid gap-4 lg:grid-cols-2 sm:gap-6">
+          <TeamBoxScore title={`${teamAName} Box Score`} stats={result.teamAStats} />
+          <TeamBoxScore title={`${teamBName} Box Score`} stats={result.teamBStats} />
+        </div>
 
         <div className="rounded-2xl border p-4 sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

@@ -13,10 +13,20 @@ export function currentCareerStage(player: Pick<DraftedPlayer, "careerStage">) {
   return player.careerStage ?? "Rook";
 }
 
-export function nextCareerStage(stage: CareerStage) {
+function rookieJumpToUnc(player: Pick<DraftedPlayer, "id">, nextGameNumber: number) {
+  return simpleHash(`${player.id}:${nextGameNumber}:career`) % 5 === 0;
+}
+
+export function nextCareerStage(
+  stage: CareerStage,
+  player?: Pick<DraftedPlayer, "id">,
+  nextGameNumber?: number
+) {
   switch (stage) {
     case "Rook":
-      return "Prime" as const;
+      return player && nextGameNumber && rookieJumpToUnc(player, nextGameNumber)
+        ? "Unc" as const
+        : "Prime" as const;
     case "Prime":
       return "Unc" as const;
     case "Unc":
@@ -35,9 +45,14 @@ function careerStageDelta(stage: CareerStage) {
   }
 }
 
-export function describeNextCareerStage(player: Pick<DraftedPlayer, "careerStage">) {
+export function describeNextCareerStage(
+  player: Pick<DraftedPlayer, "careerStage" | "id">,
+  nextGameNumber: number
+) {
   const current = currentCareerStage(player);
-  const next = willRetireAfterGame(player) ? "Retired" : nextCareerStage(current);
+  const next = willRetireAfterGame(player)
+    ? "Retired"
+    : nextCareerStage(current, player, nextGameNumber);
   return `${current} -> ${next}`;
 }
 
@@ -55,7 +70,7 @@ export function agePlayerForSeries(
     return null;
   }
 
-  const nextStage = nextCareerStage(currentCareerStage(player));
+  const nextStage = nextCareerStage(currentCareerStage(player), player, nextGameNumber);
   const delta = careerStageDelta(nextStage);
   const baseTechnical = player.technicalRating ?? player.trueGrade;
 

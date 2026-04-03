@@ -9,6 +9,7 @@ import {
   retirementGoodbye,
   willRetireAfterGame,
 } from "@/lib/series";
+import { speedRatingFromForty } from "@/lib/game/speed";
 import {
   getRoomStatusHref,
   lockKeepers,
@@ -17,6 +18,7 @@ import {
   submitFreeAgencyChoice,
   subscribeToRoom,
 } from "@/lib/room";
+import { PlayerGameStats } from "@/lib/sim";
 
 function cardClasses(selected: boolean, disabled: boolean) {
   if (disabled) {
@@ -28,6 +30,46 @@ function cardClasses(selected: boolean, disabled: boolean) {
   }
 
   return "border-gray-200 bg-white";
+}
+
+function statSummary(statLine: PlayerGameStats) {
+  const chunks: string[] = [];
+
+  if (statLine.passingYards > 0) chunks.push(`${statLine.passingYards} pass yds`);
+  if (statLine.passingTD > 0) chunks.push(`${statLine.passingTD} pass TD`);
+  if (statLine.interceptions > 0) chunks.push(`${statLine.interceptions} INT`);
+  if (statLine.carries > 0) chunks.push(`${statLine.carries} car`);
+  if (statLine.rushYards > 0) chunks.push(`${statLine.rushYards} rush yds`);
+  if (statLine.rushTD > 0) chunks.push(`${statLine.rushTD} rush TD`);
+  if (statLine.receptions > 0) chunks.push(`${statLine.receptions} rec`);
+  if (statLine.receivingYards > 0) chunks.push(`${statLine.receivingYards} rec yds`);
+  if (statLine.receivingTD > 0) chunks.push(`${statLine.receivingTD} rec TD`);
+
+  return chunks.length > 0 ? chunks.join(" • ") : "No touches recorded.";
+}
+
+function TeamBoxScore({
+  title,
+  stats,
+}: {
+  title: string;
+  stats: PlayerGameStats[];
+}) {
+  return (
+    <div className="rounded-2xl border p-4 sm:p-5">
+      <h3 className="text-lg font-semibold sm:text-xl">{title}</h3>
+      <div className="mt-3 space-y-3">
+        {stats.map((statLine) => (
+          <div key={statLine.playerId} className="rounded-xl border p-3">
+            <div className="font-medium">
+              {statLine.position} — {statLine.name}
+            </div>
+            <p className="mt-1 text-sm opacity-80">{statSummary(statLine)}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function SeriesPageContent() {
@@ -131,7 +173,7 @@ function SeriesPageContent() {
 
     const nextKeepers = myKeepers.includes(playerId)
       ? myKeepers.filter((keeperId) => keeperId !== playerId)
-      : myKeepers.length >= 2
+      : myKeepers.length >= 3
         ? [...myKeepers.slice(1), playerId]
         : [...myKeepers, playerId];
 
@@ -200,6 +242,10 @@ function SeriesPageContent() {
     (player) => player.id !== room.freeAgencyContestedPlayerId
   );
   const retiringPlayers = myTeam.filter((player) => willRetireAfterGame(player));
+  const carriedPlayers = mySide === "A" ? room.carriedPlayersA : mySide === "B" ? room.carriedPlayersB : [];
+  const myLastGameStats =
+    mySide === "A" ? room.simResult?.teamAStats ?? [] : mySide === "B" ? room.simResult?.teamBStats ?? [] : [];
+  const myLastGameStatMap = new Map(myLastGameStats.map((statLine) => [statLine.playerId, statLine]));
   const seriesPressureMessage = getSeriesPressureMessage({
     seriesGameNumber: room.seriesGameNumber,
     seriesWinsA: room.seriesWinsA,
@@ -219,12 +265,25 @@ function SeriesPageContent() {
           <p className="mt-1 text-sm font-medium">{seriesPressureMessage}</p>
         </div>
 
+        {room.simResult && (
+          <div className="grid gap-4 lg:grid-cols-2 sm:gap-6">
+            <TeamBoxScore
+              title={`${room.teamAName} Last Game Stats`}
+              stats={room.simResult.teamAStats}
+            />
+            <TeamBoxScore
+              title={`${room.teamBName} Last Game Stats`}
+              stats={room.simResult.teamBStats}
+            />
+          </div>
+        )}
+
         {room.betweenGamePhase === "keepers" && (
           <>
             <div className="rounded-2xl border p-4 sm:p-5">
-              <h2 className="text-xl font-semibold sm:text-2xl">Choose 2 Keepers</h2>
+              <h2 className="text-xl font-semibold sm:text-2xl">Choose 3 Keepers</h2>
               <p className="mt-1 text-sm opacity-70">
-                Lock exactly 2 players to carry into Game {room.seriesGameNumber + 1}.
+                Lock exactly 3 players to carry into Game {room.seriesGameNumber + 1}.
               </p>
               {retiringPlayers.length > 0 && (
                 <p className="mt-2 text-sm opacity-70">
@@ -276,13 +335,34 @@ function SeriesPageContent() {
                         <div className="text-sm opacity-80">
                           {player.archetype} • {player.careerStage ?? "Rook"}
                         </div>
+                        <div className="mt-1 text-sm opacity-80">
+                          Speed {speedRatingFromForty(player.position, player.forty)} • Tech {player.technicalRating} • Grade {player.trueGrade}
+                        </div>
                       </div>
                       <div className="text-sm font-medium">
                         {retiring ? "Retiring" : selected ? "Selected" : "Tap to keep"}
                       </div>
                     </div>
                     <p className="mt-2 text-sm opacity-70">
-                      Next game: {describeNextCareerStage(player)}
+                      Next game: {describeNextCareerStage(player, room.seriesGameNumber + 1)}
+                    </p>
+                    <p className="mt-2 text-sm opacity-80">
+                      Last game: {statSummary(
+                        myLastGameStatMap.get(player.id) ?? {
+                          playerId: player.id,
+                          name: player.name,
+                          position: player.position,
+                          passingYards: 0,
+                          passingTD: 0,
+                          interceptions: 0,
+                          rushYards: 0,
+                          rushTD: 0,
+                          carries: 0,
+                          receivingYards: 0,
+                          receivingTD: 0,
+                          receptions: 0,
+                        }
+                      )}
                     </p>
                     {retiring && (
                       <p className="mt-2 text-sm text-amber-700">
@@ -300,12 +380,12 @@ function SeriesPageContent() {
                   ? otherKeepersLocked
                     ? "Both players locked keepers. Opening free agency..."
                     : "Waiting for opponent to lock keepers..."
-                  : `Selected ${myKeepers.length} of 2 keepers.`}
+                  : `Selected ${myKeepers.length} of 3 keepers.`}
               </p>
               <button
                 type="button"
                 onClick={handleLockKeepers}
-                disabled={myKeepersLocked || myKeepers.length !== 2 || loadingAction}
+                disabled={myKeepersLocked || myKeepers.length !== 3 || loadingAction}
                 className="w-full rounded-xl border px-4 py-3 font-medium hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:rounded-md sm:py-2"
               >
                 {myKeepersLocked ? "Keepers Locked" : loadingAction ? "Locking..." : "Lock Keepers"}
@@ -325,6 +405,27 @@ function SeriesPageContent() {
                 One contested signing can swing the next game.
               </p>
             </div>
+
+            {carriedPlayers.length > 0 && (
+              <div className="rounded-2xl border p-4 sm:p-5">
+                <h3 className="text-lg font-semibold sm:text-xl">Your Locked Core</h3>
+                <div className="mt-3 space-y-3">
+                  {carriedPlayers.map((player) => (
+                    <div key={player.id} className="rounded-xl border p-3">
+                      <div className="font-medium">
+                        {player.position} — {player.name}
+                      </div>
+                      <p className="mt-1 text-sm opacity-80">
+                        {player.archetype} • {player.careerStage}
+                      </p>
+                      <p className="mt-1 text-sm opacity-80">
+                        Speed {speedRatingFromForty(player.position, player.forty)} • Tech {player.technicalRating} • Grade {player.trueGrade}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               {room.freeAgencyPool.map((player) => (

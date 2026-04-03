@@ -88,6 +88,10 @@ export type RoomData = {
   rematchAcceptedB: boolean;
 };
 
+const FULL_DRAFT_PICKS = 24;
+const LATER_GAME_ROSTER_TARGET = 10;
+const KEEPER_COUNT = 3;
+
 function emptyBetweenGameState() {
   return {
     betweenGamePhase: "none" as const,
@@ -194,6 +198,16 @@ function buildDraftReset(
 
   const carriedPlayersA = options?.carriedPlayersA ?? [];
   const carriedPlayersB = options?.carriedPlayersB ?? [];
+  const nextSeriesGameNumber = options?.resetSeries
+    ? 1
+    : options?.seriesGameNumber ?? room.seriesGameNumber;
+  const totalDraftPicks =
+    nextSeriesGameNumber <= 1
+      ? FULL_DRAFT_PICKS
+      : Math.max(
+          0,
+          LATER_GAME_ROSTER_TARGET * 2 - carriedPlayersA.length - carriedPlayersB.length
+        );
 
   return {
     status: "draft" as const,
@@ -201,7 +215,7 @@ function buildDraftReset(
     readyA: false,
     readyB: false,
     draftFirstSide: randomFirstSide(),
-    totalDraftPicks: Math.max(0, 24 - carriedPlayersA.length - carriedPlayersB.length),
+    totalDraftPicks,
     pickNumber: 0,
     draftedIds: [] as string[],
     teamA: carriedPlayersA,
@@ -237,7 +251,7 @@ function buildInitialRoomData(roomId: string, hostId: string, teamName: string):
     readyA: false,
     readyB: false,
     draftFirstSide: "A",
-    totalDraftPicks: 24,
+    totalDraftPicks: FULL_DRAFT_PICKS,
     pickNumber: 0,
     draftedIds: [],
     teamA: [],
@@ -557,7 +571,7 @@ export async function saveKeeperSelection(
   if (!user) throw new Error("No authenticated user");
 
   const roomRef = doc(db, "rooms", roomId);
-  const uniqueKeeperIds = [...new Set(keeperIds)].slice(0, 2);
+  const trimmedKeeperIds = [...new Set(keeperIds)].slice(0, KEEPER_COUNT);
 
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(roomRef);
@@ -586,9 +600,9 @@ export async function saveKeeperSelection(
     }
 
     if (actualSide === "A") {
-      transaction.update(roomRef, { keepersA: uniqueKeeperIds });
+      transaction.update(roomRef, { keepersA: trimmedKeeperIds });
     } else {
-      transaction.update(roomRef, { keepersB: uniqueKeeperIds });
+      transaction.update(roomRef, { keepersB: trimmedKeeperIds });
     }
   });
 }
@@ -622,8 +636,8 @@ export async function lockKeepers(roomId: string, side: "A" | "B") {
     const ownTeam = side === "A" ? room.teamA : room.teamB;
     const keeperIds = side === "A" ? room.keepersA : room.keepersB;
 
-    if (keeperIds.length !== 2) {
-      throw new Error("You must select exactly 2 keepers");
+    if (keeperIds.length !== KEEPER_COUNT) {
+      throw new Error(`You must select exactly ${KEEPER_COUNT} keepers`);
     }
 
     const ownIds = new Set(ownTeam.map((player) => player.id));
