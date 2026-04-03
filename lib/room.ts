@@ -8,7 +8,10 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { auth, db, ensureAnonymousAuth } from "./firebase";
-import type { DraftedPlayer, Prospect } from "./game/types";
+import type { DraftedPlayer, Position, Prospect } from "./game/types";
+import { generateProspects } from "./game/prospects";
+import type { ScoutAttribute, ScoutingMap } from "./game/scouting";
+import { buildScoutingRange } from "./game/scouting";
 import { agePlayerForSeries, buildFreeAgencyPool, willRetireAfterGame } from "./series";
 import type { SimResult } from "./sim";
 
@@ -84,6 +87,11 @@ export type RoomData = {
   freeAgencyContestedPlayerId: string | null;
   freeAgencyResolutionText: string;
 
+  scoutTokensA: number;
+  scoutTokensB: number;
+  scoutingA: ScoutingMap;
+  scoutingB: ScoutingMap;
+
   rematchAcceptedA: boolean;
   rematchAcceptedB: boolean;
 };
@@ -91,6 +99,16 @@ export type RoomData = {
 const FULL_DRAFT_PICKS = 24;
 const LATER_GAME_ROSTER_TARGET = 10;
 const KEEPER_COUNT = 3;
+const SCOUT_TOKENS_PER_DRAFT = 8;
+const STARTER_REQUIREMENTS: Record<Position, number> = {
+  QB: 1,
+  RB: 1,
+  WR: 2,
+  TE: 1,
+  DL: 1,
+  LB: 1,
+  SEC: 1,
+};
 
 function emptyBetweenGameState() {
   return {
@@ -111,6 +129,15 @@ function emptyBetweenGameState() {
     freeAgencyAwardedSide: null as "A" | "B" | null,
     freeAgencyContestedPlayerId: null as string | null,
     freeAgencyResolutionText: "",
+  };
+}
+
+function emptyScoutingState() {
+  return {
+    scoutTokensA: SCOUT_TOKENS_PER_DRAFT,
+    scoutTokensB: SCOUT_TOKENS_PER_DRAFT,
+    scoutingA: {} as ScoutingMap,
+    scoutingB: {} as ScoutingMap,
   };
 }
 
@@ -168,6 +195,51 @@ function currentPicker2P(pickNumber: number, firstSide: "A" | "B"): "A" | "B" {
   return pickInRound === 0 ? (firstSide === "A" ? "B" : "A") : firstSide;
 }
 
+function countByPosition(players: DraftedPlayer[]): Record<Position, number> {
+  return {
+    QB: players.filter((p) => p.position === "QB").length,
+    RB: players.filter((p) => p.position === "RB").length,
+    WR: players.filter((p) => p.position === "WR").length,
+    TE: players.filter((p) => p.position === "TE").length,
+    DL: players.filter((p) => p.position === "DL").length,
+    LB: players.filter((p) => p.position === "LB").length,
+    SEC: players.filter((p) => p.position === "SEC").length,
+  };
+}
+
+function startersFilled(players: DraftedPlayer[]) {
+  const counts = countByPosition(players);
+  return (Object.keys(STARTER_REQUIREMENTS) as Position[]).every(
+    (position) => counts[position] >= STARTER_REQUIREMENTS[position]
+  );
+}
+
+export function isRetoolRosterComplete(players: DraftedPlayer[]) {
+  return players.length >= LATER_GAME_ROSTER_TARGET && startersFilled(players);
+}
+
+function isRetoolDraft(room: Pick<RoomData, "seriesGameNumber">) {
+  return room.seriesGameNumber > 1;
+}
+
+export function getCurrentDraftSide(
+  room: Pick<RoomData, "pickNumber" | "draftFirstSide" | "seriesGameNumber" | "teamA" | "teamB">
+): "A" | "B" | null {
+  const baseSide = currentPicker2P(room.pickNumber, room.draftFirstSide ?? "A");
+
+  if (!isRetoolDraft(room)) {
+    return baseSide;
+  }
+
+  const teamAReady = isRetoolRosterComplete(room.teamA);
+  const teamBReady = isRetoolRosterComplete(room.teamB);
+
+  if (teamAReady && teamBReady) return null;
+  if (teamAReady) return "B";
+  if (teamBReady) return "A";
+  return baseSide;
+}
+
 function resetStrategyState() {
   return {
     teamAStrategy: {
@@ -206,7 +278,10 @@ function buildDraftReset(
       ? FULL_DRAFT_PICKS
       : Math.max(
           0,
-          LATER_GAME_ROSTER_TARGET * 2 - carriedPlayersA.length - carriedPlayersB.length
+          Math.max(
+            LATER_GAME_ROSTER_TARGET - carriedPlayersA.length,
+            LATER_GAME_ROSTER_TARGET - carriedPlayersB.length
+          ) * 2
         );
 
   return {
@@ -221,6 +296,7 @@ function buildDraftReset(
     teamA: carriedPlayersA,
     teamB: carriedPlayersB,
     simResult: null,
+    ...emptyScoutingState(),
     ...(options?.resetSeries
       ? createFreshSeriesState()
       : {
@@ -256,6 +332,7 @@ function buildInitialRoomData(roomId: string, hostId: string, teamName: string):
     draftedIds: [],
     teamA: [],
     teamB: [],
+    ...emptyScoutingState(),
     ...resetStrategyState(),
     simResult: null,
     ...createFreshSeriesState(),
@@ -291,6 +368,10 @@ function buildNextSeriesDraft(room: RoomData, carriedPlayersA: DraftedPlayer[], 
     carriedPlayersB,
     seriesGameNumber: room.seriesGameNumber + 1,
   });
+}
+
+function prospectFromSeed(room: RoomData, playerId: string) {
+  return generateProspects(room.seed).find((prospect) => prospect.id === playerId) ?? null;
 }
 
 export async function createRoom(teamName: string) {
@@ -416,7 +497,10 @@ export async function makeDraftPick(roomId: string, player: Prospect) {
       throw new Error("Player already drafted");
     }
 
-    const currentTeam = currentPicker2P(room.pickNumber, room.draftFirstSide ?? "A");
+    const currentTeam = getCurrentDraftSide(room);
+    if (!currentTeam) {
+      throw new Error("Draft is complete");
+    }
     const expectedUserId = currentTeam === "A" ? room.playerAId : room.playerBId;
 
     if (user.uid !== expectedUserId) {
@@ -435,18 +519,108 @@ export async function makeDraftPick(roomId: string, player: Prospect) {
 
     const nextDraftedIds = [...room.draftedIds, player.id];
     const nextPickNumber = room.pickNumber + 1;
+    const nextTeamA = currentTeam === "A" ? [...room.teamA, draftedPlayer] : room.teamA;
+    const nextTeamB = currentTeam === "B" ? [...room.teamB, draftedPlayer] : room.teamB;
+    const draftFinishedEarly =
+      isRetoolDraft(room) &&
+      isRetoolRosterComplete(nextTeamA) &&
+      isRetoolRosterComplete(nextTeamB);
+    const storedPickNumber = draftFinishedEarly ? room.totalDraftPicks : nextPickNumber;
 
     if (currentTeam === "A") {
       transaction.update(roomRef, {
         draftedIds: nextDraftedIds,
-        pickNumber: nextPickNumber,
-        teamA: [...room.teamA, draftedPlayer],
+        pickNumber: storedPickNumber,
+        teamA: nextTeamA,
       });
     } else {
       transaction.update(roomRef, {
         draftedIds: nextDraftedIds,
-        pickNumber: nextPickNumber,
-        teamB: [...room.teamB, draftedPlayer],
+        pickNumber: storedPickNumber,
+        teamB: nextTeamB,
+      });
+    }
+  });
+}
+
+export async function scoutProspect(
+  roomId: string,
+  side: "A" | "B",
+  playerId: string,
+  attribute: ScoutAttribute
+) {
+  await ensureAnonymousAuth();
+
+  const user = auth.currentUser;
+  if (!user) throw new Error("No authenticated user");
+
+  const roomRef = doc(db, "rooms", roomId);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+    const actualSide = getPlayerSide(room, user.uid);
+
+    if (!actualSide || actualSide !== side) {
+      throw new Error("You can only spend scouting tokens for your own side");
+    }
+
+    if (room.status !== "draft") {
+      throw new Error("Scouting is only available during the draft");
+    }
+
+    if (room.draftedIds.includes(playerId)) {
+      throw new Error("That player has already been drafted");
+    }
+
+    const prospect = prospectFromSeed(room, playerId);
+
+    if (!prospect) {
+      throw new Error("Prospect not found");
+    }
+
+    const currentMap = side === "A" ? room.scoutingA ?? {} : room.scoutingB ?? {};
+    const currentTokens = side === "A" ? room.scoutTokensA ?? SCOUT_TOKENS_PER_DRAFT : room.scoutTokensB ?? SCOUT_TOKENS_PER_DRAFT;
+    const existingReport = currentMap[playerId] ?? {};
+    const currentRange = existingReport[attribute];
+    const nextLevel = currentRange ? (currentRange.level + 1) as 1 | 2 | 3 : 1;
+
+    if (nextLevel > 2) {
+      throw new Error("That attribute is already fully scouted");
+    }
+
+    if (currentTokens <= 0) {
+      throw new Error("No scouting tokens remaining");
+    }
+
+    const nextRange = buildScoutingRange(
+      prospect,
+      attribute,
+      nextLevel as 1 | 2,
+      `${room.roomId}:${side}:${room.seed}`
+    );
+    const nextMap: ScoutingMap = {
+      ...currentMap,
+      [playerId]: {
+        ...existingReport,
+        [attribute]: nextRange,
+      },
+    };
+
+    if (side === "A") {
+      transaction.update(roomRef, {
+        scoutingA: nextMap,
+        scoutTokensA: currentTokens - 1,
+      });
+    } else {
+      transaction.update(roomRef, {
+        scoutingB: nextMap,
+        scoutTokensB: currentTokens - 1,
       });
     }
   });

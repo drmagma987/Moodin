@@ -19,6 +19,8 @@ function statSummary(statLine: PlayerGameStats) {
   if (statLine.passingYards > 0) chunks.push(`${statLine.passingYards} pass yds`);
   if (statLine.passingTD > 0) chunks.push(`${statLine.passingTD} pass TD`);
   if (statLine.interceptions > 0) chunks.push(`${statLine.interceptions} INT`);
+  if (statLine.tackles > 0) chunks.push(`${statLine.tackles} tackles`);
+  if (statLine.sacks > 0) chunks.push(`${statLine.sacks} sacks`);
   if (statLine.carries > 0) chunks.push(`${statLine.carries} car`);
   if (statLine.rushYards > 0) chunks.push(`${statLine.rushYards} rush yds`);
   if (statLine.rushTD > 0) chunks.push(`${statLine.rushTD} rush TD`);
@@ -26,7 +28,7 @@ function statSummary(statLine: PlayerGameStats) {
   if (statLine.receivingYards > 0) chunks.push(`${statLine.receivingYards} rec yds`);
   if (statLine.receivingTD > 0) chunks.push(`${statLine.receivingTD} rec TD`);
 
-  return chunks.length > 0 ? chunks.join(" • ") : "No touches recorded.";
+  return chunks.length > 0 ? chunks.join(" • ") : "Quiet game.";
 }
 
 function TeamBoxScore({

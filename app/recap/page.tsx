@@ -4,8 +4,9 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { generateProspects } from "@/lib/game/prospects";
+import type { ScoutAttribute, ScoutingMap } from "@/lib/game/scouting";
 import type { DraftedPlayer, Prospect } from "@/lib/game/types";
-import { speedRatingFromForty } from "@/lib/game/speed";
+import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
 import {
   finalizeSeriesGame,
   getRoomStatusHref,
@@ -14,35 +15,6 @@ import {
   subscribeToRoom,
 } from "@/lib/room";
 import { GameSetup, simulateGame, TeamRatings } from "@/lib/sim";
-
-function technicalFromPlayer(player: DraftedPlayer) {
-  if (typeof player.technicalRating === "number" && Number.isFinite(player.technicalRating)) {
-    return player.technicalRating;
-  }
-
-  const polishedArchetypes = new Set([
-    "Field General",
-    "Route Technician",
-    "Possession TE",
-    "Coverage LB",
-    "Lockdown",
-  ]);
-  const upsideArchetypes = new Set([
-    "Gunslinger",
-    "Deep Threat",
-    "Vertical Threat",
-    "Pass Rusher",
-    "Ball Hawk",
-  ]);
-
-  const archetypeBonus = polishedArchetypes.has(player.archetype)
-    ? 3
-    : upsideArchetypes.has(player.archetype)
-      ? 1
-      : 0;
-
-  return Math.max(45, Math.min(95, Math.round(player.trueGrade + archetypeBonus)));
-}
 
 function expectedGradeForRound(
   projectedRound: number,
@@ -100,6 +72,74 @@ function getDraftValueLabel(player: DraftedPlayer, fullDraftClass: Prospect[]) {
   if (valueDelta >= 1) return `Fair value at Pick ${player.overallPick}`;
   if (valueDelta >= -4) return `Slight reach at Pick ${player.overallPick}`;
   return `Big reach at Pick ${player.overallPick}`;
+}
+
+function scoutingAttributeLabel(attribute: ScoutAttribute) {
+  switch (attribute) {
+    case "speed":
+      return "speed";
+    case "technical":
+      return "technical profile";
+    case "power":
+      return "power";
+  }
+}
+
+function scoutingPayoffNote(
+  player: DraftedPlayer,
+  fullDraftClass: Prospect[],
+  scoutingMap: ScoutingMap,
+  currentSeed: number
+) {
+  if ((player.acquisitionType ?? "draft") !== "draft") return null;
+  if (player.seriesSourceSeed !== currentSeed) return null;
+
+  const report = scoutingMap[player.id];
+  if (!report) return null;
+
+  const valueDelta = getDraftValueDelta(player, fullDraftClass);
+  const scoutedAttributes = (Object.keys(report) as ScoutAttribute[]).filter(
+    (attribute) => report[attribute]
+  );
+
+  if (scoutedAttributes.length === 0) return null;
+
+  const attributeScore = (attribute: ScoutAttribute) => {
+    switch (attribute) {
+      case "speed":
+        return getPlayerSpeed(player);
+      case "technical":
+        return getPlayerTechnical(player);
+      case "power":
+        return getPlayerPower(player);
+    }
+  };
+
+  if (valueDelta >= 5) {
+    const standoutAttribute = [...scoutedAttributes]
+      .sort((a, b) => attributeScore(b) - attributeScore(a))
+      .find((attribute) => attributeScore(attribute) >= 82);
+
+    if (standoutAttribute) {
+      return `Scout hit: you sniffed out real ${scoutingAttributeLabel(
+        standoutAttribute
+      )} upside before the room let him turn into a steal.`;
+    }
+  }
+
+  if (valueDelta <= -5) {
+    const weakAttribute = [...scoutedAttributes]
+      .sort((a, b) => attributeScore(a) - attributeScore(b))
+      .find((attribute) => attributeScore(attribute) <= 74);
+
+    if (weakAttribute) {
+      return `Scout hit: your report hinted at shaky ${scoutingAttributeLabel(
+        weakAttribute
+      )}, and he still turned into a reach.`;
+    }
+  }
+
+  return null;
 }
 
 function getClassRankComparisonLabel(
@@ -171,16 +211,22 @@ function playerSkillScore(
   weights: {
     speed?: number;
     technical?: number;
+    power?: number;
+    iq?: number;
     trueGrade?: number;
   }
 ) {
-  const speed = speedRatingFromForty(player.position, player.forty);
-  const technical = technicalFromPlayer(player);
+  const speed = getPlayerSpeed(player);
+  const technical = getPlayerTechnical(player);
+  const power = getPlayerPower(player);
+  const iq = getPlayerIQ(player);
   const trueGrade = player.trueGrade;
 
   return (
     speed * (weights.speed ?? 0) +
     technical * (weights.technical ?? 0) +
+    power * (weights.power ?? 0) +
+    iq * (weights.iq ?? 0) +
     trueGrade * (weights.trueGrade ?? 0)
   );
 }
@@ -192,6 +238,8 @@ function rankedScores(
   weights: {
     speed?: number;
     technical?: number;
+    power?: number;
+    iq?: number;
     trueGrade?: number;
   }
 ) {
@@ -222,35 +270,35 @@ function stretchTeamRating(raw: number) {
 
 function buildRatings(players: DraftedPlayer[]): TeamRatings {
   const qbPass = weightedAverage(
-    rankedScores(players, "QB", 1, { technical: 0.45, trueGrade: 0.4, speed: 0.15 }),
+    rankedScores(players, "QB", 1, { technical: 0.3, iq: 0.35, trueGrade: 0.15, speed: 0.2 }),
     [1]
   );
   const wrPass = weightedAverage(
-    rankedScores(players, "WR", 2, { technical: 0.35, trueGrade: 0.3, speed: 0.35 }),
+    rankedScores(players, "WR", 2, { technical: 0.28, iq: 0.18, trueGrade: 0.16, speed: 0.38 }),
     [1, 0.7]
   );
   const tePass = weightedAverage(
-    rankedScores(players, "TE", 1, { technical: 0.4, trueGrade: 0.4, speed: 0.2 }),
+    rankedScores(players, "TE", 1, { technical: 0.26, iq: 0.22, power: 0.24, trueGrade: 0.14, speed: 0.14 }),
     [1]
   );
   const rbRun = weightedAverage(
-    rankedScores(players, "RB", 1, { technical: 0.3, trueGrade: 0.45, speed: 0.25 }),
+    rankedScores(players, "RB", 1, { technical: 0.18, iq: 0.18, power: 0.3, trueGrade: 0.12, speed: 0.22 }),
     [1]
   );
   const qbRun = weightedAverage(
-    rankedScores(players, "QB", 1, { technical: 0.15, trueGrade: 0.25, speed: 0.6 }),
+    rankedScores(players, "QB", 1, { technical: 0.12, iq: 0.16, power: 0.08, trueGrade: 0.12, speed: 0.52 }),
     [1]
   );
   const secCoverage = weightedAverage(
-    rankedScores(players, "SEC", 2, { technical: 0.4, trueGrade: 0.35, speed: 0.25 }),
+    rankedScores(players, "SEC", 2, { technical: 0.22, iq: 0.38, trueGrade: 0.14, speed: 0.26 }),
     [1, 0.75]
   );
   const lbDefense = weightedAverage(
-    rankedScores(players, "LB", 2, { technical: 0.35, trueGrade: 0.45, speed: 0.2 }),
+    rankedScores(players, "LB", 2, { technical: 0.2, iq: 0.28, power: 0.24, trueGrade: 0.14, speed: 0.14 }),
     [1, 0.75]
   );
   const dlDefense = weightedAverage(
-    rankedScores(players, "DL", 2, { technical: 0.3, trueGrade: 0.5, speed: 0.2 }),
+    rankedScores(players, "DL", 2, { technical: 0.18, iq: 0.18, power: 0.4, trueGrade: 0.16, speed: 0.08 }),
     [1, 0.7]
   );
 
@@ -356,6 +404,7 @@ function RecapPageContent() {
   const myTeam = mySide === "A" ? data?.teamA : mySide === "B" ? data?.teamB : null;
   const myTeamName =
     mySide === "A" ? data?.teamAName : mySide === "B" ? data?.teamBName : null;
+  const myScouting = mySide === "A" ? room?.scoutingA ?? {} : mySide === "B" ? room?.scoutingB ?? {} : {};
   const myRatings =
     mySide === "A" ? teamARatings : mySide === "B" ? teamBRatings : null;
   const selectedTeamAOffense = teamAOffenseStrategy ?? room?.teamAStrategy.offense ?? "Balanced";
@@ -542,22 +591,36 @@ function RecapPageContent() {
 
             <div className="space-y-3">
               {myTeam.map((player) => (
-                <div key={player.id} className="rounded-xl border p-3">
-                  <div className="font-medium">
-                    #{player.overallPick} — {player.position} — {player.name}
-                  </div>
-                  <div className="text-sm opacity-80">
-                    Archetype: {player.archetype} • {player.careerStage ?? "Rook"}
-                  </div>
-                  <div className="text-sm">Speed: {speedRatingFromForty(player.position, player.forty)}</div>
-                  <div className="text-sm">Technical: {technicalFromPlayer(player)}</div>
-                  <div className="text-sm">
-                    Projection Outcome: {getProjectionOutcomeLabel(player, data.fullDraftClass)}
-                  </div>
-                  <div className="text-sm">
-                    Draft Value: {getDraftValueLabel(player, data.fullDraftClass)}
-                  </div>
-                </div>
+                (() => {
+                  const scoutingNote = scoutingPayoffNote(
+                    player,
+                    data.fullDraftClass,
+                    myScouting,
+                    room?.seed ?? 0
+                  );
+
+                  return (
+                    <div key={player.id} className="rounded-xl border p-3">
+                      <div className="font-medium">
+                        #{player.overallPick} — {player.position} — {player.name}
+                      </div>
+                      <div className="text-sm opacity-80">
+                        Archetype: {player.archetype} • {player.careerStage ?? "Rook"}
+                      </div>
+                      <div className="text-sm">Speed: {getPlayerSpeed(player)}</div>
+                      <div className="text-sm">Technical: {getPlayerTechnical(player)}</div>
+                      <div className="text-sm">Power: {getPlayerPower(player)}</div>
+                      <div className="text-sm">IQ: {iqLabel(getPlayerIQ(player))}</div>
+                      <div className="text-sm">
+                        Projection Outcome: {getProjectionOutcomeLabel(player, data.fullDraftClass)}
+                      </div>
+                      <div className="text-sm">
+                        Draft Value: {getDraftValueLabel(player, data.fullDraftClass)}
+                      </div>
+                      {scoutingNote && <div className="text-sm text-sky-800">{scoutingNote}</div>}
+                    </div>
+                  );
+                })()
               ))}
             </div>
           </div>

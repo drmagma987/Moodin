@@ -29,8 +29,14 @@ export type Prospect = {
   position: Position;
   archetype: Archetype;
   height: number;
+  weight: number;
   forty: number;
+  bench: number;
+  vertical: number;
+  speedRating: number;
   technicalRating: number;
+  powerRating: number;
+  iqRating: number;
   projectedRound: number;
   trueGrade: number;
   careerStage?: CareerStage;

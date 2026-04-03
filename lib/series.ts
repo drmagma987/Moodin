@@ -1,5 +1,6 @@
 import { generateProspects } from "./game/prospects";
-import type { CareerStage, DraftedPlayer, Prospect } from "./game/types";
+import type { CareerStage, DraftedPlayer, Position, Prospect } from "./game/types";
+import { ageAdjustedPlayer, getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical } from "./game/playerRatings";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -8,6 +9,16 @@ function clamp(value: number, min: number, max: number) {
 function notNull<T>(value: T | null): value is T {
   return value !== null;
 }
+
+const STARTER_REQUIREMENTS: Record<Position, number> = {
+  QB: 1,
+  RB: 1,
+  WR: 2,
+  TE: 1,
+  DL: 1,
+  LB: 1,
+  SEC: 1,
+};
 
 export function currentCareerStage(player: Pick<DraftedPlayer, "careerStage">) {
   return player.careerStage ?? "Rook";
@@ -45,6 +56,17 @@ function careerStageDelta(stage: CareerStage) {
   }
 }
 
+function careerStageAttributeDeltas(stage: CareerStage) {
+  switch (stage) {
+    case "Prime":
+      return { speed: 1, technical: 2, power: 1, iq: 2 };
+    case "Unc":
+      return { speed: -2, technical: -1, power: -1, iq: 1 };
+    case "Rook":
+      return { speed: 0, technical: 0, power: 0, iq: 0 };
+  }
+}
+
 export function describeNextCareerStage(
   player: Pick<DraftedPlayer, "careerStage" | "id">,
   nextGameNumber: number
@@ -72,13 +94,16 @@ export function agePlayerForSeries(
 
   const nextStage = nextCareerStage(currentCareerStage(player), player, nextGameNumber);
   const delta = careerStageDelta(nextStage);
-  const baseTechnical = player.technicalRating ?? player.trueGrade;
+  const nextRatings = ageAdjustedPlayer(player, careerStageAttributeDeltas(nextStage));
 
   return {
     ...player,
     id: `${acquisitionType}-${nextGameNumber}-${side}-${player.id}`,
-    trueGrade: clamp(player.trueGrade + delta, 50, 95),
-    technicalRating: clamp(baseTechnical + delta, 45, 95),
+    trueGrade: clamp(nextRatings.trueGrade + (delta > 0 ? 0 : 0), 50, 95),
+    speedRating: nextRatings.speedRating,
+    technicalRating: nextRatings.technicalRating,
+    powerRating: nextRatings.powerRating,
+    iqRating: nextRatings.iqRating,
     careerStage: nextStage,
     acquisitionType,
     originalOverallPick: player.originalOverallPick ?? player.overallPick,
@@ -147,8 +172,65 @@ function asFreeAgentProspect(
   };
 }
 
-function byTrueGradeDesc(a: DraftedPlayer, b: DraftedPlayer) {
-  return b.trueGrade - a.trueGrade;
+function countByPosition(players: DraftedPlayer[]) {
+  return {
+    QB: players.filter((player) => player.position === "QB").length,
+    RB: players.filter((player) => player.position === "RB").length,
+    WR: players.filter((player) => player.position === "WR").length,
+    TE: players.filter((player) => player.position === "TE").length,
+    DL: players.filter((player) => player.position === "DL").length,
+    LB: players.filter((player) => player.position === "LB").length,
+    SEC: players.filter((player) => player.position === "SEC").length,
+  };
+}
+
+function neededPositions(players: DraftedPlayer[]) {
+  const counts = countByPosition(players);
+
+  return (Object.keys(STARTER_REQUIREMENTS) as Position[]).filter(
+    (position) => counts[position] < STARTER_REQUIREMENTS[position]
+  );
+}
+
+function archetypeExcitement(player: DraftedPlayer) {
+  switch (player.archetype) {
+    case "Dual Threat":
+    case "Deep Threat":
+    case "Vertical Threat":
+    case "Pass Rusher":
+    case "Ball Hawk":
+    case "Playmaker":
+      return 5;
+    case "Gunslinger":
+    case "YAC Specialist":
+    case "Receiving Back":
+    case "Lockdown":
+      return 3;
+    default:
+      return 1;
+  }
+}
+
+function freeAgencyPoolScore(
+  player: DraftedPlayer,
+  fullDraftClass: Prospect[],
+  priorityPositions: Set<Position>
+) {
+  const priorityBonus = priorityPositions.has(player.position) ? 8 : 0;
+  const valueBonus = clamp(pickValueDelta(player, fullDraftClass), -6, 10);
+  const veteranRisk = currentCareerStage(player) === "Unc" ? -2 : 0;
+
+  return (
+    player.trueGrade +
+    priorityBonus +
+    valueBonus +
+    archetypeExcitement(player) +
+    veteranRisk +
+    Math.round((getPlayerIQ(player) - 70) * 0.08) +
+    Math.round((getPlayerPower(player) - 70) * 0.04) +
+    Math.round((getPlayerSpeed(player) - 70) * 0.04) +
+    Math.round((getPlayerTechnical(player) - 70) * 0.08)
+  );
 }
 
 function pickValueDelta(player: DraftedPlayer, fullDraftClass: Prospect[]) {
@@ -212,30 +294,58 @@ export function buildFreeAgencyPool({
     })
     .filter(notNull);
 
+  const projectedKeepersA = previousTeamA
+    .filter((player) => keeperIdsA.includes(player.id))
+    .map((player) => agePlayerForSeries(player, nextGameNumber, "A", "keeper"))
+    .filter(notNull);
+  const projectedKeepersB = previousTeamB
+    .filter((player) => keeperIdsB.includes(player.id))
+    .map((player) => agePlayerForSeries(player, nextGameNumber, "B", "keeper"))
+    .filter(notNull);
+  const priorityPositions = new Set<Position>([
+    ...neededPositions(projectedKeepersA),
+    ...neededPositions(projectedKeepersB),
+  ]);
+
   const undraftedCandidates = fullDraftClass
     .filter((player) => !rosterIds.has(player.id))
     .map((player) => asFreeAgentProspect(player, nextGameNumber));
 
-  const strongOptions = [...carryoverCandidates, ...undraftedCandidates]
-    .sort(byTrueGradeDesc)
+  const allCandidates = [...carryoverCandidates, ...undraftedCandidates].sort(
+    (a, b) =>
+      freeAgencyPoolScore(b, fullDraftClass, priorityPositions) -
+      freeAgencyPoolScore(a, fullDraftClass, priorityPositions)
+  );
+
+  const strongOptions = [...allCandidates]
     .slice(0, 2);
 
   const used = new Set(strongOptions.map((player) => player.id));
 
-  const valueOptions = [...carryoverCandidates, ...undraftedCandidates]
+  const valueOptions = [...allCandidates]
     .filter((player) => !used.has(player.id))
-    .sort((a, b) => pickValueDelta(b, fullDraftClass) - pickValueDelta(a, fullDraftClass))
+    .sort(
+      (a, b) =>
+        pickValueDelta(b, fullDraftClass) -
+          pickValueDelta(a, fullDraftClass) +
+          (priorityPositions.has(b.position) ? 2 : 0) -
+          (priorityPositions.has(a.position) ? 2 : 0)
+    )
     .slice(0, 2);
 
   valueOptions.forEach((player) => used.add(player.id));
 
-  const riskyOptions = [...carryoverCandidates, ...undraftedCandidates]
+  const riskyOptions = [...allCandidates]
     .filter((player) => !used.has(player.id))
     .sort((a, b) => {
       const aRiskScore =
-        (currentCareerStage(a) === "Unc" ? 8 : 0) - a.trueGrade;
+        (currentCareerStage(a) === "Unc" ? 8 : 0) +
+        archetypeExcitement(a) -
+        a.trueGrade;
       const bRiskScore =
-        (currentCareerStage(b) === "Unc" ? 8 : 0) - b.trueGrade;
+        (currentCareerStage(b) === "Unc" ? 8 : 0) +
+        archetypeExcitement(b) -
+        b.trueGrade;
       return bRiskScore - aRiskScore;
     })
     .slice(0, 2);

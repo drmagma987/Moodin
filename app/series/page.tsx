@@ -3,13 +3,14 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
+import { buildScoutingRange, scoutingRangeLabel, type ScoutAttribute } from "@/lib/game/scouting";
 import {
   describeNextCareerStage,
   getSeriesPressureMessage,
   retirementGoodbye,
   willRetireAfterGame,
 } from "@/lib/series";
-import { speedRatingFromForty } from "@/lib/game/speed";
+import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
 import {
   getRoomStatusHref,
   lockKeepers,
@@ -19,6 +20,8 @@ import {
   subscribeToRoom,
 } from "@/lib/room";
 import { PlayerGameStats } from "@/lib/sim";
+
+const SCOUT_ATTRIBUTES: ScoutAttribute[] = ["speed", "technical", "power"];
 
 function cardClasses(selected: boolean, disabled: boolean) {
   if (disabled) {
@@ -38,6 +41,8 @@ function statSummary(statLine: PlayerGameStats) {
   if (statLine.passingYards > 0) chunks.push(`${statLine.passingYards} pass yds`);
   if (statLine.passingTD > 0) chunks.push(`${statLine.passingTD} pass TD`);
   if (statLine.interceptions > 0) chunks.push(`${statLine.interceptions} INT`);
+  if (statLine.tackles > 0) chunks.push(`${statLine.tackles} tackles`);
+  if (statLine.sacks > 0) chunks.push(`${statLine.sacks} sacks`);
   if (statLine.carries > 0) chunks.push(`${statLine.carries} car`);
   if (statLine.rushYards > 0) chunks.push(`${statLine.rushYards} rush yds`);
   if (statLine.rushTD > 0) chunks.push(`${statLine.rushTD} rush TD`);
@@ -45,7 +50,7 @@ function statSummary(statLine: PlayerGameStats) {
   if (statLine.receivingYards > 0) chunks.push(`${statLine.receivingYards} rec yds`);
   if (statLine.receivingTD > 0) chunks.push(`${statLine.receivingTD} rec TD`);
 
-  return chunks.length > 0 ? chunks.join(" • ") : "No touches recorded.";
+  return chunks.length > 0 ? chunks.join(" • ") : "Quiet game.";
 }
 
 function TeamBoxScore({
@@ -187,7 +192,7 @@ function SeriesPageContent() {
   }
 
   async function handleLockKeepers() {
-    if (!roomId || !mySide || myKeepers.length !== 2 || myKeepersLocked) return;
+    if (!roomId || !mySide || myKeepers.length !== 3 || myKeepersLocked) return;
 
     try {
       setLoadingAction(true);
@@ -336,7 +341,7 @@ function SeriesPageContent() {
                           {player.archetype} • {player.careerStage ?? "Rook"}
                         </div>
                         <div className="mt-1 text-sm opacity-80">
-                          Speed {speedRatingFromForty(player.position, player.forty)} • Tech {player.technicalRating} • Grade {player.trueGrade}
+                          SPD {getPlayerSpeed(player)} • TEC {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
                         </div>
                       </div>
                       <div className="text-sm font-medium">
@@ -355,6 +360,8 @@ function SeriesPageContent() {
                           passingYards: 0,
                           passingTD: 0,
                           interceptions: 0,
+                          tackles: 0,
+                          sacks: 0,
                           rushYards: 0,
                           rushTD: 0,
                           carries: 0,
@@ -419,7 +426,7 @@ function SeriesPageContent() {
                         {player.archetype} • {player.careerStage}
                       </p>
                       <p className="mt-1 text-sm opacity-80">
-                        Speed {speedRatingFromForty(player.position, player.forty)} • Tech {player.technicalRating} • Grade {player.trueGrade}
+                        SPD {getPlayerSpeed(player)} • TEC {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
                       </p>
                     </div>
                   ))}
@@ -428,32 +435,49 @@ function SeriesPageContent() {
             )}
 
             <div className="space-y-3">
-              {room.freeAgencyPool.map((player) => (
-                <button
-                  key={player.id}
-                  type="button"
-                  onClick={() => setSelectedFreeAgentId(player.id)}
-                  disabled={myFreeAgencyLocked}
-                  className={`w-full rounded-2xl border p-4 text-left ${cardClasses(
-                    selectedFreeAgentId === player.id,
-                    myFreeAgencyLocked
-                  )}`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-medium">
-                        {player.position} — {player.name}
+              {room.freeAgencyPool.map((player) => {
+                  const projectedRanges = SCOUT_ATTRIBUTES.map((attribute) =>
+                    scoutingRangeLabel(
+                      attribute,
+                      buildScoutingRange(
+                        player,
+                        attribute,
+                        1,
+                        `${room.roomId}:fa:${room.seriesGameNumber}`
+                      )
+                    )
+                  ).join(" • ");
+
+                  return (
+                    <button
+                      key={player.id}
+                      type="button"
+                      onClick={() => setSelectedFreeAgentId(player.id)}
+                      disabled={myFreeAgencyLocked}
+                      className={`w-full rounded-2xl border p-4 text-left ${cardClasses(
+                        selectedFreeAgentId === player.id,
+                        myFreeAgencyLocked
+                      )}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium">
+                            {player.position} — {player.name}
+                          </div>
+                          <div className="text-sm opacity-80">
+                            {player.archetype} • {player.careerStage ?? "Prime"}
+                          </div>
+                          <div className="mt-1 text-sm opacity-80">
+                            {projectedRanges} • IQ {iqLabel(getPlayerIQ(player))}
+                          </div>
+                        </div>
+                        <div className="text-sm font-medium opacity-70">
+                          {player.freeAgencyTag}
+                        </div>
                       </div>
-                      <div className="text-sm opacity-80">
-                        {player.archetype} • {player.careerStage ?? "Prime"}
-                      </div>
-                    </div>
-                    <div className="text-sm font-medium opacity-70">
-                      {player.freeAgencyTag}
-                    </div>
-                  </div>
-                </button>
-              ))}
+                    </button>
+                  );
+                })}
             </div>
 
             <div className="sticky bottom-3 z-10 rounded-2xl border bg-background/95 p-4 shadow-sm backdrop-blur">
@@ -507,31 +531,48 @@ function SeriesPageContent() {
                 </p>
 
                 <div className="space-y-3">
-                  {availableReplacementPool.map((player) => (
-                    <button
-                      key={player.id}
-                      type="button"
-                      onClick={() => setSelectedFreeAgentId(player.id)}
-                      className={`w-full rounded-2xl border p-4 text-left ${cardClasses(
-                        selectedFreeAgentId === player.id,
-                        false
-                      )}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="font-medium">
-                            {player.position} — {player.name}
+                  {availableReplacementPool.map((player) => {
+                      const projectedRanges = SCOUT_ATTRIBUTES.map((attribute) =>
+                        scoutingRangeLabel(
+                          attribute,
+                          buildScoutingRange(
+                            player,
+                            attribute,
+                            1,
+                            `${room.roomId}:fa:${room.seriesGameNumber}`
+                          )
+                        )
+                      ).join(" • ");
+
+                      return (
+                        <button
+                          key={player.id}
+                          type="button"
+                          onClick={() => setSelectedFreeAgentId(player.id)}
+                          className={`w-full rounded-2xl border p-4 text-left ${cardClasses(
+                            selectedFreeAgentId === player.id,
+                            false
+                          )}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-medium">
+                                {player.position} — {player.name}
+                              </div>
+                              <div className="text-sm opacity-80">
+                                {player.archetype} • {player.careerStage ?? "Prime"}
+                              </div>
+                              <div className="mt-1 text-sm opacity-80">
+                                {projectedRanges} • IQ {iqLabel(getPlayerIQ(player))}
+                              </div>
+                            </div>
+                            <div className="text-sm font-medium opacity-70">
+                              {player.freeAgencyTag}
+                            </div>
                           </div>
-                          <div className="text-sm opacity-80">
-                            {player.archetype} • {player.careerStage ?? "Prime"}
-                          </div>
-                        </div>
-                        <div className="text-sm font-medium opacity-70">
-                          {player.freeAgencyTag}
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                        </button>
+                      );
+                    })}
                 </div>
 
                 <div className="sticky bottom-3 z-10 rounded-2xl border bg-background/95 p-4 shadow-sm backdrop-blur">

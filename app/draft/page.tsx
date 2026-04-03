@@ -4,11 +4,14 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { generateProspects } from "@/lib/game/prospects";
-import { speedRatingFromForty } from "@/lib/game/speed";
+import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
+import { scoutingButtonLabel, scoutingRangeLabel, type ScoutAttribute } from "@/lib/game/scouting";
 import type { DraftedPlayer, Position, Prospect } from "@/lib/game/types";
 import {
+  getCurrentDraftSide,
   getRoomStatusHref,
   makeDraftPick,
+  scoutProspect,
   type RoomData,
   subscribeToRoom,
   updateRoomStatus,
@@ -20,15 +23,8 @@ function formatHeight(inches: number) {
   return `${feet}'${remainder}"`;
 }
 
-function currentPicker2P(pickNumber: number, firstSide: "A" | "B"): "A" | "B" {
-  const round = Math.floor(pickNumber / 2) + 1;
-  const pickInRound = pickNumber % 2;
-
-  if (round % 2 === 1) {
-    return pickInRound === 0 ? firstSide : firstSide === "A" ? "B" : "A";
-  }
-
-  return pickInRound === 0 ? (firstSide === "A" ? "B" : "A") : firstSide;
+function formatWeight(weight: number) {
+  return `${weight} lbs`;
 }
 
 type TeamNeeds = Record<Position, number>;
@@ -47,6 +43,7 @@ const STARTER_REQUIREMENTS: TeamNeeds = {
 };
 
 const POSITIONS: Position[] = ["QB", "RB", "WR", "TE", "DL", "LB", "SEC"];
+const SCOUT_ATTRIBUTES: ScoutAttribute[] = ["speed", "technical", "power"];
 
 function countByPosition(players: DraftedPlayer[]): Record<Position, number> {
   return {
@@ -165,7 +162,7 @@ function RosterPanel({
                     {player.position} - {player.name}
                   </div>
                   <p className="text-sm text-gray-600">
-                    {player.archetype} • Speed {speedRatingFromForty(player.position, player.forty)}
+                    {player.archetype} • SPD {getPlayerSpeed(player)} • TEC {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
                   </p>
                 </div>
                 <span className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
@@ -230,10 +227,9 @@ function DraftPageContent() {
   const teamB: DraftedPlayer[] = room?.teamB ?? EMPTY_PLAYERS;
   const pickNumber = room?.pickNumber ?? 0;
   const totalDraftPicks = room?.totalDraftPicks ?? 24;
-  const draftFirstSide = room?.draftFirstSide ?? "A";
 
   const draftOver = pickNumber >= totalDraftPicks;
-  const currentTeam = currentPicker2P(pickNumber, draftFirstSide);
+  const currentTeam = room ? getCurrentDraftSide(room) : null;
   const turnRoster = currentTeam === "A" ? teamA : teamB;
   const missingPositions = getMissingStarterPositions(turnRoster);
   const startersComplete = missingPositions.length === 0;
@@ -247,7 +243,7 @@ function DraftPageContent() {
           : null
       : null;
 
-  const isMyTurn = mySlot === currentTeam;
+  const isMyTurn = !!currentTeam && mySlot === currentTeam;
   const sortedProspects = useMemo(() => {
     const draftedIds = room?.draftedIds ?? [];
 
@@ -309,6 +305,10 @@ function DraftPageContent() {
   const opponentTeamName = mySlot === "A" ? teamBName : teamAName;
   const opponentPlayers = mySlot === "A" ? teamB : teamA;
   const opponentCounts = mySlot === "A" ? teamBCounts : teamACounts;
+  const myScouting =
+    mySlot === "A" ? room?.scoutingA ?? {} : mySlot === "B" ? room?.scoutingB ?? {} : {};
+  const myScoutTokens =
+    mySlot === "A" ? room?.scoutTokensA ?? 0 : mySlot === "B" ? room?.scoutTokensB ?? 0 : 0;
 
   async function handleDraftPlayer(player: Prospect) {
     if (!roomId || !room || room.status !== "draft" || draftOver) return;
@@ -321,6 +321,18 @@ function DraftPageContent() {
     } catch (error) {
       console.error(error);
       setPickError("Pick failed. Try again.");
+    }
+  }
+
+  async function handleScoutPlayer(playerId: string, attribute: ScoutAttribute) {
+    if (!roomId || !mySlot || !room || room.status !== "draft") return;
+
+    try {
+      setPickError("");
+      await scoutProspect(roomId, mySlot, playerId, attribute);
+    } catch (error) {
+      console.error(error);
+      setPickError("Scouting failed. Try again.");
     }
   }
 
@@ -391,7 +403,7 @@ function DraftPageContent() {
                 <p className="mt-1 text-lg font-semibold sm:text-xl">
                   {draftOver
                     ? "Both rosters are set. Move to recap when ready."
-                    : isMyTurn
+                  : isMyTurn
                       ? `You are on the clock for Pick ${Math.min(overallPick, Math.max(totalDraftPicks, 1))}.`
                       : `${currentTeam === "A" ? teamAName : teamBName} is making the next pick.`}
                 </p>
@@ -400,6 +412,7 @@ function DraftPageContent() {
                     Round {Math.max(1, round)} • Pick {Math.min(overallPick, Math.max(totalDraftPicks, 1))} / {totalDraftPicks}
                   </p>
                 )}
+                <p className="mt-1 text-sm opacity-80">Scout Tokens: {myScoutTokens}</p>
               </div>
               <button
                 type="button"
@@ -469,7 +482,7 @@ function DraftPageContent() {
               <div>
                 <p className="text-sm font-medium">Board Filters</p>
                 <p className="text-sm text-gray-600">
-                  Toggle draftable players only or zero in on a position.
+                  Toggle draftable players only or zero in on a position. Scout Tokens: {myScoutTokens}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -513,6 +526,7 @@ function DraftPageContent() {
               const disabled = !draftable || !isMyTurn;
               const playerTag = prospectTags[player.id] ?? null;
               const remainingAtPosition = remainingByPosition[player.position] ?? 0;
+              const scoutingReport = myScouting[player.id] ?? {};
 
               return (
                 <div
@@ -548,15 +562,14 @@ function DraftPageContent() {
 
                       <div>
                         <div className="text-base font-semibold sm:text-lg">{player.name}</div>
-
                         <div className="text-sm opacity-70">
-                          {formatHeight(player.height)} | {player.forty} 40
+                          {formatHeight(player.height)} • {formatWeight(player.weight)}
                         </div>
-
                         <div className="text-sm opacity-70">Archetype: {player.archetype}</div>
                         <div className="text-sm opacity-70">
-                          Speed {speedRatingFromForty(player.position, player.forty)} • Grade {player.trueGrade}
+                          40: {player.forty} • Bench: {player.bench} • Vert: {player.vertical}&quot;
                         </div>
+                        <div className="text-sm opacity-70">IQ: {iqLabel(getPlayerIQ(player))}</div>
                       </div>
                     </div>
 
@@ -570,6 +583,32 @@ function DraftPageContent() {
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    {SCOUT_ATTRIBUTES.map((attribute) => {
+                      const range = scoutingReport[attribute];
+                      const fullyScouted = range?.level === 2;
+                      const scoutDisabled = myScoutTokens <= 0 || fullyScouted || draftOver;
+
+                      return (
+                        <button
+                          key={attribute}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleScoutPlayer(player.id, attribute);
+                          }}
+                          disabled={scoutDisabled}
+                          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-sm text-slate-900 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <div className="font-medium">
+                            {range ? `${scoutingButtonLabel(attribute)} Tighten` : `Scout ${scoutingButtonLabel(attribute)}`}
+                          </div>
+                          <div className="text-xs opacity-70">{scoutingRangeLabel(attribute, range)}</div>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-3">

@@ -16,7 +16,12 @@ export const FIRST_NAMES = [
   "Dawson","Trent","Ashton","Kaden","Royce","Keenan",
   "Terrance","Jabari","Elijah","Maddox","Bryson","Cooper",
   "Miles","Logan","Carter","Sawyer","Bennett","Owen",
-  "Emmett","Tanner","Kash","Troy","Dillon","Jeremiah"
+  "Emmett","Tanner","Kash","Troy","Dillon","Jeremiah",
+  "George","Dick","Colin","Donald","Condoleezza","Paul",
+  "Henry","Alberto","Norman","Elaine","Spencer","Gale",
+  "Dirk","Mel","Alphonso","Tommy","Margaret","Carlos",
+  "Samuel","Anthony","Christie","Stephen","Robert",
+  "Jerome","Janet","Ben","Alan","Paul","Arthur","William"
 ];
 
 export const LAST_NAMES = [
@@ -38,7 +43,15 @@ export const LAST_NAMES = [
   "Owens","Reynolds","Fisher","Ellis","Porter","Hunter",
   "Stephens","Payne","Bennett","Price","Sanders","Barnett",
   "Black","Daniels","Schultz","Mendoza","Cunningham","Hawkins",
-  "Armstrong","Bishop","Goodwin","Knight","Arnold","Hudson"
+  "Armstrong","Bishop","Goodwin","Knight","Arnold","Hudson",
+  "Bush","Cheney","Powell","Rumsfeld","Rice","ONeill",
+  "Snow","Paulson","Ashcroft","Gonzales","Mukasey","Veneman",
+  "Johanns","Mineta","Peters","Chao","Abraham","Bodman",
+  "Norton","Kempthorne","Martinez","Jackson","Thompson","Leavitt",
+  "Paige","Spellings","Evans","Gutierrez","Ridge","Chertoff",
+  "Principi","Nicholson","Whitman","Johnson","Gates",
+  "Powell","Volcker","Greenspan","Bernanke","Yellen","Epstein",
+  "Malkova","Khalifa"
 ];
 
 export const SCHOOL_PREFIXES = [
