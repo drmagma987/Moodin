@@ -25,7 +25,7 @@ export function currentCareerStage(player: Pick<DraftedPlayer, "careerStage">) {
 }
 
 function rookieJumpToUnc(player: Pick<DraftedPlayer, "id">, nextGameNumber: number) {
-  return simpleHash(`${player.id}:${nextGameNumber}:career`) % 5 === 0;
+  return simpleHash(`${player.id}:${nextGameNumber}:career`) % 3 === 0;
 }
 
 export function nextCareerStage(

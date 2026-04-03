@@ -122,10 +122,12 @@ function RosterPanel({
   title,
   players,
   filledCounts,
+  showRatings,
 }: {
   title: string;
   players: DraftedPlayer[];
   filledCounts: Record<Position, number>;
+  showRatings: boolean;
 }) {
   return (
     <div className="rounded-2xl border bg-white p-4 text-slate-950 sm:p-5">
@@ -162,7 +164,10 @@ function RosterPanel({
                     {player.position} - {player.name}
                   </div>
                   <p className="text-sm text-gray-600">
-                    {player.archetype} • SPD {getPlayerSpeed(player)} • TEC {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
+                    {player.archetype}
+                    {showRatings
+                      ? ` • SPD ${getPlayerSpeed(player)} • TEC ${getPlayerTechnical(player)} • PWR ${getPlayerPower(player)} • IQ ${iqLabel(getPlayerIQ(player))}`
+                      : " • Ratings hidden from opponents"}
                   </p>
                 </div>
                 <span className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
@@ -665,11 +670,12 @@ function DraftPageContent() {
 
         <aside className="hidden lg:block">
           <div className="sticky top-4 space-y-4">
-            <RosterPanel title={myTeamName} players={myPlayers} filledCounts={myCounts} />
+            <RosterPanel title={myTeamName} players={myPlayers} filledCounts={myCounts} showRatings />
             <RosterPanel
               title={opponentTeamName}
               players={opponentPlayers}
               filledCounts={opponentCounts}
+              showRatings={false}
             />
           </div>
         </aside>
@@ -693,8 +699,18 @@ function DraftPageContent() {
           </button>
         </div>
         <div className="mx-auto mt-4 max-h-[70vh] max-w-2xl space-y-4 overflow-y-auto pb-4">
-          <RosterPanel title={teamAName} players={teamA} filledCounts={teamACounts} />
-          <RosterPanel title={teamBName} players={teamB} filledCounts={teamBCounts} />
+          <RosterPanel
+            title={teamAName}
+            players={teamA}
+            filledCounts={teamACounts}
+            showRatings={mySlot === "A"}
+          />
+          <RosterPanel
+            title={teamBName}
+            players={teamB}
+            filledCounts={teamBCounts}
+            showRatings={mySlot === "B"}
+          />
         </div>
       </div>
     </main>

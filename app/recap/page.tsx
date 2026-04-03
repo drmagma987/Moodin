@@ -268,6 +268,10 @@ function stretchTeamRating(raw: number) {
   return clamp(Math.round(centered), 45, 99);
 }
 
+function tunedRating(raw: number, offset = 0) {
+  return stretchTeamRating(raw + offset);
+}
+
 function buildRatings(players: DraftedPlayer[]): TeamRatings {
   const qbPass = weightedAverage(
     rankedScores(players, "QB", 1, { technical: 0.3, iq: 0.35, trueGrade: 0.15, speed: 0.2 }),
@@ -281,8 +285,16 @@ function buildRatings(players: DraftedPlayer[]): TeamRatings {
     rankedScores(players, "TE", 1, { technical: 0.26, iq: 0.22, power: 0.24, trueGrade: 0.14, speed: 0.14 }),
     [1]
   );
+  const teBlock = weightedAverage(
+    rankedScores(players, "TE", 1, { power: 0.45, technical: 0.2, iq: 0.2, trueGrade: 0.15 }),
+    [1]
+  );
   const rbRun = weightedAverage(
     rankedScores(players, "RB", 1, { technical: 0.18, iq: 0.18, power: 0.3, trueGrade: 0.12, speed: 0.22 }),
+    [1]
+  );
+  const rbSecurity = weightedAverage(
+    rankedScores(players, "RB", 1, { technical: 0.28, iq: 0.28, power: 0.2, trueGrade: 0.14, speed: 0.1 }),
     [1]
   );
   const qbRun = weightedAverage(
@@ -301,16 +313,19 @@ function buildRatings(players: DraftedPlayer[]): TeamRatings {
     rankedScores(players, "DL", 2, { technical: 0.18, iq: 0.18, power: 0.4, trueGrade: 0.16, speed: 0.08 }),
     [1, 0.7]
   );
+  const frontSeven = weightedAverage([dlDefense, lbDefense], [1, 0.95]);
+  const passGame = weightedAverage([qbPass, wrPass, tePass], [1, 0.85, 0.45]);
+  const runGame = weightedAverage([rbRun, qbRun, teBlock], [1, 0.45, 0.55]);
 
   return {
-    pass: stretchTeamRating(qbPass * 0.5 + wrPass * 0.35 + tePass * 0.15),
-    run: stretchTeamRating(rbRun * 0.65 + qbRun * 0.2 + tePass * 0.15),
-    bigPlay: stretchTeamRating(wrPass * 0.45 + rbRun * 0.2 + qbRun * 0.35),
-    ballSecurity: stretchTeamRating(qbPass * 0.55 + rbRun * 0.3 + tePass * 0.15),
-    passD: stretchTeamRating(secCoverage * 0.6 + lbDefense * 0.4),
-    runD: stretchTeamRating(dlDefense * 0.55 + lbDefense * 0.45),
-    pressure: stretchTeamRating(dlDefense * 0.7 + lbDefense * 0.3),
-    takeaways: stretchTeamRating(secCoverage * 0.55 + lbDefense * 0.3 + dlDefense * 0.15),
+    pass: tunedRating(passGame, -2),
+    run: tunedRating(runGame, 3),
+    bigPlay: tunedRating(weightedAverage([wrPass, qbRun, rbRun], [1, 0.7, 0.55]), -3),
+    ballSecurity: tunedRating(weightedAverage([qbPass, rbSecurity, tePass], [1, 0.7, 0.35]), 2),
+    passD: tunedRating(weightedAverage([secCoverage, lbDefense, dlDefense], [1, 0.55, 0.3]), -1),
+    runD: tunedRating(weightedAverage([frontSeven, teBlock], [1, 0.15]), 4),
+    pressure: tunedRating(weightedAverage([dlDefense, lbDefense], [1, 0.7]), 3),
+    takeaways: tunedRating(weightedAverage([secCoverage, lbDefense, dlDefense], [0.75, 0.65, 0.45]), -2),
   };
 }
 

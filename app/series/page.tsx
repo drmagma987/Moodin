@@ -77,6 +77,25 @@ function TeamBoxScore({
   );
 }
 
+function emptyStatLine(playerId: string, name: string, position: PlayerGameStats["position"]): PlayerGameStats {
+  return {
+    playerId,
+    name,
+    position,
+    passingYards: 0,
+    passingTD: 0,
+    interceptions: 0,
+    tackles: 0,
+    sacks: 0,
+    rushYards: 0,
+    rushTD: 0,
+    carries: 0,
+    receivingYards: 0,
+    receivingTD: 0,
+    receptions: 0,
+  };
+}
+
 function SeriesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -248,9 +267,10 @@ function SeriesPageContent() {
   );
   const retiringPlayers = myTeam.filter((player) => willRetireAfterGame(player));
   const carriedPlayers = mySide === "A" ? room.carriedPlayersA : mySide === "B" ? room.carriedPlayersB : [];
-  const myLastGameStats =
-    mySide === "A" ? room.simResult?.teamAStats ?? [] : mySide === "B" ? room.simResult?.teamBStats ?? [] : [];
-  const myLastGameStatMap = new Map(myLastGameStats.map((statLine) => [statLine.playerId, statLine]));
+  const allLastGameStats = room.simResult ? [...room.simResult.teamAStats, ...room.simResult.teamBStats] : [];
+  const allLastGameStatMap = new Map(
+    allLastGameStats.map((statLine) => [`${statLine.name}:${statLine.position}`, statLine])
+  );
   const seriesPressureMessage = getSeriesPressureMessage({
     seriesGameNumber: room.seriesGameNumber,
     seriesWinsA: room.seriesWinsA,
@@ -351,26 +371,6 @@ function SeriesPageContent() {
                     <p className="mt-2 text-sm opacity-70">
                       Next game: {describeNextCareerStage(player, room.seriesGameNumber + 1)}
                     </p>
-                    <p className="mt-2 text-sm opacity-80">
-                      Last game: {statSummary(
-                        myLastGameStatMap.get(player.id) ?? {
-                          playerId: player.id,
-                          name: player.name,
-                          position: player.position,
-                          passingYards: 0,
-                          passingTD: 0,
-                          interceptions: 0,
-                          tackles: 0,
-                          sacks: 0,
-                          rushYards: 0,
-                          rushTD: 0,
-                          carries: 0,
-                          receivingYards: 0,
-                          receivingTD: 0,
-                          receptions: 0,
-                        }
-                      )}
-                    </p>
                     {retiring && (
                       <p className="mt-2 text-sm text-amber-700">
                         Final season completed. This player retires before the next game.
@@ -470,6 +470,12 @@ function SeriesPageContent() {
                           <div className="mt-1 text-sm opacity-80">
                             {projectedRanges} • IQ {iqLabel(getPlayerIQ(player))}
                           </div>
+                          <div className="mt-1 text-sm opacity-80">
+                            Last game: {statSummary(
+                              allLastGameStatMap.get(`${player.name}:${player.position}`) ??
+                                emptyStatLine(player.id, player.name, player.position)
+                            )}
+                          </div>
                         </div>
                         <div className="text-sm font-medium opacity-70">
                           {player.freeAgencyTag}
@@ -564,6 +570,12 @@ function SeriesPageContent() {
                               </div>
                               <div className="mt-1 text-sm opacity-80">
                                 {projectedRanges} • IQ {iqLabel(getPlayerIQ(player))}
+                              </div>
+                              <div className="mt-1 text-sm opacity-80">
+                                Last game: {statSummary(
+                                  allLastGameStatMap.get(`${player.name}:${player.position}`) ??
+                                    emptyStatLine(player.id, player.name, player.position)
+                                )}
                               </div>
                             </div>
                             <div className="text-sm font-medium opacity-70">

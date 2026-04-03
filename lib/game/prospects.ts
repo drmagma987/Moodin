@@ -226,19 +226,19 @@ function getVertical(position: Position, rand: () => number) {
 function baseGradeByPosition(position: Position) {
   switch (position) {
     case "QB":
-      return 73;
+      return 77;
     case "RB":
-      return 72;
+      return 75;
     case "WR":
-      return 73;
+      return 76;
     case "TE":
-      return 71;
+      return 74;
     case "DL":
-      return 71;
+      return 74;
     case "LB":
-      return 71;
+      return 74;
     case "SEC":
-      return 72;
+      return 75;
   }
 }
 
@@ -447,25 +447,34 @@ export function generateProspects(seed: number): Prospect[] {
         ? generateDefenseUnitName(rand, usedNames)
         : generateUniquePlayerName(rand, usedNames);
 
+    const prospectTalentBias = randomInt(-10, 12, rand);
+    const readinessBias = randomInt(-11, 11, rand);
+    const instinctsBias = randomInt(-12, 12, rand);
+
     const speedRating = clamp(
       Math.round(
         80 +
           (4.7 - forty) * 36 +
           (vertical - 30) * 0.9 -
           Math.max(0, weight - 235) * 0.05 +
+          prospectTalentBias * 0.35 +
           archetypeSpeedBonus(archetype) +
-          randomInt(-4, 4, rand)
+          randomInt(-5, 5, rand)
       ),
       58,
-      95
+      97
     );
 
     const technicalRating = clamp(
-      baseGradeByPosition(position) +
+      Math.round(
+        baseGradeByPosition(position) +
         archetypeTechnicalBonus(archetype) +
-        randomInt(-8, 8, rand),
-      52,
-      95
+          readinessBias +
+          prospectTalentBias * 0.6 +
+          randomInt(-8, 8, rand)
+      ),
+      46,
+      99
     );
 
     const powerRating = clamp(
@@ -473,21 +482,24 @@ export function generateProspects(seed: number): Prospect[] {
         56 +
           (bench - 18) * 1.1 +
           (weight - 215) * 0.12 +
+          prospectTalentBias * 0.45 +
           archetypePowerBonus(archetype) +
-          randomInt(-5, 5, rand)
+          randomInt(-6, 6, rand)
       ),
-      50,
-      95
+      48,
+      97
     );
 
     const iqRating = clamp(
       Math.round(
         baseGradeByPosition(position) +
           archetypeIQBonus(archetype) +
-          randomInt(-7, 7, rand)
+          instinctsBias +
+          prospectTalentBias * 0.4 +
+          randomInt(-8, 8, rand)
       ),
-      50,
-      95
+      42,
+      99
     );
 
     const weights = positionOverallWeights(position);

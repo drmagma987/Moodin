@@ -99,7 +99,8 @@ export type RoomData = {
 const FULL_DRAFT_PICKS = 24;
 const LATER_GAME_ROSTER_TARGET = 10;
 const KEEPER_COUNT = 3;
-const SCOUT_TOKENS_PER_DRAFT = 8;
+const SCOUT_TOKENS_FULL_DRAFT = 8;
+const SCOUT_TOKENS_RETOOL_DRAFT = 5;
 const STARTER_REQUIREMENTS: Record<Position, number> = {
   QB: 1,
   RB: 1,
@@ -132,10 +133,15 @@ function emptyBetweenGameState() {
   };
 }
 
-function emptyScoutingState() {
+function scoutTokensForGame(seriesGameNumber: number) {
+  return seriesGameNumber <= 1 ? SCOUT_TOKENS_FULL_DRAFT : SCOUT_TOKENS_RETOOL_DRAFT;
+}
+
+function emptyScoutingState(seriesGameNumber: number) {
+  const tokenCount = scoutTokensForGame(seriesGameNumber);
   return {
-    scoutTokensA: SCOUT_TOKENS_PER_DRAFT,
-    scoutTokensB: SCOUT_TOKENS_PER_DRAFT,
+    scoutTokensA: tokenCount,
+    scoutTokensB: tokenCount,
     scoutingA: {} as ScoutingMap,
     scoutingB: {} as ScoutingMap,
   };
@@ -211,6 +217,13 @@ function startersFilled(players: DraftedPlayer[]) {
   const counts = countByPosition(players);
   return (Object.keys(STARTER_REQUIREMENTS) as Position[]).every(
     (position) => counts[position] >= STARTER_REQUIREMENTS[position]
+  );
+}
+
+function missingStarterPositions(players: DraftedPlayer[]) {
+  const counts = countByPosition(players);
+  return (Object.keys(STARTER_REQUIREMENTS) as Position[]).filter(
+    (position) => counts[position] < STARTER_REQUIREMENTS[position]
   );
 }
 
@@ -296,7 +309,7 @@ function buildDraftReset(
     teamA: carriedPlayersA,
     teamB: carriedPlayersB,
     simResult: null,
-    ...emptyScoutingState(),
+    ...emptyScoutingState(nextSeriesGameNumber),
     ...(options?.resetSeries
       ? createFreshSeriesState()
       : {
@@ -332,7 +345,7 @@ function buildInitialRoomData(roomId: string, hostId: string, teamName: string):
     draftedIds: [],
     teamA: [],
     teamB: [],
-    ...emptyScoutingState(),
+    ...emptyScoutingState(1),
     ...resetStrategyState(),
     simResult: null,
     ...createFreshSeriesState(),
@@ -502,9 +515,15 @@ export async function makeDraftPick(roomId: string, player: Prospect) {
       throw new Error("Draft is complete");
     }
     const expectedUserId = currentTeam === "A" ? room.playerAId : room.playerBId;
+    const currentRoster = currentTeam === "A" ? room.teamA : room.teamB;
+    const missingPositions = missingStarterPositions(currentRoster);
 
     if (user.uid !== expectedUserId) {
       throw new Error("Not your turn");
+    }
+
+    if (missingPositions.length > 0 && !missingPositions.includes(player.position)) {
+      throw new Error(`You must fill starter positions first: ${missingPositions.join(", ")}`);
     }
 
     const draftedPlayer: DraftedPlayer = {
@@ -585,7 +604,8 @@ export async function scoutProspect(
     }
 
     const currentMap = side === "A" ? room.scoutingA ?? {} : room.scoutingB ?? {};
-    const currentTokens = side === "A" ? room.scoutTokensA ?? SCOUT_TOKENS_PER_DRAFT : room.scoutTokensB ?? SCOUT_TOKENS_PER_DRAFT;
+    const defaultTokens = scoutTokensForGame(room.seriesGameNumber);
+    const currentTokens = side === "A" ? room.scoutTokensA ?? defaultTokens : room.scoutTokensB ?? defaultTokens;
     const existingReport = currentMap[playerId] ?? {};
     const currentRange = existingReport[attribute];
     const nextLevel = currentRange ? (currentRange.level + 1) as 1 | 2 | 3 : 1;

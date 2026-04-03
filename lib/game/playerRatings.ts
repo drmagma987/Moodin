@@ -52,9 +52,9 @@ export function getPlayerIQ(player: PlayerLike) {
 }
 
 export function iqLabel(iqRating: number) {
-  if (iqRating >= 86) return "Excellent";
-  if (iqRating >= 75) return "Good";
-  if (iqRating >= 63) return "Average";
+  if (iqRating >= 83) return "Excellent";
+  if (iqRating >= 71) return "Good";
+  if (iqRating >= 58) return "Average";
   return "Poor";
 }
 

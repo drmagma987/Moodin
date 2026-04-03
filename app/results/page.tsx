@@ -363,7 +363,7 @@ function ResultsPageContent() {
                 <p className="mt-1 text-sm opacity-70">
                   {seriesWinner
                     ? `${seriesWinner === "A" ? teamAName : teamBName} won the best-of-3 series.`
-                    : "Keep 2 players, fight over 1 free agent, then jump into the next draft."}
+                    : "Keep 3 players, fight over 1 free agent, then jump into the next draft."}
                 </p>
               </div>
 
