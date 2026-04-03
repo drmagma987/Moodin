@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { generateProspects } from "@/lib/game/prospects";
 import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
@@ -443,6 +444,8 @@ function DraftPageContent() {
             )}
             {draftOver && <p className="mt-1 font-medium">Draft complete</p>}
           </div>
+
+          <RoomSyncNotice roomId={room.roomId} phaseLabel="the draft" />
 
           {!draftOver && !startersComplete && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950">

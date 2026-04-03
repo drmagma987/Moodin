@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { getRoomStatusHref, RoomData, setReady, startDraft, subscribeToRoom } from "@/lib/room";
 
@@ -108,6 +109,8 @@ export default function RoomPage() {
           <h1 className="text-2xl font-bold sm:text-3xl">Room {room.roomId}</h1>
           <p className="opacity-70">Live lobby</p>
         </div>
+
+        <RoomSyncNotice roomId={room.roomId} phaseLabel="the lobby" />
 
         <div className="rounded-2xl border p-4 space-y-3 sm:p-5">
           <div className="flex items-center justify-between gap-3">

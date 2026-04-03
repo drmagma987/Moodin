@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { buildScoutingRange, scoutingRangeLabel, type ScoutAttribute } from "@/lib/game/scouting";
 import {
@@ -289,6 +290,8 @@ function SeriesPageContent() {
           </p>
           <p className="mt-1 text-sm font-medium">{seriesPressureMessage}</p>
         </div>
+
+        <RoomSyncNotice roomId={room.roomId} phaseLabel="the between-games flow" />
 
         {room.simResult && (
           <div className="grid gap-4 lg:grid-cols-2 sm:gap-6">

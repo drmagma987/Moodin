@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { generateProspects } from "@/lib/game/prospects";
 import type { ScoutAttribute, ScoutingMap } from "@/lib/game/scouting";
@@ -537,6 +538,8 @@ function RecapPageContent() {
           <h1 className="text-2xl font-bold sm:text-3xl">Draft Recap</h1>
           <p className="mt-1 opacity-70">Post-draft summary and game setup</p>
         </div>
+
+        {room && <RoomSyncNotice roomId={room.roomId} phaseLabel="recap" />}
 
         <div className="grid gap-4 lg:grid-cols-2 sm:gap-6">
           <div className="rounded-2xl border p-4 sm:p-5">

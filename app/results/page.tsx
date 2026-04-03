@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { getSeriesPressureMessage } from "@/lib/series";
 import {
@@ -315,6 +316,8 @@ function ResultsPageContent() {
             {teamAName} vs {teamBName}
           </p>
         </div>
+
+        {room && <RoomSyncNotice roomId={room.roomId} phaseLabel="results" />}
 
         <div className="rounded-2xl border p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
