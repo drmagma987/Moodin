@@ -365,6 +365,16 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Results rating rebuild now weights the best same-position players as starters, including WR1/WR2 ordering.
   - Missed FGs now trigger a dramatic callout, punt animations end at the post-return/touchback field position, and arrowheads were reduced in size.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Hardened halftime lock finalization:
+  - `saveHalftimeStrategy` now runs as a Firestore transaction and returns the confirmed room state after applying the player's lock.
+  - The locking client immediately starts/finalizes Q3-Q4 if that confirmed state has both halftime strategies locked, instead of relying only on a later subscription snapshot.
+  - The existing snapshot-based second-half finalizer remains as a guarded fallback to avoid duplicate finalization.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Added coin toss kickoff flow:
+  - After both recap strategies lock, Firestore creates a coin toss with a random caller.
+  - The selected caller chooses heads/tails, the toss resolves, and the winner chooses receive or defer.
+  - Opening and second-half possession are stored in room state and passed into the Q1 and Q3 simulations.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

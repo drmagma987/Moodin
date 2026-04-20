@@ -25,6 +25,18 @@ export type StrategyState = {
   defense: string;
   locked: boolean;
 };
+export type CoinTossSide = "A" | "B";
+export type CoinTossCall = "heads" | "tails";
+export type CoinTossDecision = "receive" | "defer";
+export type CoinTossState = {
+  caller: CoinTossSide | null;
+  call: CoinTossCall | null;
+  result: CoinTossCall | null;
+  winner: CoinTossSide | null;
+  decision: CoinTossDecision | null;
+  openingPossession: CoinTossSide | null;
+  secondHalfPossession: CoinTossSide | null;
+};
 export type BetweenGamePhase =
   | "none"
   | "keepers"
@@ -57,6 +69,8 @@ export type RoomData = {
   teamAStrategy: StrategyState;
 
   teamBStrategy: StrategyState;
+
+  coinToss: CoinTossState;
 
   halftimeTeamAStrategy: StrategyState;
 
@@ -275,6 +289,18 @@ function resetStrategyState() {
   };
 }
 
+function emptyCoinTossState(): CoinTossState {
+  return {
+    caller: null,
+    call: null,
+    result: null,
+    winner: null,
+    decision: null,
+    openingPossession: null,
+    secondHalfPossession: null,
+  };
+}
+
 function buildDraftReset(
   room: RoomData,
   options?: {
@@ -318,6 +344,7 @@ function buildDraftReset(
     firstHalfResult: null,
     secondHalfResult: null,
     simResult: null,
+    coinToss: emptyCoinTossState(),
     ...emptyScoutingState(nextSeriesGameNumber),
     ...(options?.resetSeries
       ? createFreshSeriesState()
@@ -356,6 +383,7 @@ function buildInitialRoomData(roomId: string, hostId: string, teamName: string):
     teamB: [],
     ...emptyScoutingState(1),
     ...resetStrategyState(),
+    coinToss: emptyCoinTossState(),
     firstHalfResult: null,
     secondHalfResult: null,
     simResult: null,
@@ -693,15 +721,155 @@ export async function saveHalftimeStrategy(
 ) {
   const roomRef = doc(db, "rooms", roomId);
 
-  if (side === "A") {
-    await updateDoc(roomRef, {
-      halftimeTeamAStrategy: { offense, defense, locked },
-    });
-  } else {
-    await updateDoc(roomRef, {
-      halftimeTeamBStrategy: { offense, defense, locked },
-    });
-  }
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+    const nextStrategy = { offense, defense, locked };
+    const nextRoom: RoomData = {
+      ...room,
+      halftimeTeamAStrategy: side === "A" ? nextStrategy : room.halftimeTeamAStrategy,
+      halftimeTeamBStrategy: side === "B" ? nextStrategy : room.halftimeTeamBStrategy,
+    };
+
+    transaction.update(
+      roomRef,
+      side === "A"
+        ? { halftimeTeamAStrategy: nextStrategy }
+        : { halftimeTeamBStrategy: nextStrategy }
+    );
+
+    return nextRoom;
+  });
+}
+
+function randomCoinSide(): CoinTossSide {
+  return Math.random() < 0.5 ? "A" : "B";
+}
+
+function randomCoinResult(): CoinTossCall {
+  return Math.random() < 0.5 ? "heads" : "tails";
+}
+
+export async function ensureCoinToss(roomId: string) {
+  const roomRef = doc(db, "rooms", roomId);
+
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+    const existing = room.coinToss ?? emptyCoinTossState();
+
+    if (existing.caller || room.status !== "recap" || !room.teamAStrategy.locked || !room.teamBStrategy.locked) {
+      return { ...room, coinToss: existing };
+    }
+
+    const coinToss: CoinTossState = {
+      ...existing,
+      caller: randomCoinSide(),
+    };
+
+    transaction.update(roomRef, { coinToss });
+
+    return { ...room, coinToss };
+  });
+}
+
+export async function submitCoinTossCall(
+  roomId: string,
+  side: CoinTossSide,
+  call: CoinTossCall
+) {
+  const roomRef = doc(db, "rooms", roomId);
+
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+    const existing = room.coinToss ?? emptyCoinTossState();
+
+    if (room.status !== "recap") {
+      throw new Error("Coin toss is only available before kickoff");
+    }
+
+    if (existing.caller !== side) {
+      throw new Error("Only the selected caller can call the toss");
+    }
+
+    if (existing.call && existing.result && existing.winner) {
+      return { ...room, coinToss: existing };
+    }
+
+    const result = randomCoinResult();
+    const winner: CoinTossSide = call === result ? side : side === "A" ? "B" : "A";
+    const coinToss: CoinTossState = {
+      ...existing,
+      call,
+      result,
+      winner,
+    };
+
+    transaction.update(roomRef, { coinToss });
+
+    return { ...room, coinToss };
+  });
+}
+
+export async function chooseCoinTossDecision(
+  roomId: string,
+  side: CoinTossSide,
+  decision: CoinTossDecision
+) {
+  const roomRef = doc(db, "rooms", roomId);
+
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+    const existing = room.coinToss ?? emptyCoinTossState();
+
+    if (room.status !== "recap") {
+      throw new Error("Coin toss decision is only available before kickoff");
+    }
+
+    if (existing.winner !== side) {
+      throw new Error("Only the coin toss winner can choose");
+    }
+
+    if (existing.decision && existing.openingPossession && existing.secondHalfPossession) {
+      return { ...room, coinToss: existing };
+    }
+
+    const loser: CoinTossSide = side === "A" ? "B" : "A";
+    const openingPossession = decision === "receive" ? side : loser;
+    const secondHalfPossession = decision === "receive" ? loser : side;
+    const coinToss: CoinTossState = {
+      ...existing,
+      decision,
+      openingPossession,
+      secondHalfPossession,
+    };
+
+    transaction.update(roomRef, { coinToss });
+
+    return { ...room, coinToss };
+  });
 }
 
 export async function startHalftime(roomId: string, firstHalfResult: SimResult) {

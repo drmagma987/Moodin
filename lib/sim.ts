@@ -39,6 +39,7 @@ export type SimOptions = {
   endQuarter?: number;
   initialScoreA?: number;
   initialScoreB?: number;
+  startingPossession?: "A" | "B";
 };
 
 export type QuarterResult = {
@@ -2068,7 +2069,7 @@ export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimRes
   let totalsB = emptyTotals();
 
   const quarters: QuarterResult[] = [];
-  let currentPossession: "A" | "B" = startQuarter >= 3 ? "B" : rand() < 0.5 ? "A" : "B";
+  let currentPossession: "A" | "B" = options.startingPossession ?? (startQuarter >= 3 ? "B" : rand() < 0.5 ? "A" : "B");
   let currentStartYardLine = kickoffStartYardLine(rand);
 
   for (let quarterNumber = startQuarter; quarterNumber <= endQuarter; quarterNumber++) {

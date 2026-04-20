@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
@@ -9,10 +9,13 @@ import type { ScoutAttribute, ScoutingMap } from "@/lib/game/scouting";
 import type { DraftedPlayer, Prospect } from "@/lib/game/types";
 import { getPlayerIQ, getPlayerPotential, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
 import {
+  chooseCoinTossDecision,
+  ensureCoinToss,
   getRoomStatusHref,
   RoomData,
   saveTeamStrategy,
   startHalftime,
+  submitCoinTossCall,
   subscribeToRoom,
 } from "@/lib/room";
 import { GameSetup, simulateGame, TeamRatings } from "@/lib/sim";
@@ -384,6 +387,9 @@ function RecapPageContent() {
   const [teamADefenseStrategy, setTeamADefenseStrategy] = useState<string | null>(null);
   const [teamBOffenseStrategy, setTeamBOffenseStrategy] = useState<string | null>(null);
   const [teamBDefenseStrategy, setTeamBDefenseStrategy] = useState<string | null>(null);
+  const [coinTossError, setCoinTossError] = useState("");
+  const [coinTossSubmitting, setCoinTossSubmitting] = useState(false);
+  const startingFirstHalfRef = useRef(false);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
@@ -462,6 +468,66 @@ function RecapPageContent() {
   const otherStrategyLocked =
     mySide === "A" ? teamBLocked : mySide === "B" ? teamALocked : false;
   const bothStrategiesLocked = teamALocked && teamBLocked;
+  const coinToss = room?.coinToss ?? null;
+  const coinCallerName =
+    coinToss?.caller === "A" ? data?.teamAName : coinToss?.caller === "B" ? data?.teamBName : "";
+  const coinWinnerName =
+    coinToss?.winner === "A" ? data?.teamAName : coinToss?.winner === "B" ? data?.teamBName : "";
+  const openingPossessionName =
+    coinToss?.openingPossession === "A" ? data?.teamAName : coinToss?.openingPossession === "B" ? data?.teamBName : "";
+  const secondHalfPossessionName =
+    coinToss?.secondHalfPossession === "A" ? data?.teamAName : coinToss?.secondHalfPossession === "B" ? data?.teamBName : "";
+  const myCoinTossCaller = mySide && coinToss?.caller === mySide;
+  const myCoinTossWinner = mySide && coinToss?.winner === mySide;
+  const coinTossReadyForKickoff = !!coinToss?.openingPossession && !!coinToss?.secondHalfPossession;
+
+  const startFirstHalfFromRoom = useCallback(
+    async (roomState: RoomData) => {
+      if (!roomId || startingFirstHalfRef.current) return;
+      if (!teamARatings || !teamBRatings) return;
+      if (roomState.status !== "recap") return;
+      if (!roomState.teamAStrategy.locked || !roomState.teamBStrategy.locked) return;
+      if (roomState.simResult) return;
+      if (!roomState.coinToss?.openingPossession || !roomState.coinToss.secondHalfPossession) return;
+
+      const gameSetup: GameSetup = {
+        teamAName: roomState.teamAName,
+        teamBName: roomState.teamBName,
+        teamA: roomState.teamA,
+        teamB: roomState.teamB,
+        teamARatings,
+        teamBRatings,
+        teamAStrategy: {
+          offense: roomState.teamAStrategy.offense,
+          defense: roomState.teamAStrategy.defense,
+        },
+        teamBStrategy: {
+          offense: roomState.teamBStrategy.offense,
+          defense: roomState.teamBStrategy.defense,
+        },
+        simSeed:
+          roomState.seed +
+          roomState.seriesGameNumber * 1_000_003 +
+          roomState.seriesWinsA * 10_007 +
+          roomState.seriesWinsB * 101,
+      };
+
+      try {
+        startingFirstHalfRef.current = true;
+        const result = simulateGame(gameSetup, {
+          startQuarter: 1,
+          endQuarter: 2,
+          startingPossession: roomState.coinToss.openingPossession,
+        });
+        await startHalftime(roomId, result);
+      } catch (error) {
+        console.error("Could not finalize simulated game", error);
+        setCoinTossError("Could not start kickoff.");
+        startingFirstHalfRef.current = false;
+      }
+    },
+    [roomId, teamARatings, teamBRatings]
+  );
 
   async function lockStrategy() {
     if (
@@ -485,45 +551,58 @@ function RecapPageContent() {
     await saveTeamStrategy(roomId, mySide, offense, defense, true);
   }
 
+  async function callCoinToss(call: "heads" | "tails") {
+    if (!roomId || !mySide || !myCoinTossCaller || coinToss?.call) return;
+
+    try {
+      setCoinTossSubmitting(true);
+      setCoinTossError("");
+      await submitCoinTossCall(roomId, mySide, call);
+    } catch (error) {
+      console.error(error);
+      setCoinTossError("Could not submit the coin toss call.");
+    } finally {
+      setCoinTossSubmitting(false);
+    }
+  }
+
+  async function chooseTossDecision(decision: "receive" | "defer") {
+    if (!roomId || !mySide || !myCoinTossWinner || !coinToss?.winner || coinToss.decision) return;
+
+    try {
+      setCoinTossSubmitting(true);
+      setCoinTossError("");
+      const confirmedRoom = await chooseCoinTossDecision(roomId, mySide, decision);
+      await startFirstHalfFromRoom(confirmedRoom);
+    } catch (error) {
+      console.error(error);
+      setCoinTossError("Could not save the coin toss decision.");
+    } finally {
+      setCoinTossSubmitting(false);
+    }
+  }
+
   useEffect(() => {
-    async function maybeStartSim() {
-      if (!roomId || !room || !teamARatings || !teamBRatings) return;
+    async function maybeCreateCoinToss() {
+      if (!roomId || !room) return;
       if (room.status !== "recap") return;
       if (!room.teamAStrategy.locked || !room.teamBStrategy.locked) return;
-      if (room.simResult) return;
-
-      const gameSetup: GameSetup = {
-        teamAName: room.teamAName,
-        teamBName: room.teamBName,
-        teamA: room.teamA,
-        teamB: room.teamB,
-        teamARatings,
-        teamBRatings,
-        teamAStrategy: {
-          offense: room.teamAStrategy.offense,
-          defense: room.teamAStrategy.defense,
-        },
-        teamBStrategy: {
-          offense: room.teamBStrategy.offense,
-          defense: room.teamBStrategy.defense,
-        },
-        simSeed:
-          room.seed +
-          room.seriesGameNumber * 1_000_003 +
-          room.seriesWinsA * 10_007 +
-          room.seriesWinsB * 101,
-      };
-
+      if (room.simResult || room.coinToss?.caller) return;
       try {
-        const result = simulateGame(gameSetup, { startQuarter: 1, endQuarter: 2 });
-        await startHalftime(roomId, result);
+        await ensureCoinToss(roomId);
       } catch (error) {
-        console.error("Could not finalize simulated game", error);
+        console.error("Could not create coin toss", error);
+        setCoinTossError("Could not start the coin toss.");
       }
     }
 
-    maybeStartSim();
-  }, [roomId, room, teamARatings, teamBRatings, uid]);
+    maybeCreateCoinToss();
+  }, [roomId, room]);
+
+  useEffect(() => {
+    if (!room) return;
+    startFirstHalfFromRoom(room);
+  }, [room, startFirstHalfFromRoom]);
 
   if (!roomId) {
     return (
@@ -840,6 +919,103 @@ function RecapPageContent() {
           </div>
         </div>
 
+        {bothStrategiesLocked && (
+          <div className="rounded-2xl border p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold sm:text-2xl">Coin Toss</h2>
+                <p className="mt-1 text-sm opacity-70">
+                  {coinTossReadyForKickoff
+                    ? `${openingPossessionName} receives the opening kickoff. ${secondHalfPossessionName} starts the second half.`
+                    : coinToss?.decision
+                      ? "Kickoff is loading."
+                      : coinToss?.winner
+                        ? `${coinWinnerName} won the toss. Choose receive or defer.`
+                        : coinToss?.caller
+                          ? `${coinCallerName} calls it in the air.`
+                          : "Setting the coin toss..."}
+                </p>
+              </div>
+              <span className="w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-700">
+                Pregame
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm">
+              {coinToss?.caller && !coinToss.call && (
+                myCoinTossCaller ? (
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => callCoinToss("heads")}
+                      disabled={coinTossSubmitting}
+                      className="rounded-xl border px-4 py-3 font-medium hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:rounded-md sm:py-2"
+                    >
+                      Call Heads
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => callCoinToss("tails")}
+                      disabled={coinTossSubmitting}
+                      className="rounded-xl border px-4 py-3 font-medium hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:rounded-md sm:py-2"
+                    >
+                      Call Tails
+                    </button>
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed p-3 opacity-70">
+                    Waiting for {coinCallerName} to call heads or tails.
+                  </p>
+                )
+              )}
+
+              {coinToss?.call && coinToss.result && (
+                <p className="rounded-xl border bg-gray-50 p-3">
+                  {coinCallerName} called {coinToss.call}. It landed {coinToss.result}.{" "}
+                  {coinWinnerName} won the toss.
+                </p>
+              )}
+
+              {coinToss?.winner && !coinToss.decision && (
+                myCoinTossWinner ? (
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => chooseTossDecision("receive")}
+                      disabled={coinTossSubmitting}
+                      className="rounded-xl border px-4 py-3 font-medium hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:rounded-md sm:py-2"
+                    >
+                      Receive
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => chooseTossDecision("defer")}
+                      disabled={coinTossSubmitting}
+                      className="rounded-xl border px-4 py-3 font-medium hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:rounded-md sm:py-2"
+                    >
+                      Defer
+                    </button>
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed p-3 opacity-70">
+                    Waiting for {coinWinnerName} to choose receive or defer.
+                  </p>
+                )
+              )}
+
+              {coinTossReadyForKickoff && (
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-medium text-emerald-900">
+                  {coinToss?.winner === coinToss?.openingPossession
+                    ? `${coinWinnerName} chose to receive.`
+                    : `${coinWinnerName} deferred.`}
+                </p>
+              )}
+
+              {coinTossError && <p className="text-sm text-red-600">{coinTossError}</p>}
+            </div>
+          </div>
+        )}
+
         <div className="sticky bottom-3 z-10 rounded-2xl border bg-background/95 p-4 shadow-sm backdrop-blur">
           <p className="mb-3 text-sm opacity-70">
             {!mySide
@@ -847,7 +1023,9 @@ function RecapPageContent() {
               : bothStrategiesLocked
                 ? room?.simResult
                   ? "Both strategies are locked. Moving to results..."
-                  : "Both strategies are locked. Simulating game..."
+                  : coinTossReadyForKickoff
+                    ? "Coin toss complete. Starting kickoff..."
+                    : "Both strategies are locked. Finish the coin toss to kick off."
                 : myStrategyLocked
                   ? otherStrategyLocked
                     ? "Both strategies are locked. Preparing results..."

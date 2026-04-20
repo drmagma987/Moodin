@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
@@ -1004,6 +1004,7 @@ function ResultsPageContent() {
   const [halftimeTeamBOffense, setHalftimeTeamBOffense] = useState<string | null>(null);
   const [halftimeTeamBDefense, setHalftimeTeamBDefense] = useState<string | null>(null);
   const timelineKeyRef = useRef("");
+  const finalizingSecondHalfRef = useRef(false);
 
   useEffect(() => {
     if (!roomId) return;
@@ -1104,6 +1105,62 @@ function ResultsPageContent() {
   const myHalftimeAssessment =
     result && mySide ? halftimeAssessment(result, mySide, teamAName, teamBName) : "";
 
+  const finishSecondHalfFromRoom = useCallback(
+    async (roomState: RoomData) => {
+      if (!roomId || roomState.status !== "halftime") return;
+      if (finalizingSecondHalfRef.current) return;
+      if (!roomState.halftimeTeamAStrategy?.locked || !roomState.halftimeTeamBStrategy?.locked) return;
+
+      const storedFirstHalf =
+        roomState.firstHalfResult ??
+        (roomState.simResult && roomState.simResult.quarters.length === 2 ? roomState.simResult : null);
+
+      if (!storedFirstHalf || storedFirstHalf.quarters.length !== 2) return;
+
+      const teamARatings = buildRatings(roomState.teamA);
+      const teamBRatings = buildRatings(roomState.teamB);
+      const secondHalfSetup: GameSetup = {
+        teamAName: roomState.teamAName,
+        teamBName: roomState.teamBName,
+        teamA: roomState.teamA,
+        teamB: roomState.teamB,
+        teamARatings,
+        teamBRatings,
+        teamAStrategy: {
+          offense: roomState.halftimeTeamAStrategy.offense,
+          defense: roomState.halftimeTeamAStrategy.defense,
+        },
+        teamBStrategy: {
+          offense: roomState.halftimeTeamBStrategy.offense,
+          defense: roomState.halftimeTeamBStrategy.defense,
+        },
+        simSeed:
+          roomState.seed +
+          roomState.seriesGameNumber * 1_000_003 +
+          roomState.seriesWinsA * 10_007 +
+          roomState.seriesWinsB * 101 +
+          2_000_029,
+      };
+
+      try {
+        finalizingSecondHalfRef.current = true;
+        const secondHalf = simulateGame(secondHalfSetup, {
+          startQuarter: 3,
+          endQuarter: 4,
+          initialScoreA: storedFirstHalf.finalA,
+          initialScoreB: storedFirstHalf.finalB,
+          startingPossession: roomState.coinToss?.secondHalfPossession ?? "B",
+        });
+        await finalizeSecondHalfGame(roomId, secondHalf);
+      } catch (error) {
+        console.error("Could not finalize second half", error);
+        setHalftimeError("Could not start the second half.");
+        finalizingSecondHalfRef.current = false;
+      }
+    },
+    [roomId]
+  );
+
   async function lockHalftimeStrategy() {
     if (!roomId || !room || room.status !== "halftime" || !mySide || myHalftimeLocked) {
       return;
@@ -1115,7 +1172,8 @@ function ResultsPageContent() {
     try {
       setHalftimeSubmitting(true);
       setHalftimeError("");
-      await saveHalftimeStrategy(roomId, mySide, offense, defense, true);
+      const confirmedRoom = await saveHalftimeStrategy(roomId, mySide, offense, defense, true);
+      await finishSecondHalfFromRoom(confirmedRoom);
     } catch (error) {
       console.error(error);
       setHalftimeError("Could not lock halftime adjustments.");
@@ -1125,52 +1183,9 @@ function ResultsPageContent() {
   }
 
   useEffect(() => {
-    async function maybeFinishSecondHalf() {
-      if (!roomId || !room || room.status !== "halftime" || !firstHalfResult) return;
-      if (!room.halftimeTeamAStrategy?.locked || !room.halftimeTeamBStrategy?.locked) return;
-      if (firstHalfResult.quarters.length !== 2) return;
-
-      const teamARatings = buildRatings(room.teamA);
-      const teamBRatings = buildRatings(room.teamB);
-      const secondHalfSetup: GameSetup = {
-        teamAName: room.teamAName,
-        teamBName: room.teamBName,
-        teamA: room.teamA,
-        teamB: room.teamB,
-        teamARatings,
-        teamBRatings,
-        teamAStrategy: {
-          offense: room.halftimeTeamAStrategy.offense,
-          defense: room.halftimeTeamAStrategy.defense,
-        },
-        teamBStrategy: {
-          offense: room.halftimeTeamBStrategy.offense,
-          defense: room.halftimeTeamBStrategy.defense,
-        },
-        simSeed:
-          room.seed +
-          room.seriesGameNumber * 1_000_003 +
-          room.seriesWinsA * 10_007 +
-          room.seriesWinsB * 101 +
-          2_000_029,
-      };
-
-      try {
-        const secondHalf = simulateGame(secondHalfSetup, {
-          startQuarter: 3,
-          endQuarter: 4,
-          initialScoreA: firstHalfResult.finalA,
-          initialScoreB: firstHalfResult.finalB,
-        });
-        await finalizeSecondHalfGame(roomId, secondHalf);
-      } catch (error) {
-        console.error("Could not finalize second half", error);
-        setHalftimeError("Could not start the second half.");
-      }
-    }
-
-    maybeFinishSecondHalf();
-  }, [roomId, room, firstHalfResult]);
+    if (!room || !firstHalfResult) return;
+    finishSecondHalfFromRoom(room);
+  }, [room, firstHalfResult, finishSecondHalfFromRoom]);
 
   async function handleRematch() {
     if (
