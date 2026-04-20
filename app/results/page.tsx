@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
@@ -189,10 +189,21 @@ function estimateWinProbabilityA(
   possession: "A" | "B" | null
 ) {
   const scoreDiff = scoreA - scoreB;
-  const leverage = 2.6 + currentQuarter * 1.2 + progressRatio * 4;
-  const possessionBump = possession === "A" ? 2 : possession === "B" ? -2 : 0;
+  const gameProgress = clamp(progressRatio, (currentQuarter - 1) / 4, 0.98);
+  const leverage = 1.05 + gameProgress * 3.45;
+  const possessionBump = possession === "A" ? 1.5 : possession === "B" ? -1.5 : 0;
+  const liveCap = 68 + gameProgress * 28;
+  const liveFloor = 100 - liveCap;
 
-  return clamp(Math.round(50 + scoreDiff * leverage + possessionBump), 4, 96);
+  return clamp(Math.round(50 + scoreDiff * leverage + possessionBump), liveFloor, liveCap);
+}
+
+function possessionLabel(possession: "A" | "B", teamAName: string, teamBName: string) {
+  return possession === "A" ? teamAName : teamBName;
+}
+
+function otherPossession(possession: "A" | "B") {
+  return possession === "A" ? "B" : "A";
 }
 
 function FieldDriveView({
@@ -238,9 +249,12 @@ function FieldDriveView({
       ? highlight.endYardLine
       : 100 - highlight.endYardLine
     : 25;
-  const arrowLeft = Math.min(start, end);
-  const arrowWidth = Math.max(Math.abs(end - start), 3);
   const movingRight = end >= start;
+  const isPassShape = highlight?.playKind === "pass" || highlight?.playKind === "sack";
+  const arrowMarkerId = highlight ? `play-arrow-${highlight.id}` : "play-arrow-idle";
+  const passArc = `M ${start} 54 Q ${(start + end) / 2} ${start === end ? 32 : 18} ${end} 54`;
+  const runLine = `M ${start} 54 L ${end} 54`;
+  const possessionArrow = highlight?.possession === "A" ? ">" : "<";
 
   return (
     <div className="rounded-2xl border bg-emerald-950 p-4 text-white shadow-sm sm:p-5">
@@ -318,7 +332,15 @@ function FieldDriveView({
         />
       </div>
 
-      <div className="relative mt-4 h-28 overflow-hidden rounded-2xl border border-white/20 bg-[linear-gradient(90deg,rgba(6,78,59,0.95),rgba(5,150,105,0.75),rgba(6,78,59,0.95))]">
+      <div className="relative mt-4 h-36 overflow-hidden rounded-2xl border border-white/20 bg-[linear-gradient(90deg,rgba(6,78,59,0.95),rgba(5,150,105,0.75),rgba(6,78,59,0.95))]">
+        <div className="absolute inset-y-0 left-0 w-[9%] border-r border-white/25 bg-emerald-950/55" />
+        <div className="absolute inset-y-0 right-0 w-[9%] border-l border-white/25 bg-emerald-950/55" />
+        <div className="absolute left-[4.5%] top-1/2 max-w-[4.5rem] -translate-x-1/2 -translate-y-1/2 -rotate-90 truncate text-center text-[10px] font-black uppercase tracking-[0.18em] text-white/70">
+          {teamAName}
+        </div>
+        <div className="absolute right-[4.5%] top-1/2 max-w-[4.5rem] translate-x-1/2 -translate-y-1/2 rotate-90 truncate text-center text-[10px] font-black uppercase tracking-[0.18em] text-white/70">
+          {teamBName}
+        </div>
         <div className="absolute inset-y-0 left-1/2 w-px bg-white/35" />
         {[10, 20, 30, 40, 60, 70, 80, 90].map((yard) => (
           <div
@@ -337,28 +359,58 @@ function FieldDriveView({
           </span>
         ))}
         <div className="absolute inset-x-0 bottom-0 top-0 bg-[repeating-linear-gradient(0deg,transparent,transparent_13px,rgba(255,255,255,0.06)_14px)]" />
-        <div
-          className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-amber-300 shadow-[0_0_18px_rgba(252,211,77,0.85)] transition-all duration-500"
-          style={{ left: `${arrowLeft}%`, width: `${arrowWidth}%` }}
-        />
-        {highlight && (
-          <span
-            className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-lg text-amber-200 transition-all duration-500 ${
-              movingRight ? "" : "rotate-180"
-            }`}
-            style={{ left: `${clamp(end, 2, 95)}%` }}
+        {highlight && phase === "live" && (
+          <div
+            className="absolute top-2 rounded-full border border-amber-200 bg-amber-300 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-emerald-950 shadow"
+            style={{ left: highlight.possession === "A" ? "10px" : "auto", right: highlight.possession === "B" ? "10px" : "auto" }}
           >
-            ▶
-          </span>
+            {possessionArrow} {possessionName} ball
+          </div>
+        )}
+        {highlight && (
+          <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <marker
+                id={arrowMarkerId}
+                markerHeight="5"
+                markerWidth="5"
+                orient="auto-start-reverse"
+                refX="4"
+                refY="2.5"
+              >
+                <path d="M 0 0 L 5 2.5 L 0 5 z" fill="rgb(252 211 77)" />
+              </marker>
+            </defs>
+            <path
+              key={highlight.id}
+              d={isPassShape ? passArc : runLine}
+              fill="none"
+              stroke="rgb(252 211 77)"
+              strokeDasharray={isPassShape ? "3 3" : undefined}
+              strokeLinecap="round"
+              strokeWidth={isPassShape ? 1.2 : 1.8}
+              markerEnd={`url(#${arrowMarkerId})`}
+              className="drop-shadow-[0_0_8px_rgba(252,211,77,0.75)]"
+            />
+          </svg>
         )}
         <div
-          className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-sky-300 shadow-[0_0_20px_rgba(125,211,252,0.9)] transition-all duration-500"
+          key={highlight?.id ?? "football"}
+          className={`absolute top-[54%] h-4 w-7 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-white/80 bg-amber-900 shadow-[0_0_20px_rgba(252,211,77,0.75)] transition-all duration-700 ${
+            movingRight ? "rotate-12" : "-rotate-12"
+          }`}
           style={{ left: `${clamp(end, 3, 97)}%` }}
         />
-        <div className="absolute left-2 top-1/2 -translate-y-1/2 rounded bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em]">
+        <div
+          className={`absolute top-[54%] h-px w-4 -translate-x-1/2 -translate-y-1/2 bg-white/75 transition-all duration-700 ${
+            movingRight ? "rotate-12" : "-rotate-12"
+          }`}
+          style={{ left: `${clamp(end, 3, 97)}%` }}
+        />
+        <div className="absolute left-2 bottom-2 rounded bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em]">
           {highlight?.possession === "B" ? "Goal" : "Own"}
         </div>
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 rounded bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em]">
+        <div className="absolute right-2 bottom-2 rounded bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em]">
           {highlight?.possession === "B" ? "Own" : "Goal"}
         </div>
       </div>
@@ -580,22 +632,42 @@ function ResultsTimeline({
                 Q{quarter.quarter} — {teamAName} {quarterScore.scoreA}, {teamBName} {quarterScore.scoreB}
               </h2>
               <ul className="mt-3 space-y-2 text-sm opacity-90">
-                {quarterHighlights.map((highlight) => (
-                  <li
-                    key={highlight.id}
-                    className={highlight.isScore ? "font-medium text-slate-950" : ""}
-                  >
-                    <span className="mr-2 font-semibold tabular-nums text-slate-500">
-                      {highlight.clock}
-                    </span>
-                    {highlight.text}
-                    {highlight.isScore && (
-                      <span className="ml-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
-                        Score update
-                      </span>
-                    )}
-                  </li>
-                ))}
+                {quarterHighlights.map((highlight, index) => {
+                  const previous = quarterHighlights[index - 1] ?? null;
+                  const changedPossession =
+                    index > 0 &&
+                    previous?.possession !== highlight.possession &&
+                    previous.eventType !== "turnover";
+                  const turnoverPossession = otherPossession(highlight.possession);
+
+                  return (
+                    <Fragment key={highlight.id}>
+                      {changedPossession && (
+                        <li className="list-none rounded border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-emerald-800">
+                          Change of Possession:{" "}
+                          {possessionLabel(highlight.possession, teamAName, teamBName)} with ball
+                        </li>
+                      )}
+                      <li className={highlight.isScore ? "font-medium text-slate-950" : ""}>
+                        <span className="mr-2 font-semibold tabular-nums text-slate-500">
+                          {highlight.clock}
+                        </span>
+                        {highlight.text}
+                        {highlight.isScore && (
+                          <span className="ml-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                            Score update
+                          </span>
+                        )}
+                      </li>
+                      {highlight.eventType === "turnover" && (
+                        <li className="list-none rounded border border-red-100 bg-red-50 px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-red-800">
+                          Change of Possession:{" "}
+                          {possessionLabel(turnoverPossession, teamAName, teamBName)} with ball
+                        </li>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </ul>
             </div>
           );

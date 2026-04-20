@@ -298,6 +298,16 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Added halftime and final scoreboard holds, including a `Team Wins!` final display before post-game actions unlock.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
 
+### 2026-04-20
+
+- Improved the results simulation field view:
+  - Individual plays now animate with a football marker instead of a generic dot.
+  - Passes and sacks use dashed arced arrows; runs and other grounded plays use solid straight arrows.
+  - Endzones are fixed to Team A on the left and Team B on the right, with possession direction shown in the field.
+  - Win probability is more conservative early and only reaches extreme values later in the game.
+  - Play-by-play logs now call out possession changes, including explicit turnover handoffs.
+  - Average generated play count per drive was reduced by about 15% while keeping 15-minute quarters.
+
 ## Ongoing Maintenance Notes
 
 Future Codex sessions should update this file when they make meaningful feature, architecture, deployment, or gameplay-balance changes.

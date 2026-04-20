@@ -52,6 +52,7 @@ export type QuarterHighlight = {
   possession: "A" | "B";
   eventType: "explosive" | "touchdown" | "fieldGoal" | "turnover" | "stop";
   eventDetail?: "interception" | "fumble" | "stripSack";
+  playKind: "pass" | "run" | "sack" | "fieldGoal" | "turnover";
   startYardLine: number;
   endYardLine: number;
   yards: number;
@@ -746,6 +747,7 @@ type LocalSimHighlight = {
   possession: "A" | "B";
   eventType: QuarterHighlight["eventType"];
   eventDetail?: QuarterHighlight["eventDetail"];
+  playKind: QuarterHighlight["playKind"];
   startYardLine: number;
   endYardLine: number;
   yards: number;
@@ -1250,6 +1252,7 @@ function localHighlight({
   possession,
   eventType,
   eventDetail,
+  playKind,
   startYardLine,
   endYardLine,
   driveSummary,
@@ -1266,6 +1269,7 @@ function localHighlight({
     possession,
     eventType,
     ...(eventDetail ? { eventDetail } : {}),
+    playKind,
     startYardLine: clampedStart,
     endYardLine: clampedEnd,
     yards: clampedEnd - clampedStart,
@@ -1496,6 +1500,7 @@ function buildDriveHighlights({
       possession: side,
       eventType: isFinalPlay ? play.eventType : play.eventType === "explosive" ? "explosive" : "stop",
       ...(isFinalPlay && play.eventDetail ? { eventDetail: play.eventDetail } : {}),
+      playKind: play.kind,
       startYardLine: currentYardLine,
       endYardLine: nextYardLine,
       driveSummary: driveSummaryText(safePlayCount, totalYards, result),
@@ -1536,7 +1541,7 @@ function simulateQuarterTeamPoints(
 
   for (let drive = 0; drive < drives; drive++) {
     const startYardLine = driveStartYardLine(rand, scoreDiff, quarter);
-    const playCount = clamp(Math.round(3 + rand() * 7), 2, 11);
+    const playCount = clamp(Math.round(2 + rand() * 7), 2, 10);
     const closeMoment = quarter >= 4 && Math.abs(scoreDiff) <= 8;
     const passEdge = offense.passAttack - defense.passDefense;
     const runEdge = offense.runAttack - defense.runDefense;
@@ -1676,7 +1681,13 @@ function simulateQuarterTeamPoints(
         rand,
         preferPass,
         finalText: turnoverPlayText,
-        finalPlayKind: stripSack ? "sack" : "turnover",
+        finalPlayKind: stripSack
+          ? "sack"
+          : turnoverDetail === "interception"
+            ? "pass"
+            : preferPass
+              ? "pass"
+              : "run",
         finalPlayYards: stripSack
           ? -clamp(Math.round(5 + rand() * 5), 4, 10)
           : clamp(Math.round(turnoverYards * 0.45), 2, turnoverYards),
@@ -1990,6 +2001,7 @@ export function simulateGame(setup: GameSetup): SimResult {
         possession: next.possession,
         eventType: next.eventType,
         ...(next.eventDetail ? { eventDetail: next.eventDetail } : {}),
+        playKind: next.playKind,
         startYardLine: next.startYardLine,
         endYardLine: next.endYardLine,
         yards: next.yards,
@@ -2014,6 +2026,7 @@ export function simulateGame(setup: GameSetup): SimResult {
         isScore: false,
         possession: i % 2 === 0 ? "A" : "B",
         eventType: "stop",
+        playKind: "run",
         startYardLine: 25,
         endYardLine: 37,
         yards: 12,
