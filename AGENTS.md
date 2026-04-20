@@ -383,6 +383,11 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Late fourth-quarter teams down multiple scores are more likely to go for it on fourth down near midfield/opponent territory, with dramatic conversion/turnover-on-downs overlays.
   - Prospect generation now stores a hidden potential ceiling, and series aging lets high-potential players break out in Prime while Rook-to-`Unc` jumps still retain a meaningful portion of that upside.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Added the Diaz halftime show overlay:
+  - Copied the supplied GIF into `public/diaztablegif.gif`.
+  - Results field view now overlays the looping GIF and caption only while the room is in halftime adjustment mode.
+  - The overlay is pointer-events-free and disappears before second-half simulation resumes.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

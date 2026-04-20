@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
@@ -492,6 +493,7 @@ function FieldDriveView({
   winProbabilityA,
   phase,
   winnerName,
+  showHalftimeShow = false,
 }: {
   highlight: QuarterHighlight | null;
   teamAName: string;
@@ -503,6 +505,7 @@ function FieldDriveView({
   winProbabilityA: number;
   phase: "live" | "halftime" | "final";
   winnerName: string | null;
+  showHalftimeShow?: boolean;
 }) {
   const possessionName =
     phase === "halftime"
@@ -550,7 +553,7 @@ function FieldDriveView({
   }, [end, highlight?.id, start]);
 
   return (
-    <div className="rounded-2xl border bg-emerald-950 p-4 text-white shadow-sm sm:p-5">
+    <div className="relative overflow-hidden rounded-2xl border bg-emerald-950 p-4 text-white shadow-sm sm:p-5">
       <div className="rounded-2xl border border-white/15 bg-white/10 p-3 sm:p-4">
         <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
           <div className="min-w-0">
@@ -731,6 +734,26 @@ function FieldDriveView({
           </p>
         )}
       </div>
+
+      {showHalftimeShow && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur-[2px]">
+          <div className="w-full max-w-sm overflow-hidden rounded-lg border border-white/20 bg-slate-950/90 shadow-2xl sm:max-w-lg">
+            <div className="relative aspect-square w-full bg-black">
+              <Image
+                src="/diaztablegif.gif"
+                alt="Diaz The Amazing Table Breaker halftime show"
+                fill
+                unoptimized
+                className="object-cover"
+                sizes="(max-width: 640px) calc(100vw - 4rem), 32rem"
+              />
+            </div>
+            <p className="bg-amber-300 px-4 py-3 text-center text-sm font-black uppercase text-slate-950 sm:text-base">
+              Your Halftime Show: Diaz The Amazing Table Breaker!
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -957,6 +980,7 @@ function ResultsTimeline({
         winProbabilityA={winProbabilityA}
         phase={currentPhase}
         winnerName={winnerName}
+        showHalftimeShow={awaitingHalftimeAdjustments && currentPhase === "halftime"}
       />
 
       <div className="space-y-3 sm:space-y-4">
