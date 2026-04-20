@@ -1,7 +1,7 @@
 import type { DraftedPlayer, Prospect } from "./types";
-import { getPlayerPower, getPlayerSpeed, getPlayerTechnical } from "./playerRatings";
+import { getPlayerPotential, getPlayerPower, getPlayerSpeed, getPlayerTechnical } from "./playerRatings";
 
-export type ScoutAttribute = "speed" | "technical" | "power";
+export type ScoutAttribute = "speed" | "skill" | "power" | "potential" | "technical";
 export type ScoutLevel = 1 | 2;
 export type ScoutingRange = {
   min: number;
@@ -33,10 +33,13 @@ function trueAttributeValue(player: Prospect | DraftedPlayer, attribute: ScoutAt
   switch (attribute) {
     case "speed":
       return getPlayerSpeed(player);
+    case "skill":
     case "technical":
       return getPlayerTechnical(player);
     case "power":
       return getPlayerPower(player);
+    case "potential":
+      return getPlayerPotential(player);
   }
 }
 
@@ -94,10 +97,13 @@ export function scoutingButtonLabel(attribute: ScoutAttribute) {
   switch (attribute) {
     case "speed":
       return "SPD";
+    case "skill":
     case "technical":
       return "SKL";
     case "power":
       return "PWR";
+    case "potential":
+      return "POT";
   }
 }
 

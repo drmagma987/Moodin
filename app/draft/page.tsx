@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { generateProspects } from "@/lib/game/prospects";
-import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
+import { getPlayerIQ, getPlayerPotential, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
 import { scoutingButtonLabel, scoutingRangeLabel, type ScoutAttribute } from "@/lib/game/scouting";
 import type { DraftedPlayer, Position, Prospect } from "@/lib/game/types";
 import {
@@ -31,6 +31,7 @@ function formatWeight(weight: number) {
 type TeamNeeds = Record<Position, number>;
 type ProspectTag = "gem" | "avoid" | null;
 type DraftFilter = "ALL" | "DRAFTABLE" | Position;
+type ScoutingReport = NonNullable<RoomData["scoutingA"][string]>;
 const EMPTY_PLAYERS: DraftedPlayer[] = [];
 
 const STARTER_REQUIREMENTS: TeamNeeds = {
@@ -44,7 +45,12 @@ const STARTER_REQUIREMENTS: TeamNeeds = {
 };
 
 const POSITIONS: Position[] = ["QB", "RB", "WR", "TE", "DL", "LB", "SEC"];
-const SCOUT_ATTRIBUTES: ScoutAttribute[] = ["speed", "technical", "power"];
+const TESTING_SCOUT_ATTRIBUTES: ScoutAttribute[] = ["speed", "power"];
+const FILM_SCOUT_ATTRIBUTES: ScoutAttribute[] = ["skill", "potential"];
+
+function scoutingRangeFor(report: ScoutingReport, attribute: ScoutAttribute) {
+  return attribute === "skill" ? report.skill ?? report.technical : report[attribute];
+}
 
 function countByPosition(players: DraftedPlayer[]): Record<Position, number> {
   return {
@@ -182,7 +188,7 @@ function RosterPanel({
                   <p className="text-sm text-gray-600">
                     {player.archetype}
                     {showRatings
-                      ? ` • SPD ${getPlayerSpeed(player)} • SKL ${getPlayerTechnical(player)} • PWR ${getPlayerPower(player)} • IQ ${iqLabel(getPlayerIQ(player))}`
+                      ? ` • SPD ${getPlayerSpeed(player)} • SKL ${getPlayerTechnical(player)} • PWR ${getPlayerPower(player)} • POT ${getPlayerPotential(player)} • IQ ${iqLabel(getPlayerIQ(player))}`
                       : " • Ratings hidden from opponents"}
                   </p>
                 </div>
@@ -615,30 +621,44 @@ function DraftPageContent() {
                     </div>
                   </div>
 
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                    {SCOUT_ATTRIBUTES.map((attribute) => {
-                      const range = scoutingReport[attribute];
-                      const fullyScouted = range?.level === 2;
-                      const scoutDisabled = myScoutTokens <= 0 || fullyScouted || draftOver;
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {[
+                      { label: "Testing", attributes: TESTING_SCOUT_ATTRIBUTES },
+                      { label: "Film", attributes: FILM_SCOUT_ATTRIBUTES },
+                    ].map((group) => (
+                      <div key={group.label} className="space-y-2">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                          {group.label}
+                        </div>
+                        <div className="grid gap-2">
+                          {group.attributes.map((attribute) => {
+                            const range = scoutingRangeFor(scoutingReport, attribute);
+                            const fullyScouted = range?.level === 2;
+                            const scoutDisabled = myScoutTokens <= 0 || fullyScouted || draftOver;
 
-                      return (
-                        <button
-                          key={attribute}
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleScoutPlayer(player.id, attribute);
-                          }}
-                          disabled={scoutDisabled}
-                          className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-sm text-slate-900 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <div className="font-medium">
-                            {range ? `${scoutingButtonLabel(attribute)} Tighten` : `Scout ${scoutingButtonLabel(attribute)}`}
-                          </div>
-                          <div className="text-xs opacity-70">{scoutingRangeLabel(attribute, range)}</div>
-                        </button>
-                      );
-                    })}
+                            return (
+                              <button
+                                key={attribute}
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleScoutPlayer(player.id, attribute);
+                                }}
+                                disabled={scoutDisabled}
+                                className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-left text-sm text-slate-900 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <div className="font-medium">
+                                  {range
+                                    ? `${scoutingButtonLabel(attribute)} Tighten`
+                                    : `Scout ${scoutingButtonLabel(attribute)}`}
+                                </div>
+                                <div className="text-xs opacity-70">{scoutingRangeLabel(attribute, range)}</div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

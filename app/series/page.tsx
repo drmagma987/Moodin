@@ -11,7 +11,7 @@ import {
   retirementGoodbye,
   willRetireAfterGame,
 } from "@/lib/series";
-import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
+import { getPlayerIQ, getPlayerPotential, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
 import {
   getRoomStatusHref,
   lockKeepers,
@@ -22,7 +22,7 @@ import {
 } from "@/lib/room";
 import { PlayerGameStats } from "@/lib/sim";
 
-const SCOUT_ATTRIBUTES: ScoutAttribute[] = ["speed", "technical", "power"];
+const SCOUT_ATTRIBUTES: ScoutAttribute[] = ["speed", "skill", "power", "potential"];
 
 function cardClasses(selected: boolean, disabled: boolean) {
   if (disabled) {
@@ -382,7 +382,7 @@ function SeriesPageContent() {
                           {player.archetype} • {player.careerStage ?? "Rook"}
                         </div>
                         <div className="mt-1 text-sm opacity-80">
-                          SPD {getPlayerSpeed(player)} • SKL {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
+                          SPD {getPlayerSpeed(player)} • SKL {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • POT {getPlayerPotential(player)} • IQ {iqLabel(getPlayerIQ(player))}
                         </div>
                       </div>
                       <div className="text-sm font-medium">
@@ -447,7 +447,7 @@ function SeriesPageContent() {
                         {player.archetype} • {player.careerStage}
                       </p>
                       <p className="mt-1 text-sm opacity-80">
-                        SPD {getPlayerSpeed(player)} • SKL {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
+                        SPD {getPlayerSpeed(player)} • SKL {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • POT {getPlayerPotential(player)} • IQ {iqLabel(getPlayerIQ(player))}
                       </p>
                     </div>
                   ))}

@@ -7,7 +7,7 @@ import { auth, ensureAnonymousAuth } from "@/lib/firebase";
 import { generateProspects } from "@/lib/game/prospects";
 import type { ScoutAttribute, ScoutingMap } from "@/lib/game/scouting";
 import type { DraftedPlayer, Prospect } from "@/lib/game/types";
-import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
+import { getPlayerIQ, getPlayerPotential, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
 import {
   getRoomStatusHref,
   RoomData,
@@ -79,10 +79,13 @@ function scoutingAttributeLabel(attribute: ScoutAttribute) {
   switch (attribute) {
     case "speed":
       return "speed";
+    case "skill":
     case "technical":
       return "skill profile";
     case "power":
       return "power";
+    case "potential":
+      return "potential";
   }
 }
 
@@ -109,10 +112,13 @@ function scoutingPayoffNote(
     switch (attribute) {
       case "speed":
         return getPlayerSpeed(player);
+      case "skill":
       case "technical":
         return getPlayerTechnical(player);
       case "power":
         return getPlayerPower(player);
+      case "potential":
+        return getPlayerPotential(player);
     }
   };
 
@@ -656,6 +662,7 @@ function RecapPageContent() {
                       <div className="text-sm">Speed: {getPlayerSpeed(player)}</div>
                       <div className="text-sm">Skill: {getPlayerTechnical(player)}</div>
                       <div className="text-sm">Power: {getPlayerPower(player)}</div>
+                      <div className="text-sm">Potential: {getPlayerPotential(player)}</div>
                       <div className="text-sm">IQ: {iqLabel(getPlayerIQ(player))}</div>
                       <div className="text-sm">
                         Projection Outcome: {getProjectionOutcomeLabel(player, data.fullDraftClass)}

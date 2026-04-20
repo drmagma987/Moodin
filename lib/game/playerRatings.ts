@@ -8,7 +8,14 @@ type PlayerLike = Pick<
   Partial<
     Pick<
       Prospect,
-      "speedRating" | "powerRating" | "iqRating" | "weight" | "bench" | "vertical"
+      | "speedRating"
+      | "powerRating"
+      | "iqRating"
+      | "weight"
+      | "bench"
+      | "vertical"
+      | "archetype"
+      | "careerStage"
     >
   >;
 
@@ -68,6 +75,83 @@ export function overallFromCoreRatings(player: Pick<Prospect, "speedRating" | "t
     ),
     52,
     95
+  );
+}
+
+function archetypePotentialBonus(player: PlayerLike) {
+  switch (player.archetype) {
+    case "Dual Threat":
+    case "Elusive Back":
+    case "Deep Threat":
+    case "Vertical Threat":
+    case "Pass Rusher":
+    case "Playmaker":
+    case "Ball Hawk":
+      return 4;
+    case "Gunslinger":
+    case "Power Back":
+    case "Receiving Back":
+    case "YAC Specialist":
+    case "Red Zone Target":
+    case "Coverage LB":
+      return 2;
+    case "Field General":
+    case "Route Technician":
+    case "Possession TE":
+    case "Run Stopper":
+    case "Run Support":
+    case "Lockdown":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function careerStagePotentialBonus(player: PlayerLike) {
+  switch (player.careerStage) {
+    case "Rook":
+      return 3;
+    case "Unc":
+      return -6;
+    default:
+      return 0;
+  }
+}
+
+function positionUpsideBlend(player: PlayerLike) {
+  const speed = getPlayerSpeed(player);
+  const skill = getPlayerTechnical(player);
+  const power = getPlayerPower(player);
+  const iq = getPlayerIQ(player);
+
+  switch (player.position) {
+    case "QB":
+      return speed * 0.28 + skill * 0.34 + iq * 0.28 + power * 0.1;
+    case "RB":
+      return speed * 0.34 + power * 0.26 + skill * 0.25 + iq * 0.15;
+    case "WR":
+      return speed * 0.38 + skill * 0.31 + iq * 0.21 + power * 0.1;
+    case "TE":
+      return power * 0.3 + skill * 0.3 + speed * 0.22 + iq * 0.18;
+    case "DL":
+      return power * 0.38 + skill * 0.26 + speed * 0.18 + iq * 0.18;
+    case "LB":
+      return iq * 0.29 + power * 0.25 + speed * 0.24 + skill * 0.22;
+    case "SEC":
+      return speed * 0.33 + iq * 0.33 + skill * 0.24 + power * 0.1;
+  }
+}
+
+export function getPlayerPotential(player: PlayerLike) {
+  return clamp(
+    Math.round(
+      player.trueGrade * 0.42 +
+        positionUpsideBlend(player) * 0.58 +
+        archetypePotentialBonus(player) +
+        careerStagePotentialBonus(player)
+    ),
+    45,
+    99
   );
 }
 

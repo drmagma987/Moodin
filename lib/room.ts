@@ -614,7 +614,7 @@ export async function scoutProspect(
     const defaultTokens = scoutTokensForGame(room.seriesGameNumber);
     const currentTokens = side === "A" ? room.scoutTokensA ?? defaultTokens : room.scoutTokensB ?? defaultTokens;
     const existingReport = currentMap[playerId] ?? {};
-    const currentRange = existingReport[attribute];
+    const currentRange = attribute === "skill" ? existingReport.skill ?? existingReport.technical : existingReport[attribute];
     const nextLevel = currentRange ? (currentRange.level + 1) as 1 | 2 | 3 : 1;
 
     if (nextLevel > 2) {

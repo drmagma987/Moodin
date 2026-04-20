@@ -330,6 +330,14 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Retool drafts continue targeting the same 10-player roster size.
   - Prospect projected rounds now cap at 10 to match the shorter draft board.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Expanded scouting from 3 lanes to 4:
+  - Speed and Power remain combine-proxy scouting categories.
+  - Skill now represents current football polish and uses the existing technical rating under the hood.
+  - Potential was added as a derived film/upside grade influenced by true grade, position traits, archetype, and career stage.
+  - Draft cards now group scouting buttons into Testing and Film sections.
+  - Free-agent projected reports include Potential, and recap exposes Potential in the team breakdown.
+  - Legacy `technical` scouting reports still display/tighten as Skill for active rooms.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 
