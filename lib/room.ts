@@ -13,7 +13,7 @@ import { generateProspects } from "./game/prospects";
 import type { ScoutAttribute, ScoutingMap } from "./game/scouting";
 import { buildScoutingRange } from "./game/scouting";
 import { agePlayerForSeries, buildFreeAgencyPool, willRetireAfterGame } from "./series";
-import type { SimResult } from "./sim";
+import { combineSimResults, type SimResult } from "./sim";
 
 function notNull<T>(value: T | null): value is T {
   return value !== null;
@@ -62,6 +62,8 @@ export type RoomData = {
 
   halftimeTeamBStrategy: StrategyState;
 
+  firstHalfResult: SimResult | null;
+  secondHalfResult: SimResult | null;
   simResult: SimResult | null;
 
   seriesGameNumber: number;
@@ -313,6 +315,8 @@ function buildDraftReset(
     draftedIds: [] as string[],
     teamA: carriedPlayersA,
     teamB: carriedPlayersB,
+    firstHalfResult: null,
+    secondHalfResult: null,
     simResult: null,
     ...emptyScoutingState(nextSeriesGameNumber),
     ...(options?.resetSeries
@@ -352,6 +356,8 @@ function buildInitialRoomData(roomId: string, hostId: string, teamName: string):
     teamB: [],
     ...emptyScoutingState(1),
     ...resetStrategyState(),
+    firstHalfResult: null,
+    secondHalfResult: null,
     simResult: null,
     ...createFreshSeriesState(),
   };
@@ -711,12 +717,14 @@ export async function startHalftime(roomId: string, firstHalfResult: SimResult) 
 
     const room = snap.data() as RoomData;
 
-    if (room.simResult) {
+    if (room.firstHalfResult || (room.simResult && room.simResult.quarters.length <= 2)) {
       transaction.update(roomRef, { status: room.status === "recap" ? "halftime" : room.status });
       return;
     }
 
     transaction.update(roomRef, {
+      firstHalfResult: cleanFirstHalfResult,
+      secondHalfResult: null,
       simResult: cleanFirstHalfResult,
       status: "halftime",
       halftimeTeamAStrategy: {
@@ -759,6 +767,56 @@ export async function finalizeSeriesGame(roomId: string, simResult: SimResult) {
 
     transaction.update(roomRef, {
       simResult: cleanSimResult,
+      status: "results",
+      seriesWinsA: nextWinsA,
+      seriesWinsB: nextWinsB,
+      seriesWinner,
+      seriesLastProcessedGame: room.seriesGameNumber,
+      rematchAcceptedA: false,
+      rematchAcceptedB: false,
+    });
+  });
+}
+
+export async function finalizeSecondHalfGame(roomId: string, secondHalfResult: SimResult) {
+  const roomRef = doc(db, "rooms", roomId);
+  const cleanSecondHalfResult = sanitizeSimResult(secondHalfResult);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+
+    if (room.seriesLastProcessedGame >= room.seriesGameNumber && room.simResult) {
+      transaction.update(roomRef, { status: "results" });
+      return;
+    }
+
+    const storedFirstHalf =
+      room.firstHalfResult ??
+      (room.simResult && room.simResult.quarters.length <= 2 ? room.simResult : null);
+
+    if (!storedFirstHalf) {
+      throw new Error("Second-half finalization requires a stored first half");
+    }
+
+    const combinedResult = sanitizeSimResult(
+      combineSimResults(storedFirstHalf, cleanSecondHalfResult)
+    );
+    const winnerSide = getGameWinner(room, combinedResult);
+    const nextWinsA = room.seriesWinsA + (winnerSide === "A" ? 1 : 0);
+    const nextWinsB = room.seriesWinsB + (winnerSide === "B" ? 1 : 0);
+    const seriesWinner =
+      nextWinsA >= 2 ? "A" : nextWinsB >= 2 ? "B" : null;
+
+    transaction.update(roomRef, {
+      firstHalfResult: storedFirstHalf,
+      secondHalfResult: cleanSecondHalfResult,
+      simResult: combinedResult,
       status: "results",
       seriesWinsA: nextWinsA,
       seriesWinsB: nextWinsB,

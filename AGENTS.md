@@ -321,6 +321,12 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Normal plays, scoring holds, close moments, halftime, and final scoreboard holds were shortened to make the game feel more like a brisk RedZone-style reveal.
   - Scoring and turnover callouts still keep their dramatic overlay timing.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Repaired halftime and field animation behavior:
+  - Room state now stores first-half and second-half sim results separately so halftime can resume into Q3 instead of replaying Q1.
+  - Both players can keep selecting halftime adjustments independently until their own side locks.
+  - The field view no longer shows drive summaries that spoil the drive result.
+  - Football laces now move as part of the football, and play arrows use steadier sizing with black positive-yard arrows, red negative-yard arrows, dashed passes, and solid runs/sacks.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 - Refreshed the landing page branding:
   - Added `public/moodinlogo.png` from the supplied Moodin crest.
   - Reworked the home screen around the logo with a stronger mobile-first create/join room panel.

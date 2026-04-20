@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
@@ -8,7 +8,7 @@ import { getSeriesPressureMessage } from "@/lib/series";
 import {
   acceptRematch,
   beginBetweenGamePhase,
-  finalizeSeriesGame,
+  finalizeSecondHalfGame,
   getRoomStatusHref,
   subscribeToRoom,
   saveHalftimeStrategy,
@@ -17,7 +17,6 @@ import {
 import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical } from "@/lib/game/playerRatings";
 import type { DraftedPlayer } from "@/lib/game/types";
 import {
-  combineSimResults,
   GameSetup,
   PlayerGameStats,
   type QuarterHighlight,
@@ -439,8 +438,8 @@ function FieldDriveView({
       : 100 - highlight.endYardLine
     : 25;
   const movingRight = end >= start;
-  const isPassShape = highlight?.playKind === "pass" || highlight?.playKind === "sack";
-  const arrowMarkerId = highlight ? `play-arrow-${highlight.id}` : "play-arrow-idle";
+  const isPassShape = highlight?.playKind === "pass";
+  const arrowColor = highlight && highlight.yards < 0 ? "rgb(220 38 38)" : "rgb(15 23 42)";
   const passArc = `M ${start} 54 Q ${(start + end) / 2} ${start === end ? 32 : 18} ${end} 54`;
   const runLine = `M ${start} 54 L ${end} 54`;
   const possessionArrow = highlight?.possession === "A" ? ">" : "<";
@@ -558,44 +557,40 @@ function FieldDriveView({
         )}
         {highlight && (
           <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-            <defs>
-              <marker
-                id={arrowMarkerId}
-                markerHeight="5"
-                markerWidth="5"
-                orient="auto-start-reverse"
-                refX="4"
-                refY="2.5"
-              >
-                <path d="M 0 0 L 5 2.5 L 0 5 z" fill="rgb(252 211 77)" />
-              </marker>
-            </defs>
             <path
               key={highlight.id}
               d={isPassShape ? passArc : runLine}
               fill="none"
-              stroke="rgb(252 211 77)"
+              stroke={arrowColor}
               strokeDasharray={isPassShape ? "3 3" : undefined}
               strokeLinecap="round"
-              strokeWidth={isPassShape ? 1.2 : 1.8}
-              markerEnd={`url(#${arrowMarkerId})`}
-              className="drop-shadow-[0_0_8px_rgba(252,211,77,0.75)]"
+              strokeWidth={3}
+              vectorEffect="non-scaling-stroke"
+              className="drop-shadow-[0_0_6px_rgba(255,255,255,0.45)]"
             />
           </svg>
         )}
         <div
-          key={highlight?.id ?? "football"}
-          className={`absolute top-[54%] h-4 w-7 -translate-x-1/2 -translate-y-1/2 rounded-[50%] border border-white/80 bg-amber-900 shadow-[0_0_20px_rgba(252,211,77,0.75)] transition-all duration-700 ${
-            movingRight ? "rotate-12" : "-rotate-12"
-          }`}
-          style={{ left: `${clamp(end, 3, 97)}%` }}
+          className="absolute top-[54%] h-0 w-0 -translate-x-1/2 -translate-y-1/2 transition-all duration-700"
+          style={{
+            left: `${clamp(end, 3, 97)}%`,
+            borderTop: "6px solid transparent",
+            borderBottom: "6px solid transparent",
+            borderLeft: `11px solid ${arrowColor}`,
+            transform: `translate(-50%, -50%) rotate(${movingRight ? 0 : 180}deg)`,
+          }}
         />
         <div
-          className={`absolute top-[54%] h-px w-4 -translate-x-1/2 -translate-y-1/2 bg-white/75 transition-all duration-700 ${
+          key={highlight?.id ?? "football"}
+          className={`absolute top-[54%] -translate-x-1/2 -translate-y-1/2 transition-all duration-700 ${
             movingRight ? "rotate-12" : "-rotate-12"
           }`}
           style={{ left: `${clamp(end, 3, 97)}%` }}
-        />
+        >
+          <div className="relative h-4 w-7 rounded-[50%] border border-white/80 bg-amber-900 shadow-[0_0_20px_rgba(252,211,77,0.75)]">
+            <div className="absolute left-1/2 top-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 bg-white/75" />
+          </div>
+        </div>
         <div className="absolute left-2 bottom-2 rounded bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.2em]">
           {highlight?.possession === "B" ? "Goal" : "Own"}
         </div>
@@ -615,11 +610,6 @@ function FieldDriveView({
                   ? highlight.text
                   : "The first possession is loading..."}
           </p>
-          {highlight && phase === "live" && (
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
-              {highlight.driveSummary}
-            </p>
-          )}
         </div>
         {highlight && phase === "live" && (
           <p className="shrink-0 font-semibold">
@@ -637,6 +627,7 @@ function ResultsTimeline({
   teamAName,
   teamBName,
   awaitingHalftimeAdjustments,
+  resumeFromQuarter = 1,
   onHalftimeRevealComplete,
   onRevealComplete,
 }: {
@@ -644,6 +635,7 @@ function ResultsTimeline({
   teamAName: string;
   teamBName: string;
   awaitingHalftimeAdjustments: boolean;
+  resumeFromQuarter?: number;
   onHalftimeRevealComplete: () => void;
   onRevealComplete: () => void;
 }) {
@@ -670,28 +662,30 @@ function ResultsTimeline({
     const steps: RevealStep[] = [];
     let nextRevealAt = FIRST_REVEAL_DELAY_MS;
 
-    result.quarters.forEach((quarter) => {
-      quarter.highlights.forEach((highlight) => {
-        const revealAt = nextRevealAt;
-        steps.push({ kind: "play", quarter: quarter.quarter, highlight, revealAt });
-        nextRevealAt += highlight.isScore
-          ? SCORE_REVEAL_STEP_MS
-          : highlight.closeMoment
-            ? CLOSE_REVEAL_STEP_MS
-            : NORMAL_REVEAL_STEP_MS;
-      });
-
-      if (quarter.quarter === 2) {
-        steps.push({
-          kind: "halftime",
-          quarter: 2,
-          revealAt: nextRevealAt,
-          scoreA: quarter.scoreA,
-          scoreB: quarter.scoreB,
+    result.quarters
+      .filter((quarter) => quarter.quarter >= resumeFromQuarter)
+      .forEach((quarter) => {
+        quarter.highlights.forEach((highlight) => {
+          const revealAt = nextRevealAt;
+          steps.push({ kind: "play", quarter: quarter.quarter, highlight, revealAt });
+          nextRevealAt += highlight.isScore
+            ? SCORE_REVEAL_STEP_MS
+            : highlight.closeMoment
+              ? CLOSE_REVEAL_STEP_MS
+              : NORMAL_REVEAL_STEP_MS;
         });
-        nextRevealAt += HALFTIME_HOLD_MS;
-      }
-    });
+
+        if (quarter.quarter === 2) {
+          steps.push({
+            kind: "halftime",
+            quarter: 2,
+            revealAt: nextRevealAt,
+            scoreA: quarter.scoreA,
+            scoreB: quarter.scoreB,
+          });
+          nextRevealAt += HALFTIME_HOLD_MS;
+        }
+      });
 
     if (!awaitingHalftimeAdjustments) {
       steps.push({
@@ -704,14 +698,28 @@ function ResultsTimeline({
     }
 
     return steps;
-  }, [awaitingHalftimeAdjustments, result]);
+  }, [awaitingHalftimeAdjustments, result, resumeFromQuarter]);
 
   const elapsed = now - startedAt;
   const revealedSteps = revealSchedule.filter((step) => elapsed >= step.revealAt).length;
   const visibleSteps = revealSchedule.slice(0, revealedSteps);
+  const preRevealedHighlights = result.quarters
+    .filter((quarter) => quarter.quarter < resumeFromQuarter)
+    .flatMap((quarter) =>
+      quarter.highlights.map((highlight) => ({
+        kind: "play" as const,
+        quarter: quarter.quarter,
+        highlight,
+        revealAt: 0,
+      }))
+    );
   const visibleHighlights = visibleSteps.filter(
     (step): step is Extract<RevealStep, { kind: "play" }> => step.kind === "play"
   );
+  const allVisibleHighlights = [...preRevealedHighlights, ...visibleHighlights];
+  const preRevealScore = result.quarters
+    .filter((quarter) => quarter.quarter < resumeFromQuarter)
+    .at(-1);
   const visibleScore =
     visibleSteps.length > 0
       ? (() => {
@@ -719,12 +727,16 @@ function ResultsTimeline({
           if (current.kind === "play") return current.highlight;
           return { scoreA: current.scoreA, scoreB: current.scoreB };
         })()
-      : { scoreA: 0, scoreB: 0 };
+      : { scoreA: preRevealScore?.scoreA ?? 0, scoreB: preRevealScore?.scoreB ?? 0 };
   const currentRevealStep = visibleSteps[visibleSteps.length - 1] ?? null;
-  const lastPlayStep = visibleHighlights[visibleHighlights.length - 1] ?? null;
+  const lastPlayStep = allVisibleHighlights[allVisibleHighlights.length - 1] ?? null;
   const currentHighlight =
-    currentRevealStep?.kind === "play" ? currentRevealStep.highlight : lastPlayStep?.highlight ?? null;
-  const currentQuarter = currentRevealStep?.quarter ?? 1;
+    currentRevealStep?.kind === "play"
+      ? currentRevealStep.highlight
+      : resumeFromQuarter > 1 && visibleHighlights.length === 0
+        ? null
+        : lastPlayStep?.highlight ?? null;
+  const currentQuarter = currentRevealStep?.quarter ?? resumeFromQuarter;
   const currentClock =
     currentRevealStep?.kind === "play"
       ? currentRevealStep.highlight.clock
@@ -759,7 +771,7 @@ function ResultsTimeline({
     elapsed - currentRevealStep.revealAt <= TURNOVER_CALLOUT_MS;
   const revealedQuarterMap = new Map<number, QuarterHighlight[]>();
 
-  visibleHighlights.forEach(({ quarter, highlight }) => {
+  allVisibleHighlights.forEach(({ quarter, highlight }) => {
     const current = revealedQuarterMap.get(quarter) ?? [];
     current.push(highlight);
     revealedQuarterMap.set(quarter, current);
@@ -926,6 +938,8 @@ function ResultsPageContent() {
   const [halftimeTeamADefense, setHalftimeTeamADefense] = useState<string | null>(null);
   const [halftimeTeamBOffense, setHalftimeTeamBOffense] = useState<string | null>(null);
   const [halftimeTeamBDefense, setHalftimeTeamBDefense] = useState<string | null>(null);
+  const [resumeSecondHalfReveal, setResumeSecondHalfReveal] = useState(false);
+  const previousRoomStatusRef = useRef<RoomData["status"] | null>(null);
 
   useEffect(() => {
     if (!roomId) return;
@@ -956,11 +970,22 @@ function ResultsPageContent() {
     }
   }, [roomId, room, router]);
 
-  const result: SimResult | null = room?.simResult ?? null;
+  const firstHalfResult =
+    room?.firstHalfResult ??
+    (room?.status === "halftime" && room?.simResult?.quarters.length === 2 ? room.simResult : null);
+  const result: SimResult | null =
+    room?.status === "halftime" ? firstHalfResult : room?.simResult ?? firstHalfResult ?? null;
   const resultKey = useMemo(() => (result ? JSON.stringify(result) : ""), [result]);
   const teamAName = room?.teamAName ?? "Team A";
   const teamBName = room?.teamBName ?? "Team B";
-  const awaitingHalftimeAdjustments = room?.status === "halftime" && !!result && result.quarters.length === 2;
+  const awaitingHalftimeAdjustments = room?.status === "halftime" && !!firstHalfResult;
+  const transitionedFromHalftime = previousRoomStatusRef.current === "halftime";
+  const shouldResumeFromSecondHalf =
+    room?.status === "results" &&
+    !!room.firstHalfResult &&
+    !!room.secondHalfResult &&
+    (resumeSecondHalfReveal || transitionedFromHalftime);
+  const resumeFromQuarter = shouldResumeFromSecondHalf ? 3 : 1;
   const mySide = useMemo<"A" | "B" | null>(() => {
     if (!room || !uid) return null;
     if (room.playerAId === uid) return "A";
@@ -989,6 +1014,25 @@ function ResultsPageContent() {
     setTimelineComplete(false);
     setHalftimeRevealComplete(false);
   }, [resultKey]);
+
+  useEffect(() => {
+    const previousStatus = previousRoomStatusRef.current;
+
+    if (
+      previousStatus === "halftime" &&
+      room?.status === "results" &&
+      room.firstHalfResult &&
+      room.secondHalfResult
+    ) {
+      setResumeSecondHalfReveal(true);
+    }
+
+    if (room?.status !== "results") {
+      setResumeSecondHalfReveal(false);
+    }
+
+    previousRoomStatusRef.current = room?.status ?? null;
+  }, [room?.status, room?.firstHalfResult, room?.secondHalfResult]);
 
   const selectedHalftimeTeamAOffense =
     halftimeTeamAOffense ?? room?.halftimeTeamAStrategy?.offense ?? room?.teamAStrategy.offense ?? "Balanced";
@@ -1030,9 +1074,9 @@ function ResultsPageContent() {
 
   useEffect(() => {
     async function maybeFinishSecondHalf() {
-      if (!roomId || !room || room.status !== "halftime" || !result) return;
+      if (!roomId || !room || room.status !== "halftime" || !firstHalfResult) return;
       if (!room.halftimeTeamAStrategy?.locked || !room.halftimeTeamBStrategy?.locked) return;
-      if (result.quarters.length !== 2) return;
+      if (firstHalfResult.quarters.length !== 2) return;
 
       const teamARatings = buildRatings(room.teamA);
       const teamBRatings = buildRatings(room.teamB);
@@ -1060,13 +1104,14 @@ function ResultsPageContent() {
       };
 
       try {
+        setResumeSecondHalfReveal(true);
         const secondHalf = simulateGame(secondHalfSetup, {
           startQuarter: 3,
           endQuarter: 4,
-          initialScoreA: result.finalA,
-          initialScoreB: result.finalB,
+          initialScoreA: firstHalfResult.finalA,
+          initialScoreB: firstHalfResult.finalB,
         });
-        await finalizeSeriesGame(roomId, combineSimResults(result, secondHalf));
+        await finalizeSecondHalfGame(roomId, secondHalf);
       } catch (error) {
         console.error("Could not finalize second half", error);
         setHalftimeError("Could not start the second half.");
@@ -1074,7 +1119,7 @@ function ResultsPageContent() {
     }
 
     maybeFinishSecondHalf();
-  }, [roomId, room, result]);
+  }, [roomId, room, firstHalfResult]);
 
   async function handleRematch() {
     if (
@@ -1195,6 +1240,7 @@ function ResultsPageContent() {
           teamAName={teamAName}
           teamBName={teamBName}
           awaitingHalftimeAdjustments={awaitingHalftimeAdjustments}
+          resumeFromQuarter={resumeFromQuarter}
           onHalftimeRevealComplete={() => setHalftimeRevealComplete(true)}
           onRevealComplete={() => setTimelineComplete(true)}
         />
