@@ -476,7 +476,6 @@ function RecapPageContent() {
   const otherStrategyLocked =
     mySide === "A" ? teamBLocked : mySide === "B" ? teamALocked : false;
   const bothStrategiesLocked = teamALocked && teamBLocked;
-  const isHost = uid === room?.hostId;
 
   async function lockStrategy() {
     if (
@@ -506,7 +505,6 @@ function RecapPageContent() {
       if (room.status !== "recap") return;
       if (!room.teamAStrategy.locked || !room.teamBStrategy.locked) return;
       if (room.simResult) return;
-      if (uid !== room.hostId) return;
 
       const gameSetup: GameSetup = {
         teamAName: room.teamAName,
@@ -523,11 +521,19 @@ function RecapPageContent() {
           offense: room.teamBStrategy.offense,
           defense: room.teamBStrategy.defense,
         },
-        simSeed: Date.now(),
+        simSeed:
+          room.seed +
+          room.seriesGameNumber * 1_000_003 +
+          room.seriesWinsA * 10_007 +
+          room.seriesWinsB * 101,
       };
 
-      const result = simulateGame(gameSetup);
-      await finalizeSeriesGame(roomId, result);
+      try {
+        const result = simulateGame(gameSetup);
+        await finalizeSeriesGame(roomId, result);
+      } catch (error) {
+        console.error("Could not finalize simulated game", error);
+      }
     }
 
     maybeStartSim();
@@ -842,9 +848,7 @@ function RecapPageContent() {
               : bothStrategiesLocked
                 ? room?.simResult
                   ? "Both strategies are locked. Moving to results..."
-                  : isHost
-                    ? "Both strategies are locked. Simulating game..."
-                    : "Both strategies are locked. Waiting for simulation..."
+                  : "Both strategies are locked. Simulating game..."
                 : myStrategyLocked
                   ? otherStrategyLocked
                     ? "Both strategies are locked. Preparing results..."

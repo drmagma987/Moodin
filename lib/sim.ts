@@ -1240,7 +1240,7 @@ function localHighlight({
     isScore,
     possession,
     eventType,
-    eventDetail,
+    ...(eventDetail ? { eventDetail } : {}),
     startYardLine: clampedStart,
     endYardLine: clampedEnd,
     yards: clampedEnd - clampedStart,

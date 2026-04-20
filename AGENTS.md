@@ -281,6 +281,11 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Draft note buttons are labeled `Target` and `Fade` instead of emoji-only buttons.
   - Free-agency resolution adds a short offer-envelope suspense reveal before showing the result.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Fixed recap simulation stall:
+  - Firestore rejected sim highlights with `eventDetail: undefined`; non-turnover highlights now omit that field.
+  - Sim finalization is deterministic and no longer depends on only the host client running it.
+  - `finalizeSeriesGame` preserves the already-stored result if a second client races to finalize.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

@@ -684,7 +684,7 @@ export async function finalizeSeriesGame(roomId: string, simResult: SimResult) {
     const room = snap.data() as RoomData;
 
     if (room.seriesLastProcessedGame >= room.seriesGameNumber && room.simResult) {
-      transaction.update(roomRef, { status: "results", simResult });
+      transaction.update(roomRef, { status: "results" });
       return;
     }
 
