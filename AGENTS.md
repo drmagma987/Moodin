@@ -357,6 +357,14 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Normal play reveal cadence moved to 2 seconds, and generated games target a longer 55-70ish visible-play flow.
   - Field arrows now use SVG marker arrowheads attached to the line while the football animates separately.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Continued halftime/sim tuning:
+  - Halftime timeline keys no longer depend on full Firestore result serialization, preventing strategy-lock room updates from restarting the Q1-Q2 reveal for the other player.
+  - Halftime reveal completion now persists while waiting for both strategy locks, so the second half starts from Q3 once both sides are locked.
+  - Scoring was raised toward a more arcade pace with more scoring-range drives, stronger touchdown odds, and more possessions.
+  - Minor-gain plays reveal faster than explosive, scoring, turnover, and missed-kick events.
+  - Results rating rebuild now weights the best same-position players as starters, including WR1/WR2 ordering.
+  - Missed FGs now trigger a dramatic callout, punt animations end at the post-return/touchback field position, and arrowheads were reduced in size.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

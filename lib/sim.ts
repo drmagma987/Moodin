@@ -1227,7 +1227,7 @@ function puntReceivingStartYardLine(
   const rawLandingYardLine = kickStartYardLine + puntDistance;
 
   if (rawLandingYardLine >= 100) {
-    return { puntEndYardLine: 75, nextStartYardLine: 25, touchback: true };
+    return { puntEndYardLine: 75, nextStartYardLine: 25, returnYards: 0, touchback: true };
   }
 
   const pinnedReturn = rawLandingYardLine >= 88 ? Math.round(rand() * 4) : Math.round(rand() * 14);
@@ -1238,6 +1238,7 @@ function puntReceivingStartYardLine(
   return {
     puntEndYardLine: 100 - nextStartYardLine,
     nextStartYardLine,
+    returnYards,
     touchback: false,
   };
 }
@@ -1420,6 +1421,7 @@ function buildDriveHighlights({
   fieldGoalDistance,
   puntEndYardLine,
   puntTouchback,
+  puntReturnYards,
   driveId,
 }: {
   offense: ReturnType<typeof buildTeamProfile>;
@@ -1442,6 +1444,7 @@ function buildDriveHighlights({
   fieldGoalDistance?: number;
   puntEndYardLine?: number;
   puntTouchback?: boolean;
+  puntReturnYards?: number;
   driveId: string;
 }) {
   const safePlayCount = clamp(playCount, 1, 11);
@@ -1584,7 +1587,9 @@ function buildDriveHighlights({
     highlights.push(localHighlight({
       text: puntTouchback
         ? "The punt sails into the end zone for a touchback."
-        : "The punt team sends it away and flips the field.",
+        : puntReturnYards && puntReturnYards > 0
+          ? `The punt team covers after a ${puntReturnYards}-yard return.`
+          : "The punt team sends it away and forces a fair catch.",
       pointsA: 0,
       pointsB: 0,
       isScore: false,
@@ -1670,23 +1675,23 @@ function simulatePossession({
   const chosenEdge = preferPass ? passEdge : runEdge;
   const swingFactor = (rand() - 0.5) * 2 * (offenseVolatility + defenseVolatility);
   const successChance = clamp(
-    0.42 +
+    0.5 +
       chosenEdge * 0.004 +
-      offenseBonus * 0.012 -
-      defenseBonus * 0.012 +
-      (quarter >= 4 && scoreDiff <= -7 ? 0.05 : 0) +
-      (startYardLine >= 45 ? 0.05 : 0),
-    0.2,
-    0.84
+      offenseBonus * 0.014 -
+      defenseBonus * 0.01 +
+      (quarter >= 4 && scoreDiff <= -7 ? 0.06 : 0) +
+      (startYardLine >= 45 ? 0.08 : 0),
+    0.28,
+    0.9
   );
   const explosiveChance = clamp(
-    0.09 +
+    0.12 +
       bigPlayEdge * 0.003 +
-      (preferPass ? 0.03 : 0.01) +
+      (preferPass ? 0.04 : 0.02) +
       offenseVolatility * 0.5 -
       defense.passDefense * 0.0006,
-    0.03,
-    0.38
+    0.05,
+    0.44
   );
   const pressureChance = clamp(
     0.11 +
@@ -1801,28 +1806,28 @@ function simulatePossession({
 
   const explosiveDrive = rand() < explosiveChance;
   const stalledByPressure = rand() < pressureChance;
-  const driveFinishChance = clamp(successChance + (explosiveDrive ? 0.12 : 0) + swingFactor, 0.12, 0.88);
+  const driveFinishChance = clamp(successChance + (explosiveDrive ? 0.16 : 0) + swingFactor, 0.2, 0.92);
   const maxUsefulYards = Math.max(1, 100 - startYardLine);
 
   if (rand() < driveFinishChance) {
     const driveYards = clamp(
-      Math.round(22 + rand() * 34 + Math.max(chosenEdge, 0) * 0.12 + (explosiveDrive ? 18 : 0)),
-      12,
+      Math.round(30 + rand() * 40 + Math.max(chosenEdge, 0) * 0.16 + (explosiveDrive ? 22 : 0)),
+      18,
       maxUsefulYards
     );
     const projectedEnd = startYardLine + driveYards;
-    const inScoringRange = projectedEnd >= 63;
+    const inScoringRange = projectedEnd >= 55;
     const tdChance = clamp(
-      0.4 +
-        (projectedEnd >= 85 ? 0.22 : 0) +
-        (explosiveDrive ? 0.16 : 0) +
+      0.5 +
+        (projectedEnd >= 85 ? 0.26 : 0) +
+        (explosiveDrive ? 0.2 : 0) +
         bigPlayEdge * 0.002 +
         chosenEdge * 0.0018 +
-        (offense.offenseStyle === "Pass Heavy" ? 0.03 : 0) -
-        (defense.defenseStyle === "Pressure" ? 0.015 : 0) +
+        (offense.offenseStyle === "Pass Heavy" ? 0.04 : 0) -
+        (defense.defenseStyle === "Pressure" ? 0.01 : 0) +
         swingFactor * 0.45,
-      0.18,
-      0.86
+      0.28,
+      0.92
     );
 
     if (projectedEnd >= 92 || (inScoringRange && rand() < tdChance)) {
@@ -1988,6 +1993,7 @@ function simulatePossession({
     finalPlayYards: stalledByPressure && preferPass ? -clamp(Math.round(4 + rand() * 5), 3, 9) : clamp(Math.round(1 + rand() * 4), 0, 5),
     puntEndYardLine: punt.puntEndYardLine,
     puntTouchback: punt.touchback,
+    puntReturnYards: punt.returnYards,
     driveId,
   });
 
@@ -2072,11 +2078,11 @@ export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimRes
     let quarterRunningB = runningB;
     let highlightIndex = 0;
     const quarterDriveCount = clamp(
-      4 +
+      5 +
         (quarterNumber >= 4 && Math.abs(runningA - runningB) <= 10 ? 1 : 0) +
         (quarterNumber >= 4 && Math.abs(runningA - runningB) >= 17 ? -1 : 0),
-      3,
-      5
+      4,
+      6
     );
 
     for (let driveIndex = 1; driveIndex <= quarterDriveCount; driveIndex += 1) {

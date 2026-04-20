@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
@@ -27,10 +27,12 @@ import {
 
 const FIRST_REVEAL_DELAY_MS = 900;
 const NORMAL_REVEAL_STEP_MS = 2000;
+const SMALL_PLAY_REVEAL_STEP_MS = 1200;
 const SCORE_REVEAL_STEP_MS = 2600;
 const CLOSE_REVEAL_STEP_MS = 1900;
 const SCORE_CALLOUT_MS = 2400;
 const TURNOVER_CALLOUT_MS = 2200;
+const MISSED_FG_CALLOUT_MS = 2200;
 const HALFTIME_HOLD_MS = 2800;
 const FINAL_SCOREBOARD_HOLD_MS = 3200;
 
@@ -89,13 +91,18 @@ function TeamBoxScore({
 
 function buildRatings(players: DraftedPlayer[]): TeamRatings {
   const byPosition = (position: DraftedPlayer["position"]) =>
-    players.filter((player) => player.position === position);
-  const avg = (
+    [...players.filter((player) => player.position === position)].sort(
+      (a, b) => b.trueGrade - a.trueGrade
+    );
+  const weightedStarterAvg = (
     group: DraftedPlayer[],
     selector: (player: DraftedPlayer) => number
   ) => {
     if (group.length === 0) return 60;
-    return group.reduce((sum, player) => sum + selector(player), 0) / group.length;
+    const weights = [1, 0.55, 0.22, 0.12];
+    const selected = group.slice(0, weights.length);
+    const totalWeight = selected.reduce((sum, _, index) => sum + weights[index], 0);
+    return selected.reduce((sum, player, index) => sum + selector(player) * weights[index], 0) / totalWeight;
   };
 
   const qbs = byPosition("QB");
@@ -107,56 +114,56 @@ function buildRatings(players: DraftedPlayer[]): TeamRatings {
   const secs = byPosition("SEC");
 
   const pass =
-    avg(qbs, getPlayerTechnical) * 0.36 +
-    avg(qbs, getPlayerIQ) * 0.2 +
-    avg(wrs, getPlayerSpeed) * 0.18 +
-    avg(wrs, getPlayerTechnical) * 0.16 +
-    avg(tes, getPlayerTechnical) * 0.1;
+    weightedStarterAvg(qbs, getPlayerTechnical) * 0.36 +
+    weightedStarterAvg(qbs, getPlayerIQ) * 0.2 +
+    weightedStarterAvg(wrs, getPlayerSpeed) * 0.18 +
+    weightedStarterAvg(wrs, getPlayerTechnical) * 0.16 +
+    weightedStarterAvg(tes, getPlayerTechnical) * 0.1;
   const run =
-    avg(rbs, getPlayerPower) * 0.34 +
-    avg(rbs, getPlayerSpeed) * 0.22 +
-    avg(tes, getPlayerPower) * 0.12 +
-    avg(qbs, getPlayerIQ) * 0.12 +
-    avg(wrs, getPlayerPower) * 0.08 +
-    avg(rbs, getPlayerTechnical) * 0.12;
+    weightedStarterAvg(rbs, getPlayerPower) * 0.34 +
+    weightedStarterAvg(rbs, getPlayerSpeed) * 0.22 +
+    weightedStarterAvg(tes, getPlayerPower) * 0.12 +
+    weightedStarterAvg(qbs, getPlayerIQ) * 0.12 +
+    weightedStarterAvg(wrs, getPlayerPower) * 0.08 +
+    weightedStarterAvg(rbs, getPlayerTechnical) * 0.12;
   const bigPlay =
-    avg(wrs, getPlayerSpeed) * 0.32 +
-    avg(rbs, getPlayerSpeed) * 0.22 +
-    avg(qbs, getPlayerPower) * 0.12 +
-    avg(qbs, getPlayerTechnical) * 0.14 +
-    avg(tes, getPlayerSpeed) * 0.08 +
-    avg(wrs, getPlayerTechnical) * 0.12;
+    weightedStarterAvg(wrs, getPlayerSpeed) * 0.32 +
+    weightedStarterAvg(rbs, getPlayerSpeed) * 0.22 +
+    weightedStarterAvg(qbs, getPlayerPower) * 0.12 +
+    weightedStarterAvg(qbs, getPlayerTechnical) * 0.14 +
+    weightedStarterAvg(tes, getPlayerSpeed) * 0.08 +
+    weightedStarterAvg(wrs, getPlayerTechnical) * 0.12;
   const ballSecurity =
-    avg(qbs, getPlayerIQ) * 0.3 +
-    avg(rbs, getPlayerTechnical) * 0.22 +
-    avg(tes, getPlayerTechnical) * 0.12 +
-    avg(wrs, getPlayerTechnical) * 0.12 +
-    avg(rbs, getPlayerPower) * 0.12 +
+    weightedStarterAvg(qbs, getPlayerIQ) * 0.3 +
+    weightedStarterAvg(rbs, getPlayerTechnical) * 0.22 +
+    weightedStarterAvg(tes, getPlayerTechnical) * 0.12 +
+    weightedStarterAvg(wrs, getPlayerTechnical) * 0.12 +
+    weightedStarterAvg(rbs, getPlayerPower) * 0.12 +
     7;
   const passD =
-    avg(secs, getPlayerIQ) * 0.26 +
-    avg(secs, getPlayerSpeed) * 0.22 +
-    avg(lbs, getPlayerIQ) * 0.18 +
-    avg(dls, getPlayerPower) * 0.12 +
-    avg(secs, getPlayerTechnical) * 0.22;
+    weightedStarterAvg(secs, getPlayerIQ) * 0.26 +
+    weightedStarterAvg(secs, getPlayerSpeed) * 0.22 +
+    weightedStarterAvg(lbs, getPlayerIQ) * 0.18 +
+    weightedStarterAvg(dls, getPlayerPower) * 0.12 +
+    weightedStarterAvg(secs, getPlayerTechnical) * 0.22;
   const runD =
-    avg(dls, getPlayerPower) * 0.32 +
-    avg(lbs, getPlayerPower) * 0.24 +
-    avg(lbs, getPlayerIQ) * 0.18 +
-    avg(secs, getPlayerPower) * 0.1 +
-    avg(dls, getPlayerTechnical) * 0.16;
+    weightedStarterAvg(dls, getPlayerPower) * 0.32 +
+    weightedStarterAvg(lbs, getPlayerPower) * 0.24 +
+    weightedStarterAvg(lbs, getPlayerIQ) * 0.18 +
+    weightedStarterAvg(secs, getPlayerPower) * 0.1 +
+    weightedStarterAvg(dls, getPlayerTechnical) * 0.16;
   const pressure =
-    avg(dls, getPlayerPower) * 0.28 +
-    avg(dls, getPlayerTechnical) * 0.22 +
-    avg(lbs, getPlayerSpeed) * 0.18 +
-    avg(lbs, getPlayerPower) * 0.18 +
-    avg(secs, getPlayerIQ) * 0.14;
+    weightedStarterAvg(dls, getPlayerPower) * 0.28 +
+    weightedStarterAvg(dls, getPlayerTechnical) * 0.22 +
+    weightedStarterAvg(lbs, getPlayerSpeed) * 0.18 +
+    weightedStarterAvg(lbs, getPlayerPower) * 0.18 +
+    weightedStarterAvg(secs, getPlayerIQ) * 0.14;
   const takeaways =
-    avg(secs, getPlayerIQ) * 0.28 +
-    avg(secs, getPlayerSpeed) * 0.18 +
-    avg(lbs, getPlayerIQ) * 0.18 +
-    avg(dls, getPlayerPower) * 0.1 +
-    avg(secs, getPlayerTechnical) * 0.26;
+    weightedStarterAvg(secs, getPlayerIQ) * 0.28 +
+    weightedStarterAvg(secs, getPlayerSpeed) * 0.18 +
+    weightedStarterAvg(lbs, getPlayerIQ) * 0.18 +
+    weightedStarterAvg(dls, getPlayerPower) * 0.1 +
+    weightedStarterAvg(secs, getPlayerTechnical) * 0.26;
 
   return {
     pass: Math.round(pass),
@@ -172,6 +179,7 @@ function buildRatings(players: DraftedPlayer[]): TeamRatings {
 
 function eventTypeLabel(highlight: QuarterHighlight) {
   if (highlight.playKind === "punt") return "Punt";
+  if (highlight.playKind === "fieldGoal" && !highlight.isScore) return "Missed FG";
 
   switch (highlight.eventType) {
     case "explosive":
@@ -303,6 +311,11 @@ function scoreCalloutLabel(highlight: QuarterHighlight, teamAName: string, teamB
 function eventCalloutLabel(highlight: QuarterHighlight, teamAName: string, teamBName: string) {
   if (highlight.isScore) return scoreCalloutLabel(highlight, teamAName, teamBName);
 
+  if (highlight.playKind === "fieldGoal") {
+    const teamName = highlight.possession === "A" ? teamAName : teamBName;
+    return `MISS ${teamName}!`;
+  }
+
   if (highlight.eventType === "turnover") {
     const defenseName = highlight.possession === "A" ? teamBName : teamAName;
     if (highlight.eventDetail === "interception") return `PICK ${defenseName}!`;
@@ -322,10 +335,13 @@ function EventCallout({
   teamAName: string;
   teamBName: string;
 }) {
-  if (!highlight || (!highlight.isScore && highlight.eventType !== "turnover")) return null;
+  const missedFieldGoal = highlight?.playKind === "fieldGoal" && !highlight.isScore;
+  if (!highlight || (!highlight.isScore && highlight.eventType !== "turnover" && !missedFieldGoal)) return null;
   const tone =
     highlight.eventType === "turnover"
       ? "border-red-100 bg-red-950 text-white"
+      : missedFieldGoal
+        ? "border-amber-100 bg-amber-950 text-white"
       : "border-white bg-slate-950 text-white";
 
   return (
@@ -335,7 +351,7 @@ function EventCallout({
         className={`animate-bounce rounded-[2rem] border-4 px-8 py-6 text-center shadow-2xl sm:px-12 sm:py-8 ${tone}`}
       >
         <p className="text-xs font-black uppercase tracking-[0.35em] text-amber-300">
-          {highlight.eventType === "turnover" ? "Turnover" : "Score Update"}
+          {highlight.eventType === "turnover" ? "Turnover" : missedFieldGoal ? "Kick Missed" : "Score Update"}
         </p>
         <p className="mt-2 text-4xl font-black uppercase tracking-tight sm:text-6xl">
           {eventCalloutLabel(highlight, teamAName, teamBName)}
@@ -343,6 +359,18 @@ function EventCallout({
       </div>
     </div>
   );
+}
+
+function revealStepMs(highlight: QuarterHighlight) {
+  if (highlight.isScore || highlight.playKind === "fieldGoal") return SCORE_REVEAL_STEP_MS;
+  if (highlight.eventType === "turnover") return TURNOVER_CALLOUT_MS;
+  if (highlight.closeMoment || highlight.eventType === "explosive" || Math.abs(highlight.yards) >= 16) {
+    return CLOSE_REVEAL_STEP_MS;
+  }
+  if (highlight.eventType === "stop" && Math.abs(highlight.yards) <= 4) {
+    return SMALL_PLAY_REVEAL_STEP_MS;
+  }
+  return NORMAL_REVEAL_STEP_MS;
 }
 
 function impactScore(statLine: PlayerGameStats) {
@@ -584,15 +612,14 @@ function FieldDriveView({
             <defs>
               <marker
                 id={arrowMarkerId}
-                markerHeight="8"
-                markerUnits="userSpaceOnUse"
-                markerWidth="8"
+                markerHeight="4"
+                markerWidth="5"
                 orient="auto"
-                refX="7"
-                refY="4"
-                viewBox="0 0 8 8"
+                refX="4.5"
+                refY="2"
+                viewBox="0 0 5 4"
               >
-                <path d="M 0 0 L 8 4 L 0 8 z" fill={arrowColor} />
+                <path d="M 0 0 L 5 2 L 0 4 z" fill={arrowColor} />
               </marker>
             </defs>
             <path
@@ -656,6 +683,7 @@ function ResultsTimeline({
   teamBName,
   awaitingHalftimeAdjustments,
   resumeFromQuarter = 1,
+  forceComplete,
   onHalftimeRevealComplete,
   onRevealComplete,
 }: {
@@ -664,6 +692,7 @@ function ResultsTimeline({
   teamBName: string;
   awaitingHalftimeAdjustments: boolean;
   resumeFromQuarter?: number;
+  forceComplete?: boolean;
   onHalftimeRevealComplete: () => void;
   onRevealComplete: () => void;
 }) {
@@ -696,11 +725,7 @@ function ResultsTimeline({
         quarter.highlights.forEach((highlight) => {
           const revealAt = nextRevealAt;
           steps.push({ kind: "play", quarter: quarter.quarter, highlight, revealAt });
-          nextRevealAt += highlight.isScore
-            ? SCORE_REVEAL_STEP_MS
-            : highlight.closeMoment
-              ? CLOSE_REVEAL_STEP_MS
-              : NORMAL_REVEAL_STEP_MS;
+          nextRevealAt += revealStepMs(highlight);
         });
 
         if (quarter.quarter === 2) {
@@ -728,7 +753,11 @@ function ResultsTimeline({
     return steps;
   }, [awaitingHalftimeAdjustments, result, resumeFromQuarter]);
 
-  const elapsed = now - startedAt;
+  const scheduleCompleteAt =
+    revealSchedule.length > 0
+      ? Math.max(...revealSchedule.map((step) => step.revealAt)) + FINAL_SCOREBOARD_HOLD_MS + 1
+      : 0;
+  const elapsed = forceComplete ? scheduleCompleteAt : now - startedAt;
   const revealedSteps = revealSchedule.filter((step) => elapsed >= step.revealAt).length;
   const visibleSteps = revealSchedule.slice(0, revealedSteps);
   const preRevealedHighlights = result.quarters
@@ -797,6 +826,12 @@ function ResultsTimeline({
     currentRevealStep.kind === "play" &&
     currentRevealStep.highlight.eventType === "turnover" &&
     elapsed - currentRevealStep.revealAt <= TURNOVER_CALLOUT_MS;
+  const showMissedFieldGoalCallout =
+    !!currentRevealStep &&
+    currentRevealStep.kind === "play" &&
+    currentRevealStep.highlight.playKind === "fieldGoal" &&
+    !currentRevealStep.highlight.isScore &&
+    elapsed - currentRevealStep.revealAt <= MISSED_FG_CALLOUT_MS;
   const revealedQuarterMap = new Map<number, QuarterHighlight[]>();
 
   allVisibleHighlights.forEach(({ quarter, highlight }) => {
@@ -837,7 +872,7 @@ function ResultsTimeline({
 
   return (
     <>
-      {(showScoreCallout || showTurnoverCallout) && (
+      {(showScoreCallout || showTurnoverCallout || showMissedFieldGoalCallout) && (
         <EventCallout
           highlight={currentHighlight}
           teamAName={teamAName}
@@ -968,6 +1003,7 @@ function ResultsPageContent() {
   const [halftimeTeamADefense, setHalftimeTeamADefense] = useState<string | null>(null);
   const [halftimeTeamBOffense, setHalftimeTeamBOffense] = useState<string | null>(null);
   const [halftimeTeamBDefense, setHalftimeTeamBDefense] = useState<string | null>(null);
+  const timelineKeyRef = useRef("");
 
   useEffect(() => {
     if (!roomId) return;
@@ -1003,7 +1039,14 @@ function ResultsPageContent() {
     (room?.status === "halftime" && room?.simResult?.quarters.length === 2 ? room.simResult : null);
   const result: SimResult | null =
     room?.status === "halftime" ? firstHalfResult : room?.simResult ?? firstHalfResult ?? null;
-  const resultKey = useMemo(() => (result ? JSON.stringify(result) : ""), [result]);
+  const timelineKey = useMemo(() => {
+    if (!room || !result) return "";
+    const phase = room.status === "halftime" ? "first-half" : room.secondHalfResult ? "full-game" : "results";
+    const quarterKey = result.quarters
+      .map((quarter) => `${quarter.quarter}:${quarter.highlights.length}:${quarter.scoreA}-${quarter.scoreB}`)
+      .join("|");
+    return `${roomId ?? ""}:${room.seriesGameNumber}:${phase}:${quarterKey}:${result.finalA}-${result.finalB}`;
+  }, [room, result, roomId]);
   const teamAName = room?.teamAName ?? "Team A";
   const teamBName = room?.teamBName ?? "Team B";
   const awaitingHalftimeAdjustments = room?.status === "halftime" && !!firstHalfResult;
@@ -1037,9 +1080,11 @@ function ResultsPageContent() {
   });
 
   useEffect(() => {
+    if (timelineKeyRef.current === timelineKey) return;
+    timelineKeyRef.current = timelineKey;
     setTimelineComplete(false);
     setHalftimeRevealComplete(false);
-  }, [resultKey]);
+  }, [timelineKey]);
 
   const selectedHalftimeTeamAOffense =
     halftimeTeamAOffense ?? room?.halftimeTeamAStrategy?.offense ?? room?.teamAStrategy.offense ?? "Balanced";
@@ -1241,12 +1286,13 @@ function ResultsPageContent() {
         </div>
 
         <ResultsTimeline
-          key={resultKey}
+          key={timelineKey}
           result={result}
           teamAName={teamAName}
           teamBName={teamBName}
           awaitingHalftimeAdjustments={awaitingHalftimeAdjustments}
           resumeFromQuarter={resumeFromQuarter}
+          forceComplete={awaitingHalftimeAdjustments && halftimeRevealComplete}
           onHalftimeRevealComplete={() => setHalftimeRevealComplete(true)}
           onRevealComplete={() => setTimelineComplete(true)}
         />
