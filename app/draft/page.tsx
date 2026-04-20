@@ -247,10 +247,10 @@ function DraftPageContent() {
   const teamA: DraftedPlayer[] = room?.teamA ?? EMPTY_PLAYERS;
   const teamB: DraftedPlayer[] = room?.teamB ?? EMPTY_PLAYERS;
   const pickNumber = room?.pickNumber ?? 0;
-  const totalDraftPicks = room?.totalDraftPicks ?? 24;
+  const totalDraftPicks = room?.totalDraftPicks ?? 20;
 
-  const draftOver = pickNumber >= totalDraftPicks;
   const currentTeam = room ? getCurrentDraftSide(room) : null;
+  const draftOver = pickNumber >= totalDraftPicks || (room !== null && currentTeam === null);
   const turnRoster = currentTeam === "A" ? teamA : teamB;
   const missingPositions = getMissingStarterPositions(turnRoster);
   const startersComplete = missingPositions.length === 0;
@@ -449,11 +449,9 @@ function DraftPageContent() {
 
           <div>
             <h1 className="text-2xl font-bold sm:text-3xl">Moodin Draft Board</h1>
-            {room.seriesGameNumber > 1 && (
-              <p className="mt-1 text-sm font-medium text-sky-800">
-                Retool Draft: fill your starters, then add 2 bench players.
-              </p>
-            )}
+            <p className="mt-1 text-sm font-medium text-sky-800">
+              Fill your starters, then add 2 bench players.
+            </p>
             {mySlot && (
               <p className="mt-1 text-sm opacity-70">
                 You are Team {mySlot} ({mySlot === "A" ? teamAName : teamBName})

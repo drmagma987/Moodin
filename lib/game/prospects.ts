@@ -398,6 +398,7 @@ function scoutingErrorRange(trueGrade: number) {
 }
 
 function assignProjectedRounds(sorted: GeneratedProspect[], rand: () => number) {
+  const maxProjectedRound = 10;
   let currentRound = 1;
   let playersInRound = 0;
 
@@ -408,9 +409,9 @@ function assignProjectedRounds(sorted: GeneratedProspect[], rand: () => number) 
     const nextPlayer = sorted[index + 1];
     const scoutGap = nextPlayer ? player.scoutGrade - nextPlayer.scoutGrade : 0;
     const remainingPlayers = sorted.length - index - 1;
-    const remainingRounds = 12 - currentRound;
+    const remainingRounds = maxProjectedRound - currentRound;
     const mustAdvanceToFillBoard = remainingPlayers === remainingRounds;
-    const canAdvance = currentRound < 12;
+    const canAdvance = currentRound < maxProjectedRound;
     const softTierBreak =
       scoutGap >= 4 ||
       (scoutGap >= 2 && playersInRound >= 2 && rand() < 0.65) ||
@@ -548,7 +549,7 @@ export function generateProspects(seed: number): Prospect[] {
       technicalRating,
       powerRating,
       iqRating,
-      projectedRound: 12,
+      projectedRound: 10,
       trueGrade,
       scoutGrade,
     };

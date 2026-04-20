@@ -75,13 +75,13 @@ Navigation should remain status-driven using `getRoomStatusHref(...)`.
 
 ### Draft
 
-Game 1 is a full draft.
+Game 1 is a full draft to 10 players per team: 8 starters plus 2 bench players.
 
 Games 2 and 3 are shorter retool drafts:
 
 - Keep 3 players.
 - Sign 1 free agent.
-- Draft until rosters reach the retool target while starter requirements are enforced.
+- Draft until rosters reach 10 players while starter requirements are enforced.
 
 Starter requirements:
 
@@ -320,6 +320,15 @@ Use this section for intermittent progress notes between chat windows. Prefer da
 - Tuned sim reveal pacing after halftime was added:
   - Normal plays, scoring holds, close moments, halftime, and final scoreboard holds were shortened to make the game feel more like a brisk RedZone-style reveal.
   - Scoring and turnover callouts still keep their dramatic overlay timing.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Refreshed the landing page branding:
+  - Added `public/moodinlogo.png` from the supplied Moodin crest.
+  - Reworked the home screen around the logo with a stronger mobile-first create/join room panel.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Shortened draft roster size:
+  - New full drafts now use 20 total picks, giving each team 8 starters and 2 bench players.
+  - Retool drafts continue targeting the same 10-player roster size.
+  - Prospect projected rounds now cap at 10 to match the shorter draft board.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes

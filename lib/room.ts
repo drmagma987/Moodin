@@ -97,8 +97,9 @@ export type RoomData = {
   rematchAcceptedB: boolean;
 };
 
-const FULL_DRAFT_PICKS = 24;
-const LATER_GAME_ROSTER_TARGET = 10;
+const ROSTER_TARGET = 10;
+const FULL_DRAFT_PICKS = ROSTER_TARGET * 2;
+const LATER_GAME_ROSTER_TARGET = ROSTER_TARGET;
 const KEEPER_COUNT = 3;
 const SCOUT_TOKENS_FULL_DRAFT = 8;
 const SCOUT_TOKENS_RETOOL_DRAFT = 5;
@@ -230,25 +231,16 @@ function missingStarterPositions(players: DraftedPlayer[]) {
   );
 }
 
-export function isRetoolRosterComplete(players: DraftedPlayer[]) {
+export function isDraftRosterComplete(players: DraftedPlayer[]) {
   return players.length >= LATER_GAME_ROSTER_TARGET && startersFilled(players);
 }
 
-function isRetoolDraft(room: Pick<RoomData, "seriesGameNumber">) {
-  return room.seriesGameNumber > 1;
-}
-
 export function getCurrentDraftSide(
-  room: Pick<RoomData, "pickNumber" | "draftFirstSide" | "seriesGameNumber" | "teamA" | "teamB">
+  room: Pick<RoomData, "pickNumber" | "draftFirstSide" | "teamA" | "teamB">
 ): "A" | "B" | null {
   const baseSide = currentPicker2P(room.pickNumber, room.draftFirstSide ?? "A");
-
-  if (!isRetoolDraft(room)) {
-    return baseSide;
-  }
-
-  const teamAReady = isRetoolRosterComplete(room.teamA);
-  const teamBReady = isRetoolRosterComplete(room.teamB);
+  const teamAReady = isDraftRosterComplete(room.teamA);
+  const teamBReady = isDraftRosterComplete(room.teamB);
 
   if (teamAReady && teamBReady) return null;
   if (teamAReady) return "B";
@@ -558,9 +550,7 @@ export async function makeDraftPick(roomId: string, player: Prospect) {
     const nextTeamA = currentTeam === "A" ? [...room.teamA, draftedPlayer] : room.teamA;
     const nextTeamB = currentTeam === "B" ? [...room.teamB, draftedPlayer] : room.teamB;
     const draftFinishedEarly =
-      isRetoolDraft(room) &&
-      isRetoolRosterComplete(nextTeamA) &&
-      isRetoolRosterComplete(nextTeamB);
+      isDraftRosterComplete(nextTeamA) && isDraftRosterComplete(nextTeamB);
     const storedPickNumber = draftFinishedEarly ? room.totalDraftPicks : nextPickNumber;
 
     if (currentTeam === "A") {
