@@ -93,18 +93,18 @@ function getPositionBadgeClass(position: Position) {
 
 function getProspectCardClass(tag: ProspectTag, disabled: boolean) {
   if (disabled) {
-    return "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-500 opacity-60";
+    return "border-gray-200 bg-gray-100 text-gray-500 opacity-60";
   }
 
   if (tag === "gem") {
-    return "cursor-pointer border-sky-300 bg-sky-100 text-slate-950 hover:bg-sky-200";
+    return "border-sky-300 bg-sky-100 text-slate-950";
   }
 
   if (tag === "avoid") {
-    return "cursor-pointer border-red-300 bg-red-100 text-slate-950 hover:bg-red-200";
+    return "border-red-300 bg-red-100 text-slate-950";
   }
 
-  return "cursor-pointer border-gray-200 bg-white text-slate-950 hover:bg-gray-50";
+  return "border-gray-200 bg-white text-slate-950";
 }
 
 function scarcityTone(count: number) {
@@ -117,6 +117,21 @@ function rosterLineLabel(player: DraftedPlayer) {
   if (player.acquisitionType === "freeAgency") return "FA";
   if (player.acquisitionType === "keeper") return "Keep";
   return `#${player.overallPick}`;
+}
+
+function draftButtonLabel({
+  draftOver,
+  draftable,
+  isMyTurn,
+}: {
+  draftOver: boolean;
+  draftable: boolean;
+  isMyTurn: boolean;
+}) {
+  if (draftOver) return "Draft done";
+  if (!draftable) return "Need other position";
+  if (!isMyTurn) return "Waiting";
+  return "Draft";
 }
 
 function RosterPanel({
@@ -167,7 +182,7 @@ function RosterPanel({
                   <p className="text-sm text-gray-600">
                     {player.archetype}
                     {showRatings
-                      ? ` • SPD ${getPlayerSpeed(player)} • TEC ${getPlayerTechnical(player)} • PWR ${getPlayerPower(player)} • IQ ${iqLabel(getPlayerIQ(player))}`
+                      ? ` • SPD ${getPlayerSpeed(player)} • SKL ${getPlayerTechnical(player)} • PWR ${getPlayerPower(player)} • IQ ${iqLabel(getPlayerIQ(player))}`
                       : " • Ratings hidden from opponents"}
                   </p>
                 </div>
@@ -291,16 +306,18 @@ function DraftPageContent() {
   }
 
   const filteredProspects = useMemo(() => {
+    const effectiveDraftFilter = draftFilter === "DRAFTABLE" && !isMyTurn ? "ALL" : draftFilter;
+
     return sortedProspects.filter((player) => {
-      if (draftFilter === "ALL") return true;
-      if (draftFilter === "DRAFTABLE") {
+      if (effectiveDraftFilter === "ALL") return true;
+      if (effectiveDraftFilter === "DRAFTABLE") {
         if (draftOver) return false;
         if (draftablePositionSet) return draftablePositionSet.has(player.position);
         return true;
       }
-      return player.position === draftFilter;
+      return player.position === effectiveDraftFilter;
     });
-  }, [draftFilter, sortedProspects, draftOver, draftablePositionSet]);
+  }, [draftFilter, isMyTurn, sortedProspects, draftOver, draftablePositionSet]);
 
   const teamACounts = useMemo(() => countByPosition(teamA), [teamA]);
   const teamBCounts = useMemo(() => countByPosition(teamB), [teamB]);
@@ -491,6 +508,9 @@ function DraftPageContent() {
                 <p className="text-sm font-medium">Board Filters</p>
                 <p className="text-sm text-gray-600">
                   Toggle draftable players only or zero in on a position. Scout Tokens: {myScoutTokens}
+                  {draftFilter === "DRAFTABLE" && !isMyTurn
+                    ? " Draftable view pauses while you wait so the full board stays visible."
+                    : ""}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -531,31 +551,18 @@ function DraftPageContent() {
           <div className="space-y-2 sm:space-y-3">
             {filteredProspects.map((player) => {
               const draftable = isDraftable(player);
-              const disabled = !draftable || !isMyTurn;
+              const draftDisabled = draftOver || !draftable || !isMyTurn;
+              const cardUnavailable = draftOver || !draftable;
               const playerTag = prospectTags[player.id] ?? null;
               const remainingAtPosition = remainingByPosition[player.position] ?? 0;
               const scoutingReport = myScouting[player.id] ?? {};
+              const draftLabel = draftButtonLabel({ draftOver, draftable, isMyTurn });
 
               return (
                 <div
                   key={player.id}
-                  onClick={() => {
-                    if (!disabled) {
-                      void handleDraftPlayer(player);
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (disabled) return;
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      void handleDraftPlayer(player);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={disabled ? -1 : 0}
-                  aria-disabled={disabled}
                   className={`w-full rounded-2xl border p-3 text-left transition sm:p-4 ${
-                    getProspectCardClass(playerTag, disabled)
+                    getProspectCardClass(playerTag, cardUnavailable)
                   }`}
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -593,6 +600,23 @@ function DraftPageContent() {
                     </div>
                   </div>
 
+                  <div className="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-white/70 p-3 text-xs text-slate-700 sm:grid-cols-3">
+                    <div>
+                      <span className="font-semibold text-slate-950">Build read:</span>{" "}
+                      {draftable ? "Fits current roster rules" : "Blocked until starters are covered"}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-950">Market:</span>{" "}
+                      {remainingAtPosition <= 1
+                        ? `Last ${player.position} on the board`
+                        : `${remainingAtPosition} ${player.position}s remain`}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-950">Report:</span>{" "}
+                      {Object.keys(scoutingReport).length > 0 ? "Partially scouted" : "No private intel yet"}
+                    </div>
+                  </div>
+
                   <div className="mt-3 grid gap-2 sm:grid-cols-3">
                     {SCOUT_ATTRIBUTES.map((attribute) => {
                       const range = scoutingReport[attribute];
@@ -619,7 +643,7 @@ function DraftPageContent() {
                     })}
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -653,11 +677,23 @@ function DraftPageContent() {
                       </button>
                     </div>
 
-                    {playerTag && (
-                      <span className="text-xs font-medium uppercase tracking-[0.18em] opacity-70">
-                        {playerTag === "gem" ? "Targeted" : "Avoid"}
-                      </span>
-                    )}
+                    <div className="flex items-center justify-between gap-3 sm:justify-end">
+                      {playerTag && (
+                        <span className="text-xs font-medium uppercase tracking-[0.18em] opacity-70">
+                          {playerTag === "gem" ? "Targeted" : "Avoid"}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleDraftPlayer(player);
+                        }}
+                        disabled={draftDisabled}
+                        className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-200 disabled:text-gray-500"
+                      >
+                        {draftLabel}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

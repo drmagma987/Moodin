@@ -48,6 +48,11 @@ export type QuarterHighlight = {
   scoreA: number;
   scoreB: number;
   isScore: boolean;
+  possession: "A" | "B";
+  eventType: "explosive" | "touchdown" | "fieldGoal" | "turnover" | "stop";
+  startYardLine: number;
+  endYardLine: number;
+  yards: number;
 };
 
 export type PlayerGameStats = {
@@ -641,6 +646,18 @@ type TeamSimTotals = {
   redZoneTrips: number;
 };
 
+type LocalSimHighlight = {
+  text: string;
+  pointsA: number;
+  pointsB: number;
+  isScore: boolean;
+  possession: "A" | "B";
+  eventType: QuarterHighlight["eventType"];
+  startYardLine: number;
+  endYardLine: number;
+  yards: number;
+};
+
 function buildOffenseGameStats(
   team: DraftedPlayer[],
   profile: ReturnType<typeof buildTeamProfile>,
@@ -661,6 +678,9 @@ function buildOffenseGameStats(
   const te = profile.te;
   const wr1 = profile.wr1;
   const wr2 = profile.wr2;
+  const wr3 = playersByPosition(team, "WR")[2] ?? null;
+  const rb2 = playersByPosition(team, "RB")[1] ?? null;
+  const te2 = playersByPosition(team, "TE")[1] ?? null;
 
   if (qb) {
     const qbStats = stats.get(qb.id);
@@ -675,8 +695,11 @@ function buildOffenseGameStats(
     [
       ...(wr1 ? [{ id: wr1.id, weight: 34 }] : []),
       ...(wr2 ? [{ id: wr2.id, weight: 26 }] : []),
+      ...(wr3 ? [{ id: wr3.id, weight: 7 }] : []),
       ...(te ? [{ id: te.id, weight: 18 }] : []),
+      ...(te2 ? [{ id: te2.id, weight: 4 }] : []),
       ...(rb ? [{ id: rb.id, weight: 12 }] : []),
+      ...(rb2 ? [{ id: rb2.id, weight: 4 }] : []),
     ],
     totalReceptions
   );
@@ -684,8 +707,11 @@ function buildOffenseGameStats(
     [
       ...(wr1 ? [{ id: wr1.id, weight: 38 }] : []),
       ...(wr2 ? [{ id: wr2.id, weight: 28 }] : []),
+      ...(wr3 ? [{ id: wr3.id, weight: 8 }] : []),
       ...(te ? [{ id: te.id, weight: 18 }] : []),
+      ...(te2 ? [{ id: te2.id, weight: 4 }] : []),
       ...(rb ? [{ id: rb.id, weight: 16 }] : []),
+      ...(rb2 ? [{ id: rb2.id, weight: 4 }] : []),
     ],
     passingYards
   );
@@ -693,14 +719,18 @@ function buildOffenseGameStats(
     [
       ...(wr1 ? [{ id: wr1.id, weight: 36 }] : []),
       ...(wr2 ? [{ id: wr2.id, weight: 24 }] : []),
+      ...(wr3 ? [{ id: wr3.id, weight: 4 }] : []),
       ...(te ? [{ id: te.id, weight: 20 }] : []),
+      ...(te2 ? [{ id: te2.id, weight: 3 }] : []),
       ...(rb ? [{ id: rb.id, weight: 10 }] : []),
+      ...(rb2 ? [{ id: rb2.id, weight: 2 }] : []),
     ],
     passTouchdowns
   );
   const carryShares = distributeIntegerTotal(
     [
       ...(rb ? [{ id: rb.id, weight: 34 }] : []),
+      ...(rb2 ? [{ id: rb2.id, weight: 6 }] : []),
       ...(qb ? [{ id: qb.id, weight: 12 }] : []),
       ...(te ? [{ id: te.id, weight: 3 }] : []),
     ],
@@ -709,6 +739,7 @@ function buildOffenseGameStats(
   const rushingYardShares = distributeIntegerTotal(
     [
       ...(rb ? [{ id: rb.id, weight: 36 }] : []),
+      ...(rb2 ? [{ id: rb2.id, weight: 6 }] : []),
       ...(qb ? [{ id: qb.id, weight: 14 }] : []),
       ...(te ? [{ id: te.id, weight: 3 }] : []),
     ],
@@ -717,6 +748,7 @@ function buildOffenseGameStats(
   const rushingTDShares = distributeIntegerTotal(
     [
       ...(rb ? [{ id: rb.id, weight: 32 }] : []),
+      ...(rb2 ? [{ id: rb2.id, weight: 3 }] : []),
       ...(qb ? [{ id: qb.id, weight: 12 }] : []),
     ],
     rushTouchdowns
@@ -890,29 +922,61 @@ function sortPlayerStats(stats: Map<string, PlayerGameStats>) {
   });
 }
 
+function tickerPrefix(quarter: number) {
+  return quarter >= 4 ? "Late" : `Q${quarter}`;
+}
+
 function bigPlayText(
   scoringTeamName: string,
   playerName: string,
   playKind: "pass" | "run",
-  yardage: number
+  yardage: number,
+  quarter: number
 ) {
   return playKind === "pass"
-    ? `${scoringTeamName}: ${playerName} rips off a ${yardage}-yard catch-and-run to flip the quarter.`
-    : `${scoringTeamName}: ${playerName} bursts loose for ${yardage} yards and swings field position.`;
+    ? `${tickerPrefix(quarter)}: ${scoringTeamName} flips the field as ${playerName} breaks free for ${yardage} yards.`
+    : `${tickerPrefix(quarter)}: ${scoringTeamName} hits a crease, and ${playerName} rips off ${yardage} on the ground.`;
 }
 
 function touchdownText(
   scoringTeamName: string,
   scorer: { name: string; kind: "pass" | "run" },
-  yardage: number
+  yardage: number,
+  quarter: number
 ) {
   return scorer.kind === "pass"
-    ? `${scoringTeamName}: Touchdown on a ${yardage}-yard strike finished by ${scorer.name}.`
-    : `${scoringTeamName}: ${scorer.name} punches in a ${yardage}-yard rushing touchdown.`;
+    ? `${tickerPrefix(quarter)} TD: ${scoringTeamName} cashes in with a ${yardage}-yard strike to ${scorer.name}.`
+    : `${tickerPrefix(quarter)} TD: ${scoringTeamName} finishes the drive as ${scorer.name} hammers in from ${yardage}.`;
 }
 
-function fieldGoalText(scoringTeamName: string, yardage: number) {
-  return `${scoringTeamName}: ${yardage}-yard field goal is good, and the scoreboard moves.`;
+function fieldGoalText(scoringTeamName: string, yardage: number, quarter: number) {
+  return `${tickerPrefix(quarter)} FG: ${scoringTeamName} settles for a ${yardage}-yarder after the red-zone door closes.`;
+}
+
+function turnoverText(defenseTeamName: string, preferPass: boolean, quarter: number) {
+  if (preferPass) {
+    return `${tickerPrefix(quarter)}: ${defenseTeamName} jumps the route and steals a drive before points can hit.`;
+  }
+
+  return `${tickerPrefix(quarter)}: ${defenseTeamName} punches the ball loose and flips possession in scoring range.`;
+}
+
+function stopText(
+  offenseTeamName: string,
+  defenseTeamName: string,
+  quarter: number,
+  scoreDiff: number,
+  nearScoringRange: boolean
+) {
+  if (quarter >= 4 && Math.abs(scoreDiff) <= 8) {
+    return `${tickerPrefix(quarter)} stop: ${defenseTeamName} gets off the field in a one-score moment.`;
+  }
+
+  if (nearScoringRange) {
+    return `${tickerPrefix(quarter)} stop: ${defenseTeamName} bends near the stripe but forces ${offenseTeamName} away empty.`;
+  }
+
+  return `${tickerPrefix(quarter)}: ${defenseTeamName} wins third down and kills a promising ${offenseTeamName} march.`;
 }
 
 function driveCountForQuarter(
@@ -923,12 +987,12 @@ function driveCountForQuarter(
   let drives = 3;
 
   if (offense.offenseStyle === "Pass Heavy") drives += 1;
-  if (offense.offenseStyle === "Run Heavy") drives -= 1;
+  if (offense.offenseStyle === "Run Heavy" && quarter < 3) drives -= 1;
 
   if (quarter >= 3 && scoreDiff <= -10) drives += 1;
   if (quarter >= 3 && scoreDiff >= 10) drives -= 1;
 
-  return clamp(drives, 2, 4);
+  return clamp(drives, 3, 5);
 }
 
 function gameScriptPassLean(basePassLean: number, scoreDiff: number, quarter: number) {
@@ -982,6 +1046,95 @@ function addTotals(base: TeamSimTotals, next: TeamSimTotals) {
   };
 }
 
+function normalizeTeamTotals(
+  totals: TeamSimTotals,
+  profile: ReturnType<typeof buildTeamProfile>,
+  rand: () => number
+) {
+  const touchdownCount = totals.passingTD + totals.rushingTD;
+  const scoringDrives = touchdownCount + totals.fieldGoals;
+  const currentYards = totals.passingYards + totals.rushingYards;
+  const targetTotalYards = clamp(
+    Math.round(
+      120 +
+        totals.points * 7.6 +
+        totals.drives * 7 +
+        totals.explosivePlays * 16 +
+        scoringDrives * 8 +
+        (rand() - 0.5) * 42
+    ),
+    totals.points >= 35 ? 330 : totals.points >= 24 ? 260 : 160,
+    totals.points >= 35 ? 520 : totals.points >= 24 ? 460 : 380
+  );
+  const yardScale = currentYards > 0 ? targetTotalYards / currentYards : 1;
+  const passShare = clamp(
+    profile.passLean +
+      (profile.passAttack - profile.runAttack) * 0.004 +
+      (totals.passingTD - totals.rushingTD) * 0.045,
+    profile.offenseStyle === "Run Heavy" ? 0.34 : 0.42,
+    profile.offenseStyle === "Pass Heavy" ? 0.82 : 0.74
+  );
+  const minPassingYards = totals.passingTD * 28 + totals.interceptionsThrown * 8;
+  const minRushingYards = totals.rushingTD * 8;
+  const scaledPassingYards = Math.round(totals.passingYards * yardScale);
+  const targetPassingYards = Math.round(targetTotalYards * passShare);
+  const passingYards = clamp(
+    Math.round((scaledPassingYards + targetPassingYards) / 2),
+    minPassingYards,
+    targetTotalYards - minRushingYards
+  );
+  const rushingYards = Math.max(minRushingYards, targetTotalYards - passingYards);
+  const totalReceptions = clamp(
+    Math.round(passingYards / (profile.offenseStyle === "Pass Heavy" ? 12.5 : 14.5)),
+    totals.passingTD,
+    36
+  );
+  const totalCarries = clamp(
+    Math.round(rushingYards / (profile.offenseStyle === "Run Heavy" ? 4.2 : 5.1)) + totals.rushingTD,
+    totals.rushingTD,
+    38
+  );
+
+  return {
+    ...totals,
+    passingYards,
+    rushingYards,
+    totalReceptions,
+    totalCarries,
+  };
+}
+
+function driveStartYardLine(rand: () => number, scoreDiff: number, quarter: number) {
+  const urgencyBoost = quarter >= 4 && scoreDiff < 0 ? 4 : 0;
+  return clamp(Math.round(20 + rand() * 17 + urgencyBoost), 15, 42);
+}
+
+function localHighlight({
+  text,
+  pointsA,
+  pointsB,
+  isScore,
+  possession,
+  eventType,
+  startYardLine,
+  endYardLine,
+}: Omit<LocalSimHighlight, "yards">) {
+  const clampedStart = clamp(Math.round(startYardLine), 0, 100);
+  const clampedEnd = clamp(Math.round(endYardLine), 0, 100);
+
+  return {
+    text,
+    pointsA,
+    pointsB,
+    isScore,
+    possession,
+    eventType,
+    startYardLine: clampedStart,
+    endYardLine: clampedEnd,
+    yards: clampedEnd - clampedStart,
+  };
+}
+
 function simulateQuarterTeamPoints(
   offenseTeamName: string,
   defenseTeamName: string,
@@ -1004,10 +1157,11 @@ function simulateQuarterTeamPoints(
   let totalReceptions = 0;
   let explosivePlays = 0;
   let redZoneTrips = 0;
-  const highlights: Array<{ text: string; pointsA: number; pointsB: number; isScore: boolean }> = [];
+  const highlights: LocalSimHighlight[] = [];
   const drives = driveCountForQuarter(offense, scoreDiff, quarter);
 
   for (let drive = 0; drive < drives; drive++) {
+    const startYardLine = driveStartYardLine(rand, scoreDiff, quarter);
     const passEdge = offense.passAttack - defense.passDefense;
     const runEdge = offense.runAttack - defense.runDefense;
     const bigPlayEdge =
@@ -1040,13 +1194,13 @@ function simulateQuarterTeamPoints(
     const preferPass = passLean >= runLean;
     const chosenEdge = preferPass ? passEdge : runEdge;
     const successChance = clamp(
-      0.4 +
+      0.43 +
         chosenEdge * 0.004 +
         offenseBonus * 0.012 -
         defenseBonus * 0.012 +
         (quarter >= 4 && scoreDiff <= -7 ? 0.04 : 0),
-      0.18,
-      0.82
+      0.22,
+      0.86
     );
     const explosiveChance = clamp(
       0.1 +
@@ -1085,19 +1239,16 @@ function simulateQuarterTeamPoints(
         rushingYards += turnoverYards;
         totalCarries += 2;
       }
-      highlights.push({
-        text:
-          preferPass
-            ? rand() < 0.5
-              ? `${defenseTeamName}: a ball hawk jumps the throw and kills the drive.`
-              : `${defenseTeamName}: the quarterback forces it, and the takeaway swings the quarter.`
-            : rand() < 0.5
-            ? `${defenseTeamName}: a takeaway flips the drive before points can land.`
-            : `${defenseTeamName}: the offense presses, and the ball comes out.`,
+      highlights.push(localHighlight({
+        text: turnoverText(defenseTeamName, preferPass, quarter),
         pointsA: 0,
         pointsB: 0,
         isScore: false,
-      });
+        possession: side,
+        eventType: "turnover",
+        startYardLine,
+        endYardLine: startYardLine + turnoverYards,
+      }));
       continue;
     }
 
@@ -1118,12 +1269,16 @@ function simulateQuarterTeamPoints(
         rushingYards += yardage;
         totalCarries += clamp(Math.round(yardage / 11), 1, 3);
       }
-      highlights.push({
-        text: bigPlayText(offenseTeamName, playmaker.name, playmaker.kind, yardage),
+      highlights.push(localHighlight({
+        text: bigPlayText(offenseTeamName, playmaker.name, playmaker.kind, yardage, quarter),
         pointsA: 0,
         pointsB: 0,
         isScore: false,
-      });
+        possession: side,
+        eventType: "explosive",
+        startYardLine,
+        endYardLine: startYardLine + yardage,
+      }));
     }
 
     const stalledByPressure = rand() < pressureChance;
@@ -1131,19 +1286,26 @@ function simulateQuarterTeamPoints(
 
     if (stalledByPressure && driveFinishChance < 0.62) {
       sacksAllowed += 1;
+      const stopYards = preferPass
+        ? clamp(Math.round(6 + rand() * 12), 3, 18)
+        : clamp(Math.round(4 + rand() * 10), 2, 14);
       if (preferPass) {
-        passingYards += clamp(Math.round(6 + rand() * 12), 3, 18);
+        passingYards += stopYards;
         totalReceptions += 1;
       } else {
-        rushingYards += clamp(Math.round(4 + rand() * 10), 2, 14);
+        rushingYards += stopYards;
         totalCarries += 2;
       }
-      highlights.push({
-        text: `${defenseTeamName}: pressure wrecks the timing and forces the punt team on.`,
+      highlights.push(localHighlight({
+        text: stopText(offenseTeamName, defenseTeamName, quarter, scoreDiff, driveFinishChance > 0.48),
         pointsA: 0,
         pointsB: 0,
         isScore: false,
-      });
+        possession: side,
+        eventType: "stop",
+        startYardLine,
+        endYardLine: startYardLine + stopYards,
+      }));
       continue;
     }
 
@@ -1155,15 +1317,15 @@ function simulateQuarterTeamPoints(
       );
       redZoneTrips += driveYards >= 35 ? 1 : 0;
       const tdChance = clamp(
-        0.45 +
+        0.52 +
           redZoneBoost +
           bigPlayEdge * 0.002 +
           chosenEdge * 0.0018 +
           (offense.offenseStyle === "Pass Heavy" ? 0.03 : 0) -
           (defense.defenseStyle === "Pressure" ? 0.015 : 0) +
           swingFactor * 0.45,
-        0.2,
-        0.86
+        0.24,
+        0.9
       );
 
       if (rand() < tdChance) {
@@ -1184,15 +1346,21 @@ function simulateQuarterTeamPoints(
           totalCarries += clamp(Math.round(driveYards / 5.5), 3, 8);
         }
 
-        highlights.push({
-          text: touchdownText(offenseTeamName, scorer, yardage),
+        highlights.push(localHighlight({
+          text: touchdownText(offenseTeamName, scorer, yardage, quarter),
           pointsA: side === "A" ? 7 : 0,
           pointsB: side === "B" ? 7 : 0,
           isScore: true,
-        });
+          possession: side,
+          eventType: "touchdown",
+          startYardLine,
+          endYardLine: 100,
+        }));
       } else {
         points += 3;
         fieldGoals += 1;
+        const fieldGoalDistance = clamp(Math.round(28 + rand() * 25), 27, 54);
+        const kickSpotYardLine = clamp(100 - (fieldGoalDistance - 17), startYardLine + 8, 88);
         if (preferPass) {
           passingYards += driveYards;
           totalReceptions += clamp(Math.round(driveYards / 15), 1, 4);
@@ -1202,12 +1370,16 @@ function simulateQuarterTeamPoints(
           totalCarries += clamp(Math.round(driveYards / 10), 2, 5);
           totalReceptions += clamp(Math.round(driveYards / 18), 1, 3);
         }
-        highlights.push({
-          text: fieldGoalText(offenseTeamName, clamp(Math.round(28 + rand() * 25), 27, 54)),
+        highlights.push(localHighlight({
+          text: fieldGoalText(offenseTeamName, fieldGoalDistance, quarter),
           pointsA: side === "A" ? 3 : 0,
           pointsB: side === "B" ? 3 : 0,
           isScore: true,
-        });
+          possession: side,
+          eventType: "fieldGoal",
+          startYardLine,
+          endYardLine: kickSpotYardLine,
+        }));
       }
       continue;
     }
@@ -1221,15 +1393,16 @@ function simulateQuarterTeamPoints(
         rushingYards += Math.round(emptyDriveYards * 0.6);
         totalCarries += clamp(Math.round(emptyDriveYards / 6), 2, 5);
       }
-      highlights.push({
-        text:
-          rand() < 0.5
-            ? `${defenseTeamName}: the drive crosses midfield, but the stop comes in time.`
-            : `${offenseTeamName}: a promising march stalls just outside scoring range.`,
+      highlights.push(localHighlight({
+        text: stopText(offenseTeamName, defenseTeamName, quarter, scoreDiff, emptyDriveYards >= 18),
         pointsA: 0,
         pointsB: 0,
         isScore: false,
-      });
+        possession: side,
+        eventType: "stop",
+        startYardLine,
+        endYardLine: startYardLine + emptyDriveYards,
+      }));
     }
   }
 
@@ -1333,6 +1506,11 @@ export function simulateGame(setup: GameSetup): SimResult {
         scoreA: quarterRunningA,
         scoreB: quarterRunningB,
         isScore: next.isScore,
+        possession: next.possession,
+        eventType: next.eventType,
+        startYardLine: next.startYardLine,
+        endYardLine: next.endYardLine,
+        yards: next.yards,
       });
       highlightIndex += 1;
     }
@@ -1340,12 +1518,17 @@ export function simulateGame(setup: GameSetup): SimResult {
     if (mergedHighlights.length === 0) {
       mergedHighlights.push({
         id: `q${i + 1}-h1`,
-        text: "Both defenses hold firm for long stretches.",
+        text: `Q${i + 1}: both defenses trade clean stops and keep the scoreboard frozen.`,
         scoreA: runningA,
         scoreB: runningB,
         isScore: false,
+        possession: i % 2 === 0 ? "A" : "B",
+        eventType: "stop",
+        startYardLine: 25,
+        endYardLine: 37,
+        yards: 12,
       });
-      quarterPlays.push("Both defenses hold firm for long stretches.");
+      quarterPlays.push(`Q${i + 1}: both defenses trade clean stops and keep the scoreboard frozen.`);
     }
 
     quarters.push({
@@ -1357,15 +1540,18 @@ export function simulateGame(setup: GameSetup): SimResult {
     });
   }
 
+  const normalizedTotalsA = normalizeTeamTotals(totalsA, teamAProfile, rand);
+  const normalizedTotalsB = normalizeTeamTotals(totalsB, teamBProfile, rand);
+
   const teamAOffense = buildOffenseGameStats(
     setup.teamA,
     teamAProfile,
-    totalsA
+    normalizedTotalsA
   );
   const teamBOffense = buildOffenseGameStats(
     setup.teamB,
     teamBProfile,
-    totalsB
+    normalizedTotalsB
   );
 
   applyDefensiveGameStats(

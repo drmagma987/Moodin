@@ -95,7 +95,7 @@ export function scoutingButtonLabel(attribute: ScoutAttribute) {
     case "speed":
       return "SPD";
     case "technical":
-      return "TEC";
+      return "SKL";
     case "power":
       return "PWR";
   }

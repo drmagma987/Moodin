@@ -364,7 +364,7 @@ function SeriesPageContent() {
                           {player.archetype} • {player.careerStage ?? "Rook"}
                         </div>
                         <div className="mt-1 text-sm opacity-80">
-                          SPD {getPlayerSpeed(player)} • TEC {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
+                          SPD {getPlayerSpeed(player)} • SKL {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
                         </div>
                       </div>
                       <div className="text-sm font-medium">
@@ -429,7 +429,7 @@ function SeriesPageContent() {
                         {player.archetype} • {player.careerStage}
                       </p>
                       <p className="mt-1 text-sm opacity-80">
-                        SPD {getPlayerSpeed(player)} • TEC {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
+                        SPD {getPlayerSpeed(player)} • SKL {getPlayerTechnical(player)} • PWR {getPlayerPower(player)} • IQ {iqLabel(getPlayerIQ(player))}
                       </p>
                     </div>
                   ))}

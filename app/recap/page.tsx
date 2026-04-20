@@ -80,7 +80,7 @@ function scoutingAttributeLabel(attribute: ScoutAttribute) {
     case "speed":
       return "speed";
     case "technical":
-      return "technical profile";
+      return "skill profile";
     case "power":
       return "power";
   }
@@ -626,7 +626,7 @@ function RecapPageContent() {
                         Archetype: {player.archetype} • {player.careerStage ?? "Rook"}
                       </div>
                       <div className="text-sm">Speed: {getPlayerSpeed(player)}</div>
-                      <div className="text-sm">Technical: {getPlayerTechnical(player)}</div>
+                      <div className="text-sm">Skill: {getPlayerTechnical(player)}</div>
                       <div className="text-sm">Power: {getPlayerPower(player)}</div>
                       <div className="text-sm">IQ: {iqLabel(getPlayerIQ(player))}</div>
                       <div className="text-sm">
