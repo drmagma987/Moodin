@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RoomSyncNotice } from "@/components/room-sync-notice";
 import { auth, ensureAnonymousAuth } from "@/lib/firebase";
@@ -26,7 +26,7 @@ import {
 } from "@/lib/sim";
 
 const FIRST_REVEAL_DELAY_MS = 900;
-const NORMAL_REVEAL_STEP_MS = 1500;
+const NORMAL_REVEAL_STEP_MS = 2000;
 const SCORE_REVEAL_STEP_MS = 2600;
 const CLOSE_REVEAL_STEP_MS = 1900;
 const SCORE_CALLOUT_MS = 2400;
@@ -446,6 +446,7 @@ function FieldDriveView({
   const passArc = `M ${start} 54 Q ${(start + end) / 2} ${highlight?.playKind === "punt" ? 10 : start === end ? 32 : 18} ${end} 54`;
   const runLine = `M ${start} 54 L ${end} 54`;
   const possessionArrow = highlight?.possession === "A" ? ">" : "<";
+  const arrowMarkerId = highlight ? `play-arrow-${highlight.id.replace(/[^a-zA-Z0-9_-]/g, "-")}` : "play-arrow";
 
   useEffect(() => {
     let frame = 0;
@@ -580,10 +581,25 @@ function FieldDriveView({
         )}
         {highlight && (
           <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <marker
+                id={arrowMarkerId}
+                markerHeight="8"
+                markerUnits="userSpaceOnUse"
+                markerWidth="8"
+                orient="auto"
+                refX="7"
+                refY="4"
+                viewBox="0 0 8 8"
+              >
+                <path d="M 0 0 L 8 4 L 0 8 z" fill={arrowColor} />
+              </marker>
+            </defs>
             <path
               key={highlight.id}
               d={isPassShape ? passArc : runLine}
               fill="none"
+              markerEnd={`url(#${arrowMarkerId})`}
               stroke={arrowColor}
               strokeDasharray={isPassShape ? "3 3" : undefined}
               strokeLinecap="round"
@@ -593,16 +609,6 @@ function FieldDriveView({
             />
           </svg>
         )}
-        <div
-          className="absolute top-[54%] h-0 w-0 -translate-x-1/2 -translate-y-1/2 transition-all duration-700"
-          style={{
-            left: `${clamp(end, 3, 97)}%`,
-            borderTop: "6px solid transparent",
-            borderBottom: "6px solid transparent",
-            borderLeft: `11px solid ${arrowColor}`,
-            transform: `translate(-50%, -50%) rotate(${movingRight ? 0 : 180}deg)`,
-          }}
-        />
         <div
           className={`absolute top-[54%] -translate-x-1/2 -translate-y-1/2 transition-all duration-700 ${
             movingRight ? "rotate-12" : "-rotate-12"
@@ -962,8 +968,6 @@ function ResultsPageContent() {
   const [halftimeTeamADefense, setHalftimeTeamADefense] = useState<string | null>(null);
   const [halftimeTeamBOffense, setHalftimeTeamBOffense] = useState<string | null>(null);
   const [halftimeTeamBDefense, setHalftimeTeamBDefense] = useState<string | null>(null);
-  const [resumeSecondHalfReveal, setResumeSecondHalfReveal] = useState(false);
-  const previousRoomStatusRef = useRef<RoomData["status"] | null>(null);
 
   useEffect(() => {
     if (!roomId) return;
@@ -1003,12 +1007,10 @@ function ResultsPageContent() {
   const teamAName = room?.teamAName ?? "Team A";
   const teamBName = room?.teamBName ?? "Team B";
   const awaitingHalftimeAdjustments = room?.status === "halftime" && !!firstHalfResult;
-  const transitionedFromHalftime = previousRoomStatusRef.current === "halftime";
   const shouldResumeFromSecondHalf =
     room?.status === "results" &&
     !!room.firstHalfResult &&
-    !!room.secondHalfResult &&
-    (resumeSecondHalfReveal || transitionedFromHalftime);
+    !!room.secondHalfResult;
   const resumeFromQuarter = shouldResumeFromSecondHalf ? 3 : 1;
   const mySide = useMemo<"A" | "B" | null>(() => {
     if (!room || !uid) return null;
@@ -1038,25 +1040,6 @@ function ResultsPageContent() {
     setTimelineComplete(false);
     setHalftimeRevealComplete(false);
   }, [resultKey]);
-
-  useEffect(() => {
-    const previousStatus = previousRoomStatusRef.current;
-
-    if (
-      previousStatus === "halftime" &&
-      room?.status === "results" &&
-      room.firstHalfResult &&
-      room.secondHalfResult
-    ) {
-      setResumeSecondHalfReveal(true);
-    }
-
-    if (room?.status !== "results") {
-      setResumeSecondHalfReveal(false);
-    }
-
-    previousRoomStatusRef.current = room?.status ?? null;
-  }, [room?.status, room?.firstHalfResult, room?.secondHalfResult]);
 
   const selectedHalftimeTeamAOffense =
     halftimeTeamAOffense ?? room?.halftimeTeamAStrategy?.offense ?? room?.teamAStrategy.offense ?? "Balanced";
@@ -1128,7 +1111,6 @@ function ResultsPageContent() {
       };
 
       try {
-        setResumeSecondHalfReveal(true);
         const secondHalf = simulateGame(secondHalfSetup, {
           startQuarter: 3,
           endQuarter: 4,

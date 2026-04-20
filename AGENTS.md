@@ -350,6 +350,13 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Punt drives now include an explicit punt snap before the next possession.
   - Results reveal uses a 1.5-second normal-play cadence, keeps important-play holds, animates the football from snap point to result, and shows a recent rolling play log.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Overhauled sim possession realism:
+  - Results now resumes from Q3 whenever both stored halves exist, avoiding Q1-Q2 replay after halftime locks.
+  - The sim now generates sequential possessions instead of independent per-team drive lists, so punts, turnovers, scores, and next field position are correlated.
+  - Punt outcomes include returns/touchbacks, field goals can miss based on distance, and punt sequences show a third-down stop followed by one fourth-down punt.
+  - Normal play reveal cadence moved to 2 seconds, and generated games target a longer 55-70ish visible-play flow.
+  - Field arrows now use SVG marker arrowheads attached to the line while the football animates separately.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

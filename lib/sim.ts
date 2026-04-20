@@ -553,30 +553,6 @@ function defensivePlayBonus(player: DraftedPlayer | null) {
   }
 }
 
-function chooseBigPlayMaker(
-  profile: ReturnType<typeof buildTeamProfile>,
-  rand: () => number,
-  preferPass: boolean
-) {
-  const candidates: { name: string; weight: number; kind: "pass" | "run" }[] = [];
-
-  if (profile.wr1) candidates.push({ name: profile.wr1.name, weight: (preferPass ? 34 : 14) + explosiveWeightBonus(profile.wr1), kind: "pass" });
-  if (profile.wr2) candidates.push({ name: profile.wr2.name, weight: (preferPass ? 24 : 10) + explosiveWeightBonus(profile.wr2), kind: "pass" });
-  if (profile.te) candidates.push({ name: profile.te.name, weight: (preferPass ? 12 : 6) + explosiveWeightBonus(profile.te), kind: "pass" });
-  if (profile.rb) candidates.push({ name: profile.rb.name, weight: (preferPass ? 10 : 28) + explosiveWeightBonus(profile.rb), kind: "run" });
-  if (profile.qb) candidates.push({ name: profile.qb.name, weight: (preferPass ? 8 : 10) + explosiveWeightBonus(profile.qb), kind: "run" });
-
-  const totalWeight = candidates.reduce((sum, candidate) => sum + candidate.weight, 0);
-  let roll = rand() * totalWeight;
-
-  for (const candidate of candidates) {
-    roll -= candidate.weight;
-    if (roll <= 0) return candidate;
-  }
-
-  return candidates[0] ?? { name: "Unknown Player", kind: "pass" as const };
-}
-
 function shortPlayerName(name: string) {
   const parts = name.trim().split(/\s+/);
   if (parts.length <= 1) return name;
@@ -1123,23 +1099,6 @@ function sortPlayerStats(stats: Map<string, PlayerGameStats>) {
   });
 }
 
-function driveCountForQuarter(
-  offense: ReturnType<typeof buildTeamProfile>,
-  scoreDiff: number,
-  quarter: number
-) {
-  let drives = 1;
-
-  if (offense.offenseStyle === "Pass Heavy") drives += 1;
-  if (offense.offenseStyle === "Run Heavy" && scoreDiff >= 7) drives -= 1;
-
-  if (quarter >= 3 && scoreDiff <= -10) drives += 1;
-  if (quarter >= 4 && scoreDiff <= -7) drives += 1;
-  if (quarter >= 3 && scoreDiff >= 10) drives -= 1;
-
-  return clamp(drives, 1, quarter >= 4 ? 3 : 2);
-}
-
 function gameScriptPassLean(basePassLean: number, scoreDiff: number, quarter: number) {
   const urgency =
     quarter >= 4 ? 0.14 : quarter === 3 ? 0.1 : 0.05;
@@ -1251,9 +1210,48 @@ function normalizeTeamTotals(
   };
 }
 
-function driveStartYardLine(rand: () => number, scoreDiff: number, quarter: number) {
-  const urgencyBoost = quarter >= 4 && scoreDiff < 0 ? 4 : 0;
-  return clamp(Math.round(20 + rand() * 17 + urgencyBoost), 15, 42);
+function kickoffStartYardLine(rand: () => number) {
+  if (rand() < 0.72) return 25;
+  return clamp(Math.round(18 + rand() * 16), 12, 38);
+}
+
+function puntReceivingStartYardLine(
+  kickStartYardLine: number,
+  rand: () => number
+) {
+  const puntDistance = clamp(
+    Math.round(38 + rand() * 18 - Math.max(kickStartYardLine - 58, 0) * 0.38),
+    32,
+    58
+  );
+  const rawLandingYardLine = kickStartYardLine + puntDistance;
+
+  if (rawLandingYardLine >= 100) {
+    return { puntEndYardLine: 75, nextStartYardLine: 25, touchback: true };
+  }
+
+  const pinnedReturn = rawLandingYardLine >= 88 ? Math.round(rand() * 4) : Math.round(rand() * 14);
+  const fairCatchChance = rawLandingYardLine >= 78 ? 0.48 : 0.28;
+  const returnYards = rand() < fairCatchChance ? 0 : pinnedReturn;
+  const nextStartYardLine = clamp(100 - rawLandingYardLine + returnYards, 3, 48);
+
+  return {
+    puntEndYardLine: 100 - nextStartYardLine,
+    nextStartYardLine,
+    touchback: false,
+  };
+}
+
+function fieldGoalDistanceFromYardLine(yardLine: number) {
+  return clamp(100 - yardLine + 17, 18, 65);
+}
+
+function fieldGoalMakeChance(distance: number) {
+  if (distance <= 30) return 0.96;
+  if (distance <= 39) return 0.88;
+  if (distance <= 49) return 0.74;
+  if (distance <= 55) return 0.55;
+  return 0.34;
 }
 
 function formatDownDistance(down: number, yardsToGo: number, yardLine: number) {
@@ -1316,7 +1314,7 @@ function clockForHighlight(index: number, total: number) {
 function driveSummaryText(
   playCount: number,
   yards: number,
-  result: "TD" | "FG" | "INT" | "FUM" | "PUNT" | "BIG"
+  result: "TD" | "FG" | "MISS" | "INT" | "FUM" | "PUNT" | "BIG"
 ) {
   const yardText = yards >= 0 ? `+${yards}` : `${yards}`;
   const playLabel = playCount === 1 ? "play" : "plays";
@@ -1333,6 +1331,7 @@ function playText({
   runnerName,
   defenderName,
   fieldGoalDistance,
+  fieldGoalMade,
 }: {
   offense: ReturnType<typeof buildTeamProfile>;
   defense: ReturnType<typeof buildTeamProfile>;
@@ -1343,6 +1342,7 @@ function playText({
   runnerName?: string;
   defenderName?: string;
   fieldGoalDistance?: number;
+  fieldGoalMade?: boolean;
 }) {
   const qb = shortPlayerName(qbName ?? offense.qb?.name ?? "QB");
   const target = shortPlayerName(targetName ?? choosePassTarget(offense, () => 0));
@@ -1355,7 +1355,9 @@ function playText({
   }
 
   if (kind === "fieldGoal") {
-    return `${shortPlayerName(offense.qb?.name ?? "Kicker")} steadies the operation for a ${fieldGoalDistance ?? 38}-yard field goal.`;
+    return fieldGoalMade === false
+      ? `${shortPlayerName(offense.qb?.name ?? "Kicker")} pushes the ${fieldGoalDistance ?? 38}-yard field goal wide.`
+      : `${shortPlayerName(offense.qb?.name ?? "Kicker")} steadies the operation for a ${fieldGoalDistance ?? 38}-yard field goal.`;
   }
 
   if (kind === "turnover") {
@@ -1416,6 +1418,8 @@ function buildDriveHighlights({
   finalPlayKind,
   finalPlayYards,
   fieldGoalDistance,
+  puntEndYardLine,
+  puntTouchback,
   driveId,
 }: {
   offense: ReturnType<typeof buildTeamProfile>;
@@ -1424,7 +1428,7 @@ function buildDriveHighlights({
   startYardLine: number;
   totalYards: number;
   playCount: number;
-  result: "TD" | "FG" | "INT" | "FUM" | "PUNT" | "BIG";
+  result: "TD" | "FG" | "MISS" | "INT" | "FUM" | "PUNT" | "BIG";
   eventType: QuarterHighlight["eventType"];
   eventDetail?: QuarterHighlight["eventDetail"];
   isScore: boolean;
@@ -1436,6 +1440,8 @@ function buildDriveHighlights({
   finalPlayKind?: PlayKind;
   finalPlayYards?: number;
   fieldGoalDistance?: number;
+  puntEndYardLine?: number;
+  puntTouchback?: boolean;
   driveId: string;
 }) {
   const safePlayCount = clamp(playCount, 1, 11);
@@ -1494,6 +1500,7 @@ function buildDriveHighlights({
       runnerName: finalKind === "run" ? chooseRunner(offense, rand) : undefined,
       defenderName: finalDefender,
       fieldGoalDistance,
+      fieldGoalMade: result !== "MISS",
     });
 
   plays.push({
@@ -1511,8 +1518,28 @@ function buildDriveHighlights({
   let currentDown = 1;
   let yardsToGo = Math.min(10, 100 - currentYardLine);
 
-  plays.forEach((play, index) => {
+  plays.forEach((rawPlay, index) => {
+    let play = rawPlay;
     const isFinalPlay = index === plays.length - 1;
+    const finalKickPlay = isFinalPlay && (result === "FG" || result === "MISS");
+
+    if (!isFinalPlay && currentDown === 3 && play.yards < yardsToGo) {
+      const conversionYards = clamp(yardsToGo + Math.round(rand() * 8), yardsToGo, 22);
+      play = {
+        ...play,
+        yards: conversionYards,
+        eventType: conversionYards >= 18 ? "explosive" : play.eventType,
+        text: playText({
+          offense,
+          defense,
+          yards: conversionYards,
+          kind: play.kind,
+          targetName: play.kind === "pass" ? choosePassTarget(offense, rand) : undefined,
+          runnerName: play.kind === "run" ? chooseRunner(offense, rand) : undefined,
+        }),
+      };
+    }
+
     const nextYardLine =
       result === "TD" && isFinalPlay
         ? 100
@@ -1530,7 +1557,11 @@ function buildDriveHighlights({
       downDistance:
         play.kind === "fieldGoal"
           ? `4th & ${Math.max(1, yardsToGo)}`
-          : formatDownDistance(isFinalPlay && result === "PUNT" ? 4 : currentDown, yardsToGo, currentYardLine),
+          : formatDownDistance(
+              isFinalPlay && result === "PUNT" ? 3 : finalKickPlay ? 4 : currentDown,
+              yardsToGo,
+              currentYardLine
+            ),
       driveId,
       startYardLine: currentYardLine,
       endYardLine: nextYardLine,
@@ -1549,9 +1580,11 @@ function buildDriveHighlights({
   });
 
   if (result === "PUNT") {
-    const puntEndYardLine = clamp(currentYardLine + Math.round(34 + rand() * 14), currentYardLine + 20, 98);
+    const puntEnd = puntEndYardLine ?? puntReceivingStartYardLine(currentYardLine, rand).puntEndYardLine;
     highlights.push(localHighlight({
-      text: "The punt team sends it away and flips the field.",
+      text: puntTouchback
+        ? "The punt sails into the end zone for a touchback."
+        : "The punt team sends it away and flips the field.",
       pointsA: 0,
       pointsB: 0,
       isScore: false,
@@ -1561,7 +1594,7 @@ function buildDriveHighlights({
       downDistance: "4th & punt",
       driveId,
       startYardLine: currentYardLine,
-      endYardLine: puntEndYardLine,
+      endYardLine: puntEnd,
       driveSummary: driveSummaryText(safePlayCount + 1, totalYards, result),
       closeMoment,
     }));
@@ -1570,415 +1603,395 @@ function buildDriveHighlights({
   return highlights;
 }
 
-function simulateQuarterTeamPoints(
-  offenseTeamName: string,
-  defenseTeamName: string,
-  side: "A" | "B",
-  offense: ReturnType<typeof buildTeamProfile>,
-  defense: ReturnType<typeof buildTeamProfile>,
-  scoreDiff: number,
-  quarter: number,
-  rand: () => number
-) {
-  let points = 0;
-  let passingYards = 0;
-  let rushingYards = 0;
-  let passingTD = 0;
-  let rushingTD = 0;
-  let fieldGoals = 0;
-  let interceptionsThrown = 0;
-  let fumblesLost = 0;
-  let sacksAllowed = 0;
-  let totalCarries = 0;
-  let totalReceptions = 0;
-  let explosivePlays = 0;
-  let redZoneTrips = 0;
-  const highlights: LocalSimHighlight[] = [];
-  const drives = driveCountForQuarter(offense, scoreDiff, quarter);
+type PossessionResult = {
+  highlights: LocalSimHighlight[];
+  totals: TeamSimTotals;
+  nextPossession: "A" | "B";
+  nextStartYardLine: number;
+  points: number;
+};
 
-  for (let drive = 0; drive < drives; drive++) {
-    const startYardLine = driveStartYardLine(rand, scoreDiff, quarter);
-    const playCount = clamp(Math.round(3 + rand() * 5), 3, 8);
-    const closeMoment = quarter >= 4 && Math.abs(scoreDiff) <= 8;
-    const passEdge = offense.passAttack - defense.passDefense;
-    const runEdge = offense.runAttack - defense.runDefense;
-    const bigPlayEdge =
-      offense.bigPlayAttack - (defense.passDefense * 0.7 + defense.takeaways * 0.3);
-    const turnoverPressure =
-      defense.pressure * 0.55 + defense.takeaways * 0.45 - offense.ballSecurity;
-    const { offenseBonus, defenseBonus } = strategyMatchupBonus(
-      offense.offenseStyle,
-      defense.defenseStyle,
-      offense,
-      defense
-    );
-    const { offenseVolatility, defenseVolatility } = strategyVolatility(
-      offense.offenseStyle,
-      defense.defenseStyle,
-      offense,
-      defense
-    );
-    const passLean = gameScriptPassLean(
-      clamp(
-        offense.passLean + clamp((passEdge - runEdge) * 0.004, -0.08, 0.08),
-        0.3,
-        0.75
-      ),
-      scoreDiff,
-      quarter
-    );
-    const runLean = 1 - passLean;
-    const swingFactor = (rand() - 0.5) * 2 * (offenseVolatility + defenseVolatility);
-    const preferPass = passLean >= runLean;
-    const chosenEdge = preferPass ? passEdge : runEdge;
-    const successChance = clamp(
-      0.43 +
-        chosenEdge * 0.004 +
-        offenseBonus * 0.012 -
-        defenseBonus * 0.012 +
-        (quarter >= 4 && scoreDiff <= -7 ? 0.04 : 0),
-      0.22,
-      0.86
-    );
-    const explosiveChance = clamp(
-      0.1 +
-        bigPlayEdge * 0.003 +
-        (preferPass ? 0.03 : 0.01) +
-        offenseVolatility * 0.5 -
-        defense.passDefense * 0.0006,
-      0.03,
-      0.42
-    );
-    const pressureChance = clamp(
-      0.12 +
-        (defense.pressure - offense.ballSecurity) * 0.0025 +
-        (defense.defenseStyle === "Pressure" ? 0.04 : 0) +
-        (preferPass ? 0.02 : -0.01),
-      0.03,
-      0.36
-    );
-    const turnoverChance = clamp(
-      0.05 +
-        turnoverPressure * 0.0025 +
-        (preferPass ? 0.02 : 0) +
-        (defense.defenseStyle === "Coverage" ? 0.015 : 0) +
-        (defense.defenseStyle === "Pressure" ? 0.012 : 0) +
-        defenseVolatility * 0.45,
-      0.02,
-      0.28
-    );
+function otherSide(side: "A" | "B"): "A" | "B" {
+  return side === "A" ? "B" : "A";
+}
 
-    if (rand() < turnoverChance) {
-      const turnoverYards = clamp(Math.round(6 + rand() * 18), 4, 20);
-      const stripSackChance = clamp(
-        0.16 +
-          (defense.pressure - offense.ballSecurity) * 0.003 +
-          (defense.defenseStyle === "Pressure" ? 0.14 : 0) +
-          (preferPass ? 0.08 : 0),
-        0.08,
-        0.5
-      );
-      const fumbleChance = clamp(
-        (preferPass ? 0.18 : 0.56) +
-          (offense.offenseStyle === "Run Heavy" ? 0.12 : 0) +
-          (defense.defenseStyle === "Pressure" ? 0.08 : 0) -
-          (defense.defenseStyle === "Coverage" && preferPass ? 0.13 : 0) +
-          (defense.pressure - offense.ballSecurity) * 0.002,
-        0.1,
-        0.72
-      );
-      const turnoverType: "interception" | "fumble" =
-        rand() < fumbleChance ? "fumble" : "interception";
-      const stripSack = turnoverType === "fumble" && preferPass && rand() < stripSackChance;
+function simulatePossession({
+  offenseTeamName,
+  side,
+  offense,
+  defense,
+  startYardLine,
+  scoreDiff,
+  quarter,
+  driveIndex,
+  rand,
+}: {
+  offenseTeamName: string;
+  side: "A" | "B";
+  offense: ReturnType<typeof buildTeamProfile>;
+  defense: ReturnType<typeof buildTeamProfile>;
+  startYardLine: number;
+  scoreDiff: number;
+  quarter: number;
+  driveIndex: number;
+  rand: () => number;
+}): PossessionResult {
+  const totals = emptyTotals();
+  totals.drives = 1;
 
-      if (turnoverType === "interception") {
-        passingYards += turnoverYards;
-        totalReceptions += 1;
-        interceptionsThrown += 1;
+  const driveId = `${side}-q${quarter}-d${driveIndex}`;
+  const closeMoment = quarter >= 4 && Math.abs(scoreDiff) <= 8;
+  const passEdge = offense.passAttack - defense.passDefense;
+  const runEdge = offense.runAttack - defense.runDefense;
+  const bigPlayEdge = offense.bigPlayAttack - (defense.passDefense * 0.7 + defense.takeaways * 0.3);
+  const turnoverPressure = defense.pressure * 0.55 + defense.takeaways * 0.45 - offense.ballSecurity;
+  const { offenseBonus, defenseBonus } = strategyMatchupBonus(
+    offense.offenseStyle,
+    defense.defenseStyle,
+    offense,
+    defense
+  );
+  const { offenseVolatility, defenseVolatility } = strategyVolatility(
+    offense.offenseStyle,
+    defense.defenseStyle,
+    offense,
+    defense
+  );
+  const passLean = gameScriptPassLean(
+    clamp(
+      offense.passLean + clamp((passEdge - runEdge) * 0.004, -0.08, 0.08),
+      0.3,
+      0.75
+    ),
+    scoreDiff,
+    quarter
+  );
+  const preferPass = passLean >= 1 - passLean;
+  const chosenEdge = preferPass ? passEdge : runEdge;
+  const swingFactor = (rand() - 0.5) * 2 * (offenseVolatility + defenseVolatility);
+  const successChance = clamp(
+    0.42 +
+      chosenEdge * 0.004 +
+      offenseBonus * 0.012 -
+      defenseBonus * 0.012 +
+      (quarter >= 4 && scoreDiff <= -7 ? 0.05 : 0) +
+      (startYardLine >= 45 ? 0.05 : 0),
+    0.2,
+    0.84
+  );
+  const explosiveChance = clamp(
+    0.09 +
+      bigPlayEdge * 0.003 +
+      (preferPass ? 0.03 : 0.01) +
+      offenseVolatility * 0.5 -
+      defense.passDefense * 0.0006,
+    0.03,
+    0.38
+  );
+  const pressureChance = clamp(
+    0.11 +
+      (defense.pressure - offense.ballSecurity) * 0.0025 +
+      (defense.defenseStyle === "Pressure" ? 0.04 : 0) +
+      (preferPass ? 0.02 : -0.01),
+    0.03,
+    0.34
+  );
+  const turnoverChance = clamp(
+    0.035 +
+      turnoverPressure * 0.0025 +
+      (preferPass ? 0.018 : 0) +
+      (defense.defenseStyle === "Coverage" ? 0.014 : 0) +
+      (defense.defenseStyle === "Pressure" ? 0.011 : 0) +
+      defenseVolatility * 0.38,
+    0.015,
+    0.22
+  );
+  const basePlayCount = clamp(Math.round(2.5 + rand() * 2.8 + (startYardLine < 20 ? 1 : 0)), 3, 6);
+
+  function finish(
+    highlights: LocalSimHighlight[],
+    points = 0,
+    nextStartYardLine = kickoffStartYardLine(rand)
+  ): PossessionResult {
+    return {
+      highlights,
+      totals,
+      nextPossession: otherSide(side),
+      nextStartYardLine,
+      points,
+    };
+  }
+
+  if (rand() < turnoverChance) {
+    const turnoverYards = clamp(Math.round(5 + rand() * 22), 1, Math.max(1, 98 - startYardLine));
+    const stripSackChance = clamp(
+      0.14 +
+        (defense.pressure - offense.ballSecurity) * 0.003 +
+        (defense.defenseStyle === "Pressure" ? 0.14 : 0) +
+        (preferPass ? 0.08 : 0),
+      0.08,
+      0.48
+    );
+    const fumbleChance = clamp(
+      (preferPass ? 0.18 : 0.56) +
+        (offense.offenseStyle === "Run Heavy" ? 0.12 : 0) +
+        (defense.defenseStyle === "Pressure" ? 0.08 : 0) -
+        (defense.defenseStyle === "Coverage" && preferPass ? 0.13 : 0) +
+        (defense.pressure - offense.ballSecurity) * 0.002,
+      0.1,
+      0.72
+    );
+    const turnoverType: "interception" | "fumble" = rand() < fumbleChance ? "fumble" : "interception";
+    const stripSack = turnoverType === "fumble" && preferPass && rand() < stripSackChance;
+
+    if (turnoverType === "interception") {
+      totals.passingYards += turnoverYards;
+      totals.totalReceptions += 1;
+      totals.interceptionsThrown += 1;
+    } else {
+      totals.fumblesLost += 1;
+      if (stripSack) {
+        totals.sacksAllowed += 1;
+      } else if (preferPass) {
+        totals.passingYards += turnoverYards;
+        totals.totalReceptions += 1;
       } else {
-        fumblesLost += 1;
-        if (stripSack) {
-          sacksAllowed += 1;
-          passingYards += clamp(Math.round(2 + rand() * 8), 0, 10);
-        } else if (preferPass) {
-          passingYards += turnoverYards;
-          totalReceptions += 1;
-        } else {
-          rushingYards += turnoverYards;
-          totalCarries += 2;
-        }
+        totals.rushingYards += turnoverYards;
+        totals.totalCarries += 1;
       }
-      const turnoverDetail =
-        turnoverType === "interception" ? "interception" : stripSack ? "stripSack" : "fumble";
-      const defenderName = chooseDefender(
-        defense,
-        rand,
-        turnoverDetail === "interception" ? "coverage" : "fumble"
-      );
-      const turnoverPlayText =
-        turnoverDetail === "interception"
-          ? `${shortPlayerName(defenderName)} jumps the route for an interception.`
-          : turnoverDetail === "stripSack"
-            ? `${shortPlayerName(defenderName)} strips the quarterback on the sack and recovers.`
-            : `${shortPlayerName(defenderName)} punches it loose and the defense recovers.`;
-
-      highlights.push(...buildDriveHighlights({
-        offense,
-        defense,
-        side,
-        startYardLine,
-        totalYards: turnoverYards,
-        playCount,
-        result: turnoverType === "interception" ? "INT" : "FUM",
-        eventType: "turnover",
-        eventDetail: turnoverDetail,
-        isScore: false,
-        points: 0,
-        closeMoment,
-        rand,
-        preferPass,
-        finalText: turnoverPlayText,
-        finalPlayKind: stripSack
-          ? "sack"
-          : turnoverDetail === "interception"
-            ? "pass"
-            : preferPass
-              ? "pass"
-              : "run",
-        finalPlayYards: stripSack
-          ? -clamp(Math.round(5 + rand() * 5), 4, 10)
-          : clamp(Math.round(turnoverYards * 0.45), 2, turnoverYards),
-        driveId: `${side}-q${quarter}-d${drive + 1}`,
-      }));
-      continue;
     }
 
-    let redZoneBoost = 0;
-    if (rand() < explosiveChance) {
-      const playmaker = chooseBigPlayMaker(offense, rand, preferPass);
-      const yardage = clamp(
-        Math.round(24 + rand() * 34 + Math.max(bigPlayEdge, 0) * 0.14),
-        18,
-        68
-      );
-      redZoneBoost += 0.18;
-      explosivePlays += 1;
-      if (playmaker.kind === "pass") {
-        passingYards += yardage;
-        totalReceptions += 1;
+    const turnoverDetail =
+      turnoverType === "interception" ? "interception" : stripSack ? "stripSack" : "fumble";
+    const defenderName = chooseDefender(
+      defense,
+      rand,
+      turnoverDetail === "interception" ? "coverage" : "fumble"
+    );
+    const turnoverPlayText =
+      turnoverDetail === "interception"
+        ? `${shortPlayerName(defenderName)} jumps the route for an interception.`
+        : turnoverDetail === "stripSack"
+          ? `${shortPlayerName(defenderName)} strips the quarterback on the sack and recovers.`
+          : `${shortPlayerName(defenderName)} punches it loose and the defense recovers.`;
+    const highlights = buildDriveHighlights({
+      offense,
+      defense,
+      side,
+      startYardLine,
+      totalYards: turnoverYards,
+      playCount: clamp(basePlayCount - 1, 2, 6),
+      result: turnoverType === "interception" ? "INT" : "FUM",
+      eventType: "turnover",
+      eventDetail: turnoverDetail,
+      isScore: false,
+      points: 0,
+      closeMoment,
+      rand,
+      preferPass,
+      finalText: turnoverPlayText,
+      finalPlayKind: stripSack ? "sack" : preferPass ? "pass" : "run",
+      finalPlayYards: stripSack ? -clamp(Math.round(5 + rand() * 5), 4, 10) : clamp(Math.round(turnoverYards * 0.45), 1, turnoverYards),
+      driveId,
+    });
+    const last = highlights[highlights.length - 1];
+    const returnYards = turnoverDetail === "interception" ? Math.round(rand() * 12) : Math.round(rand() * 6);
+    return finish(highlights, 0, clamp(100 - (last?.endYardLine ?? startYardLine) + returnYards, 8, 80));
+  }
+
+  const explosiveDrive = rand() < explosiveChance;
+  const stalledByPressure = rand() < pressureChance;
+  const driveFinishChance = clamp(successChance + (explosiveDrive ? 0.12 : 0) + swingFactor, 0.12, 0.88);
+  const maxUsefulYards = Math.max(1, 100 - startYardLine);
+
+  if (rand() < driveFinishChance) {
+    const driveYards = clamp(
+      Math.round(22 + rand() * 34 + Math.max(chosenEdge, 0) * 0.12 + (explosiveDrive ? 18 : 0)),
+      12,
+      maxUsefulYards
+    );
+    const projectedEnd = startYardLine + driveYards;
+    const inScoringRange = projectedEnd >= 63;
+    const tdChance = clamp(
+      0.4 +
+        (projectedEnd >= 85 ? 0.22 : 0) +
+        (explosiveDrive ? 0.16 : 0) +
+        bigPlayEdge * 0.002 +
+        chosenEdge * 0.0018 +
+        (offense.offenseStyle === "Pass Heavy" ? 0.03 : 0) -
+        (defense.defenseStyle === "Pressure" ? 0.015 : 0) +
+        swingFactor * 0.45,
+      0.18,
+      0.86
+    );
+
+    if (projectedEnd >= 92 || (inScoringRange && rand() < tdChance)) {
+      const scorer = chooseTouchdownScorer(offense, rand, preferPass);
+      const finalYardage =
+        scorer.kind === "pass"
+          ? clamp(Math.round(8 + rand() * 31), 3, maxUsefulYards)
+          : clamp(Math.round(1 + rand() * 14), 1, maxUsefulYards);
+
+      totals.points += 7;
+      if (scorer.kind === "pass") {
+        totals.passingTD += 1;
+        totals.passingYards += maxUsefulYards;
+        totals.totalReceptions += clamp(Math.round(maxUsefulYards / 14), 1, 5);
       } else {
-        rushingYards += yardage;
-        totalCarries += clamp(Math.round(yardage / 11), 1, 3);
+        totals.rushingTD += 1;
+        totals.rushingYards += maxUsefulYards;
+        totals.totalCarries += clamp(Math.round(maxUsefulYards / 6), 2, 8);
       }
-      highlights.push(...buildDriveHighlights({
+      totals.redZoneTrips += 1;
+      if (explosiveDrive) totals.explosivePlays += 1;
+
+      const highlights = buildDriveHighlights({
         offense,
         defense,
         side,
         startYardLine,
-        totalYards: yardage,
-        playCount: Math.max(1, Math.round(playCount / 2)),
-        result: "BIG",
-        eventType: "explosive",
-        isScore: false,
-        points: 0,
+        totalYards: maxUsefulYards,
+        playCount: clamp(basePlayCount + 1, 4, 8),
+        result: "TD",
+        eventType: "touchdown",
+        isScore: true,
+        points: 7,
         closeMoment,
         rand,
         preferPass,
         finalText:
-          playmaker.kind === "pass"
-            ? `${shortPlayerName(offense.qb?.name ?? "QB")} hits ${shortPlayerName(playmaker.name)} in stride for ${yardage} yards.`
-            : `${shortPlayerName(playmaker.name)} breaks free for ${yardage} yards.`,
-        finalPlayKind: playmaker.kind,
-        finalPlayYards: clamp(Math.round(yardage * 0.62), 12, yardage),
-        driveId: `${side}-q${quarter}-d${drive + 1}`,
-      }));
-    }
-
-    const stalledByPressure = rand() < pressureChance;
-    const driveFinishChance = clamp(successChance + redZoneBoost + swingFactor, 0.12, 0.88);
-
-    if (stalledByPressure && driveFinishChance < 0.62) {
-      sacksAllowed += 1;
-      const stopYards = preferPass
-        ? clamp(Math.round(6 + rand() * 12), 3, 18)
-        : clamp(Math.round(4 + rand() * 10), 2, 14);
-      if (preferPass) {
-        passingYards += stopYards;
-        totalReceptions += 1;
-      } else {
-        rushingYards += stopYards;
-        totalCarries += 2;
-      }
-      highlights.push(...buildDriveHighlights({
-        offense,
-        defense,
-        side,
-        startYardLine,
-        totalYards: stopYards,
-        playCount,
-        result: "PUNT",
-        eventType: "stop",
-        isScore: false,
-        points: 0,
-        closeMoment,
-        rand,
-        preferPass,
-        finalText: `${shortPlayerName(chooseDefender(defense, rand, "sack"))} gets home on third down and forces the punt.`,
-        finalPlayKind: "sack",
-        finalPlayYards: -clamp(Math.round(4 + rand() * 5), 3, 9),
-        driveId: `${side}-q${quarter}-d${drive + 1}`,
-      }));
-      continue;
-    }
-
-    if (rand() < driveFinishChance) {
-      const driveYards = clamp(
-        Math.round(18 + rand() * 28 + Math.max(chosenEdge, 0) * 0.12 + redZoneBoost * 35),
-        14,
-        72
-      );
-      redZoneTrips += driveYards >= 35 ? 1 : 0;
-      const tdChance = clamp(
-        0.52 +
-          redZoneBoost +
-          bigPlayEdge * 0.002 +
-          chosenEdge * 0.0018 +
-          (offense.offenseStyle === "Pass Heavy" ? 0.03 : 0) -
-          (defense.defenseStyle === "Pressure" ? 0.015 : 0) +
-          swingFactor * 0.45,
-        0.24,
-        0.9
-      );
-
-      if (rand() < tdChance) {
-        points += 7;
-        const scorer = chooseTouchdownScorer(offense, rand, preferPass);
-        const yardage =
           scorer.kind === "pass"
-            ? clamp(Math.round(8 + rand() * 31), 5, 39)
-            : clamp(Math.round(1 + rand() * 14), 1, 15);
-
-        if (scorer.kind === "pass") {
-          passingTD += 1;
-          passingYards += driveYards;
-          totalReceptions += clamp(Math.round(driveYards / 14), 1, 4);
-        } else {
-          rushingTD += 1;
-          rushingYards += driveYards;
-          totalCarries += clamp(Math.round(driveYards / 5.5), 3, 8);
-        }
-
-        highlights.push(...buildDriveHighlights({
-          offense,
-          defense,
-          side,
-          startYardLine,
-          totalYards: 100 - startYardLine,
-          playCount,
-          result: "TD",
-          eventType: "touchdown",
-          isScore: true,
-          points: 7,
-          closeMoment,
-          rand,
-          preferPass,
-          finalText:
-            scorer.kind === "pass"
-              ? `${shortPlayerName(offense.qb?.name ?? "QB")} finds ${shortPlayerName(scorer.name)} for a ${yardage}-yard touchdown.`
-              : `${shortPlayerName(scorer.name)} powers in for a ${yardage}-yard touchdown.`,
-          finalPlayKind: scorer.kind,
-          finalPlayYards: yardage,
-          driveId: `${side}-q${quarter}-d${drive + 1}`,
-        }));
-      } else {
-        points += 3;
-        fieldGoals += 1;
-        const fieldGoalDistance = clamp(Math.round(28 + rand() * 25), 27, 54);
-        const kickSpotYardLine = clamp(100 - (fieldGoalDistance - 17), startYardLine + 8, 88);
-        if (preferPass) {
-          passingYards += driveYards;
-          totalReceptions += clamp(Math.round(driveYards / 15), 1, 4);
-        } else {
-          rushingYards += Math.round(driveYards * 0.55);
-          passingYards += Math.round(driveYards * 0.45);
-          totalCarries += clamp(Math.round(driveYards / 10), 2, 5);
-          totalReceptions += clamp(Math.round(driveYards / 18), 1, 3);
-        }
-        highlights.push(...buildDriveHighlights({
-          offense,
-          defense,
-          side,
-          startYardLine,
-          totalYards: kickSpotYardLine - startYardLine,
-          playCount,
-          result: "FG",
-          eventType: "fieldGoal",
-          isScore: true,
-          points: 3,
-          closeMoment,
-          rand,
-          preferPass,
-          finalText: `${offenseTeamName} converts a ${fieldGoalDistance}-yard field goal.`,
-          finalPlayKind: "fieldGoal",
-          finalPlayYards: 0,
-          fieldGoalDistance,
-          driveId: `${side}-q${quarter}-d${drive + 1}`,
-        }));
-      }
-      continue;
+            ? `${shortPlayerName(offense.qb?.name ?? "QB")} finds ${shortPlayerName(scorer.name)} for a ${finalYardage}-yard touchdown.`
+            : `${shortPlayerName(scorer.name)} powers in for a ${finalYardage}-yard touchdown.`,
+        finalPlayKind: scorer.kind,
+        finalPlayYards: finalYardage,
+        driveId,
+      });
+      return finish(highlights, 7);
     }
 
-    if (highlights.length < 5) {
-      const emptyDriveYards = clamp(Math.round(7 + rand() * 18 + Math.max(chosenEdge, -4) * 0.4), 4, 28);
+    const kickSpotYardLine = clamp(projectedEnd, 55, 82);
+    const fieldGoalDistance = fieldGoalDistanceFromYardLine(kickSpotYardLine);
+
+    if (inScoringRange && fieldGoalDistance <= 58) {
+      const made = rand() < fieldGoalMakeChance(fieldGoalDistance);
+      const creditedYards = Math.max(0, kickSpotYardLine - startYardLine);
+      totals.redZoneTrips += kickSpotYardLine >= 80 ? 1 : 0;
       if (preferPass) {
-        passingYards += Math.round(emptyDriveYards * 0.7);
-        totalReceptions += clamp(Math.round(emptyDriveYards / 16), 1, 3);
+        totals.passingYards += creditedYards;
+        totals.totalReceptions += clamp(Math.round(creditedYards / 15), creditedYards > 0 ? 1 : 0, 4);
       } else {
-        rushingYards += Math.round(emptyDriveYards * 0.6);
-        totalCarries += clamp(Math.round(emptyDriveYards / 6), 2, 5);
+        totals.rushingYards += Math.round(creditedYards * 0.55);
+        totals.passingYards += Math.round(creditedYards * 0.45);
+        totals.totalCarries += clamp(Math.round(creditedYards / 10), creditedYards > 0 ? 1 : 0, 5);
+        totals.totalReceptions += clamp(Math.round(creditedYards / 18), creditedYards > 0 ? 1 : 0, 3);
       }
-      highlights.push(...buildDriveHighlights({
+
+      if (made) {
+        totals.points += 3;
+        totals.fieldGoals += 1;
+      }
+
+      const highlights = buildDriveHighlights({
         offense,
         defense,
         side,
         startYardLine,
-        totalYards: emptyDriveYards,
-        playCount,
-        result: "PUNT",
-        eventType: "stop",
-        isScore: false,
-        points: 0,
+        totalYards: creditedYards,
+        playCount: clamp(basePlayCount, 3, 7),
+        result: made ? "FG" : "MISS",
+        eventType: made ? "fieldGoal" : "stop",
+        isScore: made,
+        points: made ? 3 : 0,
         closeMoment,
         rand,
         preferPass,
-        finalText: `${shortPlayerName(chooseDefender(defense, rand, "coverage"))} closes the window on third down. Punt team coming on.`,
-        finalPlayKind: preferPass ? "pass" : "run",
-        finalPlayYards: clamp(Math.round(1 + rand() * 4), 0, 5),
-        driveId: `${side}-q${quarter}-d${drive + 1}`,
-      }));
+        finalText: made
+          ? `${offenseTeamName} converts a ${fieldGoalDistance}-yard field goal.`
+          : `${offenseTeamName} misses from ${fieldGoalDistance} yards out.`,
+        finalPlayKind: "fieldGoal",
+        finalPlayYards: 0,
+        fieldGoalDistance,
+        driveId,
+      });
+      return finish(highlights, made ? 3 : 0, made ? kickoffStartYardLine(rand) : clamp(100 - kickSpotYardLine, 20, 45));
     }
   }
 
-  return {
-    points,
-    highlights,
-    totals: {
-      points,
-      passingYards,
-      rushingYards,
-      passingTD,
-      rushingTD,
-      fieldGoals,
-      interceptionsThrown,
-      fumblesLost,
-      sacksAllowed,
-      totalCarries,
-      totalReceptions,
-      drives,
-      explosivePlays,
-      redZoneTrips,
-    },
-  };
+  const stopYards = clamp(
+    Math.round((stalledByPressure ? 3 : 8) + rand() * 17 + Math.max(chosenEdge, -8) * 0.35),
+    stalledByPressure ? -4 : 1,
+    Math.max(1, 100 - startYardLine - 1)
+  );
+  if (preferPass) {
+    totals.passingYards += Math.max(0, Math.round(stopYards * 0.72));
+    totals.totalReceptions += stopYards > 0 ? clamp(Math.round(stopYards / 16), 1, 3) : 0;
+  } else {
+    totals.rushingYards += Math.max(0, Math.round(stopYards * 0.62));
+    totals.totalCarries += clamp(Math.round(Math.max(stopYards, 3) / 6), 1, 5);
+  }
+  if (stalledByPressure && preferPass) totals.sacksAllowed += 1;
+
+  const puntSpot = clamp(startYardLine + stopYards, 1, 95);
+  const longLateTry = quarter >= 4 && scoreDiff < 0 && puntSpot >= 50 && fieldGoalDistanceFromYardLine(puntSpot) <= 58;
+  if (longLateTry) {
+    const fieldGoalDistance = fieldGoalDistanceFromYardLine(puntSpot);
+    const made = rand() < fieldGoalMakeChance(fieldGoalDistance);
+    if (made) {
+      totals.points += 3;
+      totals.fieldGoals += 1;
+    }
+    const highlights = buildDriveHighlights({
+      offense,
+      defense,
+      side,
+      startYardLine,
+      totalYards: puntSpot - startYardLine,
+      playCount: basePlayCount,
+      result: made ? "FG" : "MISS",
+      eventType: made ? "fieldGoal" : "stop",
+      isScore: made,
+      points: made ? 3 : 0,
+      closeMoment,
+      rand,
+      preferPass,
+      finalText: made
+        ? `${offenseTeamName} sneaks through a ${fieldGoalDistance}-yard field goal.`
+        : `${offenseTeamName} comes up empty on a ${fieldGoalDistance}-yard field goal try.`,
+      finalPlayKind: "fieldGoal",
+      finalPlayYards: 0,
+      fieldGoalDistance,
+      driveId,
+    });
+    return finish(highlights, made ? 3 : 0, made ? kickoffStartYardLine(rand) : clamp(100 - puntSpot, 20, 45));
+  }
+
+  const punt = puntReceivingStartYardLine(puntSpot, rand);
+  const highlights = buildDriveHighlights({
+    offense,
+    defense,
+    side,
+    startYardLine,
+    totalYards: puntSpot - startYardLine,
+    playCount: basePlayCount,
+    result: "PUNT",
+    eventType: "stop",
+    isScore: false,
+    points: 0,
+    closeMoment,
+    rand,
+    preferPass,
+    finalText: stalledByPressure
+      ? `${shortPlayerName(chooseDefender(defense, rand, "sack"))} gets home on third down and forces the punt.`
+      : `${shortPlayerName(chooseDefender(defense, rand, "coverage"))} closes the window on third down. Punt team coming on.`,
+    finalPlayKind: stalledByPressure && preferPass ? "sack" : preferPass ? "pass" : "run",
+    finalPlayYards: stalledByPressure && preferPass ? -clamp(Math.round(4 + rand() * 5), 3, 9) : clamp(Math.round(1 + rand() * 4), 0, 5),
+    puntEndYardLine: punt.puntEndYardLine,
+    puntTouchback: punt.touchback,
+    driveId,
+  });
+
+  return finish(highlights, 0, punt.nextStartYardLine);
 }
 
 function mergePlayerStats(
@@ -2027,22 +2040,6 @@ export function combineSimResults(firstHalf: SimResult, secondHalf: SimResult): 
   };
 }
 
-function groupHighlightsByDrive(highlights: LocalSimHighlight[]) {
-  const groups: LocalSimHighlight[][] = [];
-
-  highlights.forEach((highlight) => {
-    const current = groups[groups.length - 1];
-    if (current && current[0]?.driveId === highlight.driveId) {
-      current.push(highlight);
-      return;
-    }
-
-    groups.push([highlight]);
-  });
-
-  return groups;
-}
-
 export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimResult {
   const rand = mulberry32(setup.simSeed || Date.now());
   const startQuarter = clamp(Math.round(options.startQuarter ?? 1), 1, 4);
@@ -2065,57 +2062,48 @@ export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimRes
   let totalsB = emptyTotals();
 
   const quarters: QuarterResult[] = [];
+  let currentPossession: "A" | "B" = startQuarter >= 3 ? "B" : rand() < 0.5 ? "A" : "B";
+  let currentStartYardLine = kickoffStartYardLine(rand);
 
   for (let quarterNumber = startQuarter; quarterNumber <= endQuarter; quarterNumber++) {
-    const preQuarterDiff = runningA - runningB;
-    const aQuarter = simulateQuarterTeamPoints(
-      setup.teamAName,
-      setup.teamBName,
-      "A",
-      teamAProfile,
-      teamBProfile,
-      preQuarterDiff,
-      quarterNumber,
-      rand
-    );
-    const bQuarter = simulateQuarterTeamPoints(
-      setup.teamBName,
-      setup.teamAName,
-      "B",
-      teamBProfile,
-      teamAProfile,
-      -preQuarterDiff - aQuarter.points,
-      quarterNumber,
-      rand
-    );
-
-    runningA += aQuarter.points;
-    runningB += bQuarter.points;
-    totalsA = addTotals(totalsA, aQuarter.totals);
-    totalsB = addTotals(totalsB, bQuarter.totals);
-
     const quarterPlays: string[] = [];
     const mergedHighlights: QuarterHighlight[] = [];
-    const aDrives = groupHighlightsByDrive(aQuarter.highlights);
-    const bDrives = groupHighlightsByDrive(bQuarter.highlights);
-    let quarterRunningA = quarters[quarters.length - 1]?.scoreA ?? runningA - aQuarter.points;
-    let quarterRunningB = quarters[quarters.length - 1]?.scoreB ?? runningB - bQuarter.points;
+    let quarterRunningA = runningA;
+    let quarterRunningB = runningB;
     let highlightIndex = 0;
-    let mergedDriveIndex = 0;
-    const startWithA = rand() < 0.5;
+    const quarterDriveCount = clamp(
+      4 +
+        (quarterNumber >= 4 && Math.abs(runningA - runningB) <= 10 ? 1 : 0) +
+        (quarterNumber >= 4 && Math.abs(runningA - runningB) >= 17 ? -1 : 0),
+      3,
+      5
+    );
 
-    while (aDrives.length > 0 || bDrives.length > 0) {
-      const pullFromA =
-        aDrives.length === 0
-          ? false
-          : bDrives.length === 0
-            ? true
-            : (mergedDriveIndex % 2 === 0 ? startWithA : !startWithA);
+    for (let driveIndex = 1; driveIndex <= quarterDriveCount; driveIndex += 1) {
+      const side = currentPossession;
+      const offense = side === "A" ? teamAProfile : teamBProfile;
+      const defense = side === "A" ? teamBProfile : teamAProfile;
+      const offenseTeamName = side === "A" ? setup.teamAName : setup.teamBName;
+      const scoreDiff = side === "A" ? quarterRunningA - quarterRunningB : quarterRunningB - quarterRunningA;
+      const possession = simulatePossession({
+        offenseTeamName,
+        side,
+        offense,
+        defense,
+        startYardLine: currentStartYardLine,
+        scoreDiff,
+        quarter: quarterNumber,
+        driveIndex,
+        rand,
+      });
 
-      const nextDrive = pullFromA ? aDrives.shift() : bDrives.shift();
-      if (!nextDrive) continue;
+      if (side === "A") {
+        totalsA = addTotals(totalsA, possession.totals);
+      } else {
+        totalsB = addTotals(totalsB, possession.totals);
+      }
 
-      nextDrive.forEach((next) => {
+      possession.highlights.forEach((next) => {
         quarterRunningA += next.pointsA;
         quarterRunningB += next.pointsB;
         quarterPlays.push(next.text);
@@ -2140,8 +2128,13 @@ export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimRes
         });
         highlightIndex += 1;
       });
-      mergedDriveIndex += 1;
+
+      currentPossession = possession.nextPossession;
+      currentStartYardLine = possession.nextStartYardLine;
     }
+
+    runningA = quarterRunningA;
+    runningB = quarterRunningB;
 
     const highlightsInQuarter = Math.max(mergedHighlights.length, 1);
     mergedHighlights.forEach((highlight, index) => {
