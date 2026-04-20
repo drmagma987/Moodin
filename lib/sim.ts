@@ -1581,7 +1581,7 @@ function buildDriveHighlights({
     const finalPuntSetup = isFinalPlay && result === "PUNT";
     const finalFourthDown = isFinalPlay && play.eventType === "fourthDown";
 
-    if (!isFinalPlay && result !== "PUNT" && result !== "4D" && currentDown === 3 && play.yards < yardsToGo) {
+    if (!isFinalPlay && result !== "4D" && currentDown >= 3 && play.yards < yardsToGo) {
       const conversionYards = clamp(yardsToGo + Math.round(rand() * 8), yardsToGo, 22);
       play = {
         ...play,
@@ -1595,6 +1595,13 @@ function buildDriveHighlights({
           targetName: play.kind === "pass" ? choosePassTarget(offense, rand) : undefined,
           runnerName: play.kind === "run" ? chooseRunner(offense, rand) : undefined,
         }),
+      };
+    }
+
+    if (finalPuntSetup && play.yards >= yardsToGo) {
+      play = {
+        ...play,
+        yards: yardsToGo - 1,
       };
     }
 

@@ -388,6 +388,15 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Results field view now overlays the looping GIF and caption only while the room is in halftime adjustment mode.
   - The overlay is pointer-events-free and disappears before second-half simulation resumes.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Updated the results play log ordering:
+  - Quarter play-log cards and their visible plays now render newest-first below the simulator.
+  - The most recently revealed play stays closest to the field view as the simulation advances.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Validated and repaired sim down/distance continuity:
+  - Added a one-off simulation consistency harness over 9,000 generated game variants and 703,792 plays.
+  - Fixed punt-drive setup so continued drives visibly earn conversions and final punt setup plays cannot accidentally reset down/distance.
+  - The harness found zero remaining down/distance mismatches, possession skips, punt handoff mismatches, or fourth-down continuation errors.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

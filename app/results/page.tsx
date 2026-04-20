@@ -747,10 +747,12 @@ function FieldDriveView({
                 className="object-cover"
                 sizes="(max-width: 640px) calc(100vw - 4rem), 32rem"
               />
+              <div className="absolute inset-x-0 bottom-0 bg-slate-950/85 px-4 py-3 text-center shadow-[0_-8px_24px_rgba(15,23,42,0.65)]">
+                <p className="text-sm font-black uppercase text-amber-200 sm:text-base">
+                  Your Halftime Show: Diaz The Amazing Table Breaker!
+                </p>
+              </div>
             </div>
-            <p className="bg-amber-300 px-4 py-3 text-center text-sm font-black uppercase text-slate-950 sm:text-base">
-              Your Halftime Show: Diaz The Amazing Table Breaker!
-            </p>
           </div>
         </div>
       )}
@@ -984,12 +986,12 @@ function ResultsTimeline({
       />
 
       <div className="space-y-3 sm:space-y-4">
-        {result.quarters.map((quarter) => {
+        {[...result.quarters].reverse().map((quarter) => {
           const quarterHighlights = revealedQuarterMap.get(quarter.quarter) ?? [];
           if (quarterHighlights.length === 0) return null;
 
           const quarterScore = quarterHighlights[quarterHighlights.length - 1];
-          const recentQuarterHighlights = quarterHighlights.slice(-5);
+          const recentQuarterHighlights = quarterHighlights.slice(-5).reverse();
 
           return (
             <div key={quarter.quarter} className="rounded-2xl border p-4 sm:p-5">
@@ -998,7 +1000,7 @@ function ResultsTimeline({
               </h2>
               <ul className="mt-3 space-y-2 text-sm opacity-90">
                 {recentQuarterHighlights.map((highlight, index) => {
-                  const fullIndex = quarterHighlights.length - recentQuarterHighlights.length + index;
+                  const fullIndex = quarterHighlights.length - 1 - index;
                   const previous = quarterHighlights[fullIndex - 1] ?? null;
                   const changedPossession =
                     fullIndex > 0 &&
