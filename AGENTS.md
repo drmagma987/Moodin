@@ -290,6 +290,13 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - The quarter merge step was reintroducing `eventDetail: undefined`; merged highlights now omit unset details too.
   - `finalizeSeriesGame` sanitizes sim results before writing to Firestore as a defensive guard.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Upgraded the results simulation reveal:
+  - Sim highlights now represent individual plays within drives instead of only drive outcomes.
+  - Play events include believable quarter clocks, player-credit copy, yardage movement, sacks, scoring plays, and turnover details.
+  - The results field view now has a pronounced top scoreboard with quarter/time and score as the primary live display.
+  - Removed duplicate live score cards below/inside the field view.
+  - Added halftime and final scoreboard holds, including a `Team Wins!` final display before post-game actions unlock.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

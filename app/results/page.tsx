@@ -15,11 +15,18 @@ import {
 import { PlayerGameStats, type QuarterHighlight, SimResult } from "@/lib/sim";
 
 const FIRST_REVEAL_DELAY_MS = 900;
-const NORMAL_REVEAL_STEP_MS = 3400;
-const SCORE_REVEAL_STEP_MS = 5600;
-const CLOSE_REVEAL_STEP_MS = 6400;
+const NORMAL_REVEAL_STEP_MS = 1650;
+const SCORE_REVEAL_STEP_MS = 4300;
+const CLOSE_REVEAL_STEP_MS = 2300;
 const SCORE_CALLOUT_MS = 2400;
 const TURNOVER_CALLOUT_MS = 2200;
+const HALFTIME_HOLD_MS = 3600;
+const FINAL_SCOREBOARD_HOLD_MS = 3600;
+
+type RevealStep =
+  | { kind: "play"; quarter: number; highlight: QuarterHighlight; revealAt: number }
+  | { kind: "halftime"; quarter: 2; revealAt: number; scoreA: number; scoreB: number }
+  | { kind: "final"; quarter: 4; revealAt: number; scoreA: number; scoreB: number };
 
 function statSummary(statLine: PlayerGameStats) {
   const chunks: string[] = [];
@@ -77,7 +84,7 @@ function eventTypeLabel(eventType: QuarterHighlight["eventType"]) {
     case "turnover":
       return "Turnover";
     case "stop":
-      return "Defensive stop";
+      return "Play";
   }
 }
 
@@ -195,7 +202,10 @@ function FieldDriveView({
   scoreA,
   scoreB,
   quarter,
+  clock,
   winProbabilityA,
+  phase,
+  winnerName,
 }: {
   highlight: QuarterHighlight | null;
   teamAName: string;
@@ -203,10 +213,21 @@ function FieldDriveView({
   scoreA: number;
   scoreB: number;
   quarter: number;
+  clock: string;
   winProbabilityA: number;
+  phase: "live" | "halftime" | "final";
+  winnerName: string | null;
 }) {
   const possessionName =
-    highlight?.possession === "A" ? teamAName : highlight?.possession === "B" ? teamBName : "Awaiting kickoff";
+    phase === "halftime"
+      ? "Halftime"
+      : phase === "final"
+        ? "Final"
+        : highlight?.possession === "A"
+          ? teamAName
+          : highlight?.possession === "B"
+            ? teamBName
+            : "Awaiting kickoff";
   const start = highlight
     ? highlight.possession === "A"
       ? highlight.startYardLine
@@ -223,38 +244,65 @@ function FieldDriveView({
 
   return (
     <div className="rounded-2xl border bg-emerald-950 p-4 text-white shadow-sm sm:p-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+      <div className="rounded-2xl border border-white/15 bg-white/10 p-3 sm:p-4">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-200">
+              {phase === "final" ? "Final" : phase === "halftime" ? "Halftime" : `Q${quarter} • ${clock}`}
+            </p>
+            <p className="mt-1 truncate text-sm font-semibold text-white/85">
+              {possessionName}
+              {phase === "live" ? " possession" : ""}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 rounded-2xl bg-slate-950/60 px-4 py-3 text-center shadow-inner">
+            <div className="min-w-0">
+              <p className="max-w-[7rem] truncate text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">
+                {teamAName}
+              </p>
+              <p className="text-3xl font-black leading-none sm:text-4xl">{scoreA}</p>
+            </div>
+            <span className="text-2xl font-black text-amber-300">-</span>
+            <div className="min-w-0">
+              <p className="max-w-[7rem] truncate text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">
+                {teamBName}
+              </p>
+              <p className="text-3xl font-black leading-none sm:text-4xl">{scoreB}</p>
+            </div>
+          </div>
+
+          <div className="flex justify-start sm:justify-end">
+            {highlight && phase === "live" ? (
+              <span className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${eventTypeClass(highlight.eventType)}`}>
+                {eventTypeLabel(highlight.eventType)}
+              </span>
+            ) : (
+              <span className="w-fit rounded-full border border-amber-200 bg-amber-300 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-emerald-950">
+                {phase === "final" ? "Game Complete" : "Intermission"}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">
             Field View
           </p>
-          <h2 className="mt-1 text-lg font-semibold sm:text-xl">{possessionName} possession</h2>
+          <h2 className="mt-1 text-lg font-semibold sm:text-xl">
+            {phase === "final"
+              ? winnerName
+                ? `${winnerName} Wins!`
+                : "Final Whistle"
+              : phase === "halftime"
+                ? "Halftime Reset"
+                : `${possessionName} possession`}
+          </h2>
         </div>
-        {highlight && (
-          <span className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${eventTypeClass(highlight.eventType)}`}>
-            {eventTypeLabel(highlight.eventType)}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-4 grid gap-3 rounded-2xl border border-white/15 bg-white/10 p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-200">
-              Q{quarter}
-            </p>
-            <p className="mt-1 font-semibold">
-              {teamAName} {scoreA} - {scoreB} {teamBName}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-200">
-              Win Prob
-            </p>
-            <p className="mt-1 font-semibold">
-              {teamAName} {winProbabilityA}% / {teamBName} {100 - winProbabilityA}%
-            </p>
-          </div>
+        <div className="text-sm font-semibold">
+          {teamAName} {winProbabilityA}% / {teamBName} {100 - winProbabilityA}% WP
         </div>
         {highlight?.closeMoment && (
           <span className="w-fit rounded-full border border-amber-200 bg-amber-300 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-emerald-950">
@@ -317,14 +365,22 @@ function FieldDriveView({
 
       <div className="mt-3 flex flex-col gap-1 text-sm text-emerald-50 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p>{highlight ? highlight.text : "The first possession is loading..."}</p>
-          {highlight && (
+          <p>
+            {phase === "final"
+              ? "The clock hits zero and the scoreboard is official."
+              : phase === "halftime"
+                ? "Both teams head into the locker room. Adjustments are coming."
+                : highlight
+                  ? highlight.text
+                  : "The first possession is loading..."}
+          </p>
+          {highlight && phase === "live" && (
             <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
               {highlight.driveSummary}
             </p>
           )}
         </div>
-        {highlight && (
+        {highlight && phase === "live" && (
           <p className="shrink-0 font-semibold">
             {highlight.yards >= 0 ? "+" : ""}
             {highlight.yards} yards
@@ -365,42 +421,78 @@ function ResultsTimeline({
     };
   }, []);
 
-  const revealPlan = useMemo(() => {
-    const steps: Array<{ quarter: number; highlight: QuarterHighlight }> = [];
+  const revealSchedule = useMemo<RevealStep[]>(() => {
+    const steps: RevealStep[] = [];
+    let nextRevealAt = FIRST_REVEAL_DELAY_MS;
 
     result.quarters.forEach((quarter) => {
       quarter.highlights.forEach((highlight) => {
-        steps.push({ quarter: quarter.quarter, highlight });
+        const revealAt = nextRevealAt;
+        steps.push({ kind: "play", quarter: quarter.quarter, highlight, revealAt });
+        nextRevealAt += highlight.isScore
+          ? SCORE_REVEAL_STEP_MS
+          : highlight.closeMoment
+            ? CLOSE_REVEAL_STEP_MS
+            : NORMAL_REVEAL_STEP_MS;
       });
+
+      if (quarter.quarter === 2) {
+        steps.push({
+          kind: "halftime",
+          quarter: 2,
+          revealAt: nextRevealAt,
+          scoreA: quarter.scoreA,
+          scoreB: quarter.scoreB,
+        });
+        nextRevealAt += HALFTIME_HOLD_MS;
+      }
+    });
+
+    steps.push({
+      kind: "final",
+      quarter: 4,
+      revealAt: nextRevealAt,
+      scoreA: result.finalA,
+      scoreB: result.finalB,
     });
 
     return steps;
   }, [result]);
-  const revealSchedule = useMemo(() => {
-    let nextRevealAt = FIRST_REVEAL_DELAY_MS;
-
-    return revealPlan.map((step) => {
-      const revealAt = nextRevealAt;
-      nextRevealAt += step.highlight.isScore
-        ? SCORE_REVEAL_STEP_MS
-        : step.highlight.closeMoment
-          ? CLOSE_REVEAL_STEP_MS
-          : NORMAL_REVEAL_STEP_MS;
-      return { ...step, revealAt };
-    });
-  }, [revealPlan]);
 
   const elapsed = now - startedAt;
-  const revealedHighlights = revealSchedule.filter((step) => elapsed >= step.revealAt).length;
-  const visibleHighlights = revealSchedule.slice(0, revealedHighlights);
+  const revealedSteps = revealSchedule.filter((step) => elapsed >= step.revealAt).length;
+  const visibleSteps = revealSchedule.slice(0, revealedSteps);
+  const visibleHighlights = visibleSteps.filter(
+    (step): step is Extract<RevealStep, { kind: "play" }> => step.kind === "play"
+  );
   const visibleScore =
-    visibleHighlights.length > 0
-      ? visibleHighlights[visibleHighlights.length - 1].highlight
+    visibleSteps.length > 0
+      ? (() => {
+          const current = visibleSteps[visibleSteps.length - 1];
+          if (current.kind === "play") return current.highlight;
+          return { scoreA: current.scoreA, scoreB: current.scoreB };
+        })()
       : { scoreA: 0, scoreB: 0 };
-  const currentRevealStep = visibleHighlights[visibleHighlights.length - 1] ?? null;
-  const currentHighlight = currentRevealStep?.highlight ?? null;
+  const currentRevealStep = visibleSteps[visibleSteps.length - 1] ?? null;
+  const lastPlayStep = visibleHighlights[visibleHighlights.length - 1] ?? null;
+  const currentHighlight =
+    currentRevealStep?.kind === "play" ? currentRevealStep.highlight : lastPlayStep?.highlight ?? null;
   const currentQuarter = currentRevealStep?.quarter ?? 1;
-  const progressRatio = revealSchedule.length > 0 ? revealedHighlights / revealSchedule.length : 0;
+  const currentClock =
+    currentRevealStep?.kind === "play"
+      ? currentRevealStep.highlight.clock
+      : currentRevealStep?.kind === "halftime"
+        ? "0:00"
+        : currentRevealStep?.kind === "final"
+          ? "0:00"
+          : "15:00";
+  const currentPhase =
+    currentRevealStep?.kind === "halftime"
+      ? "halftime"
+      : currentRevealStep?.kind === "final"
+        ? "final"
+        : "live";
+  const progressRatio = revealSchedule.length > 0 ? revealedSteps / revealSchedule.length : 0;
   const winProbabilityA = estimateWinProbabilityA(
     visibleScore.scoreA,
     visibleScore.scoreB,
@@ -410,10 +502,12 @@ function ResultsTimeline({
   );
   const showScoreCallout =
     !!currentRevealStep &&
+    currentRevealStep.kind === "play" &&
     currentRevealStep.highlight.isScore &&
     elapsed - currentRevealStep.revealAt <= SCORE_CALLOUT_MS;
   const showTurnoverCallout =
     !!currentRevealStep &&
+    currentRevealStep.kind === "play" &&
     currentRevealStep.highlight.eventType === "turnover" &&
     elapsed - currentRevealStep.revealAt <= TURNOVER_CALLOUT_MS;
   const revealedQuarterMap = new Map<number, QuarterHighlight[]>();
@@ -426,11 +520,23 @@ function ResultsTimeline({
 
   const finalScoreHoldActive =
     !!currentRevealStep &&
+    currentRevealStep.kind === "play" &&
     (currentRevealStep.highlight.isScore || currentRevealStep.highlight.eventType === "turnover") &&
     elapsed - currentRevealStep.revealAt <=
       (currentRevealStep.highlight.isScore ? SCORE_CALLOUT_MS : TURNOVER_CALLOUT_MS);
+  const finalStep = revealSchedule[revealSchedule.length - 1];
+  const finalScoreboardHoldActive =
+    finalStep?.kind === "final" &&
+    elapsed >= finalStep.revealAt &&
+    elapsed - finalStep.revealAt <= FINAL_SCOREBOARD_HOLD_MS;
   const allHighlightsRevealed =
-    revealedHighlights >= revealPlan.length && !finalScoreHoldActive;
+    revealedSteps >= revealSchedule.length && !finalScoreHoldActive && !finalScoreboardHoldActive;
+  const winnerName =
+    result.finalA === result.finalB
+      ? null
+      : result.finalA > result.finalB
+        ? teamAName
+        : teamBName;
 
   useEffect(() => {
     if (allHighlightsRevealed) {
@@ -455,19 +561,11 @@ function ResultsTimeline({
         scoreA={visibleScore.scoreA}
         scoreB={visibleScore.scoreB}
         quarter={currentQuarter}
+        clock={currentClock}
         winProbabilityA={winProbabilityA}
+        phase={currentPhase}
+        winnerName={winnerName}
       />
-
-      <div className="rounded-2xl border p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-4 text-base font-semibold sm:text-lg">
-          <span className="truncate pr-3">{teamAName}</span>
-          <span>{allHighlightsRevealed ? result.finalA : visibleScore.scoreA}</span>
-        </div>
-        <div className="mt-2 flex items-center justify-between gap-4 text-base font-semibold sm:text-lg">
-          <span className="truncate pr-3">{teamBName}</span>
-          <span>{allHighlightsRevealed ? result.finalB : visibleScore.scoreB}</span>
-        </div>
-      </div>
 
       <div className="space-y-3 sm:space-y-4">
         {result.quarters.map((quarter) => {
@@ -487,7 +585,10 @@ function ResultsTimeline({
                     key={highlight.id}
                     className={highlight.isScore ? "font-medium text-slate-950" : ""}
                   >
-                    • {highlight.text}
+                    <span className="mr-2 font-semibold tabular-nums text-slate-500">
+                      {highlight.clock}
+                    </span>
+                    {highlight.text}
                     {highlight.isScore && (
                       <span className="ml-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
                         Score update
