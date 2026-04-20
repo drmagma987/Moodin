@@ -344,6 +344,12 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Free-agent projected reports include Potential, and recap exposes Potential in the team breakdown.
   - Legacy `technical` scouting reports still display/tighten as Skill for active rooms.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Repaired play-by-play simulation reveal pacing:
+  - Sim highlights now carry drive identity and down/distance context.
+  - Quarter merging alternates full drives instead of individual snaps, preventing possession from flipping every update.
+  - Punt drives now include an explicit punt snap before the next possession.
+  - Results reveal uses a 1.5-second normal-play cadence, keeps important-play holds, animates the football from snap point to result, and shows a recent rolling play log.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

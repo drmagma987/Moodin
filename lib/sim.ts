@@ -59,7 +59,9 @@ export type QuarterHighlight = {
   possession: "A" | "B";
   eventType: "explosive" | "touchdown" | "fieldGoal" | "turnover" | "stop";
   eventDetail?: "interception" | "fumble" | "stripSack";
-  playKind: "pass" | "run" | "sack" | "fieldGoal" | "turnover";
+  playKind: "pass" | "run" | "sack" | "fieldGoal" | "turnover" | "punt";
+  downDistance: string;
+  driveId: string;
   startYardLine: number;
   endYardLine: number;
   yards: number;
@@ -755,6 +757,8 @@ type LocalSimHighlight = {
   eventType: QuarterHighlight["eventType"];
   eventDetail?: QuarterHighlight["eventDetail"];
   playKind: QuarterHighlight["playKind"];
+  downDistance: string;
+  driveId: string;
   startYardLine: number;
   endYardLine: number;
   yards: number;
@@ -762,7 +766,7 @@ type LocalSimHighlight = {
   closeMoment: boolean;
 };
 
-type PlayKind = "pass" | "run" | "sack" | "fieldGoal" | "turnover";
+type PlayKind = "pass" | "run" | "sack" | "fieldGoal" | "turnover" | "punt";
 
 type DrivePlay = {
   text: string;
@@ -1124,15 +1128,16 @@ function driveCountForQuarter(
   scoreDiff: number,
   quarter: number
 ) {
-  let drives = 3;
+  let drives = 1;
 
   if (offense.offenseStyle === "Pass Heavy") drives += 1;
-  if (offense.offenseStyle === "Run Heavy" && quarter < 3) drives -= 1;
+  if (offense.offenseStyle === "Run Heavy" && scoreDiff >= 7) drives -= 1;
 
   if (quarter >= 3 && scoreDiff <= -10) drives += 1;
+  if (quarter >= 4 && scoreDiff <= -7) drives += 1;
   if (quarter >= 3 && scoreDiff >= 10) drives -= 1;
 
-  return clamp(drives, 3, 5);
+  return clamp(drives, 1, quarter >= 4 ? 3 : 2);
 }
 
 function gameScriptPassLean(basePassLean: number, scoreDiff: number, quarter: number) {
@@ -1251,6 +1256,12 @@ function driveStartYardLine(rand: () => number, scoreDiff: number, quarter: numb
   return clamp(Math.round(20 + rand() * 17 + urgencyBoost), 15, 42);
 }
 
+function formatDownDistance(down: number, yardsToGo: number, yardLine: number) {
+  if (yardLine >= 100) return "Goal line";
+  const distance = yardLine + yardsToGo >= 100 ? "Goal" : yardsToGo.toString();
+  return `${down}${down === 1 ? "st" : down === 2 ? "nd" : down === 3 ? "rd" : "th"} & ${distance}`;
+}
+
 function localHighlight({
   text,
   pointsA,
@@ -1260,6 +1271,8 @@ function localHighlight({
   eventType,
   eventDetail,
   playKind,
+  downDistance,
+  driveId,
   startYardLine,
   endYardLine,
   driveSummary,
@@ -1277,6 +1290,8 @@ function localHighlight({
     eventType,
     ...(eventDetail ? { eventDetail } : {}),
     playKind,
+    downDistance,
+    driveId,
     startYardLine: clampedStart,
     endYardLine: clampedEnd,
     yards: clampedEnd - clampedStart,
@@ -1401,6 +1416,7 @@ function buildDriveHighlights({
   finalPlayKind,
   finalPlayYards,
   fieldGoalDistance,
+  driveId,
 }: {
   offense: ReturnType<typeof buildTeamProfile>;
   defense: ReturnType<typeof buildTeamProfile>;
@@ -1420,6 +1436,7 @@ function buildDriveHighlights({
   finalPlayKind?: PlayKind;
   finalPlayYards?: number;
   fieldGoalDistance?: number;
+  driveId: string;
 }) {
   const safePlayCount = clamp(playCount, 1, 11);
   const finalYards =
@@ -1491,6 +1508,8 @@ function buildDriveHighlights({
 
   const highlights: LocalSimHighlight[] = [];
   let currentYardLine = startYardLine;
+  let currentDown = 1;
+  let yardsToGo = Math.min(10, 100 - currentYardLine);
 
   plays.forEach((play, index) => {
     const isFinalPlay = index === plays.length - 1;
@@ -1508,6 +1527,11 @@ function buildDriveHighlights({
       eventType: isFinalPlay ? play.eventType : play.eventType === "explosive" ? "explosive" : "stop",
       ...(isFinalPlay && play.eventDetail ? { eventDetail: play.eventDetail } : {}),
       playKind: play.kind,
+      downDistance:
+        play.kind === "fieldGoal"
+          ? `4th & ${Math.max(1, yardsToGo)}`
+          : formatDownDistance(isFinalPlay && result === "PUNT" ? 4 : currentDown, yardsToGo, currentYardLine),
+      driveId,
       startYardLine: currentYardLine,
       endYardLine: nextYardLine,
       driveSummary: driveSummaryText(safePlayCount, totalYards, result),
@@ -1515,7 +1539,33 @@ function buildDriveHighlights({
     }));
 
     currentYardLine = nextYardLine;
+    if (play.yards >= yardsToGo) {
+      currentDown = 1;
+      yardsToGo = Math.min(10, Math.max(1, 100 - currentYardLine));
+    } else {
+      currentDown = clamp(currentDown + 1, 1, 4);
+      yardsToGo = clamp(yardsToGo - play.yards, 1, 30);
+    }
   });
+
+  if (result === "PUNT") {
+    const puntEndYardLine = clamp(currentYardLine + Math.round(34 + rand() * 14), currentYardLine + 20, 98);
+    highlights.push(localHighlight({
+      text: "The punt team sends it away and flips the field.",
+      pointsA: 0,
+      pointsB: 0,
+      isScore: false,
+      possession: side,
+      eventType: "stop",
+      playKind: "punt",
+      downDistance: "4th & punt",
+      driveId,
+      startYardLine: currentYardLine,
+      endYardLine: puntEndYardLine,
+      driveSummary: driveSummaryText(safePlayCount + 1, totalYards, result),
+      closeMoment,
+    }));
+  }
 
   return highlights;
 }
@@ -1548,7 +1598,7 @@ function simulateQuarterTeamPoints(
 
   for (let drive = 0; drive < drives; drive++) {
     const startYardLine = driveStartYardLine(rand, scoreDiff, quarter);
-    const playCount = clamp(Math.round(2 + rand() * 7), 2, 10);
+    const playCount = clamp(Math.round(3 + rand() * 5), 3, 8);
     const closeMoment = quarter >= 4 && Math.abs(scoreDiff) <= 8;
     const passEdge = offense.passAttack - defense.passDefense;
     const runEdge = offense.runAttack - defense.runDefense;
@@ -1698,6 +1748,7 @@ function simulateQuarterTeamPoints(
         finalPlayYards: stripSack
           ? -clamp(Math.round(5 + rand() * 5), 4, 10)
           : clamp(Math.round(turnoverYards * 0.45), 2, turnoverYards),
+        driveId: `${side}-q${quarter}-d${drive + 1}`,
       }));
       continue;
     }
@@ -1739,6 +1790,7 @@ function simulateQuarterTeamPoints(
             : `${shortPlayerName(playmaker.name)} breaks free for ${yardage} yards.`,
         finalPlayKind: playmaker.kind,
         finalPlayYards: clamp(Math.round(yardage * 0.62), 12, yardage),
+        driveId: `${side}-q${quarter}-d${drive + 1}`,
       }));
     }
 
@@ -1774,6 +1826,7 @@ function simulateQuarterTeamPoints(
         finalText: `${shortPlayerName(chooseDefender(defense, rand, "sack"))} gets home on third down and forces the punt.`,
         finalPlayKind: "sack",
         finalPlayYards: -clamp(Math.round(4 + rand() * 5), 3, 9),
+        driveId: `${side}-q${quarter}-d${drive + 1}`,
       }));
       continue;
     }
@@ -1835,6 +1888,7 @@ function simulateQuarterTeamPoints(
               : `${shortPlayerName(scorer.name)} powers in for a ${yardage}-yard touchdown.`,
           finalPlayKind: scorer.kind,
           finalPlayYards: yardage,
+          driveId: `${side}-q${quarter}-d${drive + 1}`,
         }));
       } else {
         points += 3;
@@ -1868,6 +1922,7 @@ function simulateQuarterTeamPoints(
           finalPlayKind: "fieldGoal",
           finalPlayYards: 0,
           fieldGoalDistance,
+          driveId: `${side}-q${quarter}-d${drive + 1}`,
         }));
       }
       continue;
@@ -1899,6 +1954,7 @@ function simulateQuarterTeamPoints(
         finalText: `${shortPlayerName(chooseDefender(defense, rand, "coverage"))} closes the window on third down. Punt team coming on.`,
         finalPlayKind: preferPass ? "pass" : "run",
         finalPlayYards: clamp(Math.round(1 + rand() * 4), 0, 5),
+        driveId: `${side}-q${quarter}-d${drive + 1}`,
       }));
     }
   }
@@ -1971,6 +2027,22 @@ export function combineSimResults(firstHalf: SimResult, secondHalf: SimResult): 
   };
 }
 
+function groupHighlightsByDrive(highlights: LocalSimHighlight[]) {
+  const groups: LocalSimHighlight[][] = [];
+
+  highlights.forEach((highlight) => {
+    const current = groups[groups.length - 1];
+    if (current && current[0]?.driveId === highlight.driveId) {
+      current.push(highlight);
+      return;
+    }
+
+    groups.push([highlight]);
+  });
+
+  return groups;
+}
+
 export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimResult {
   const rand = mulberry32(setup.simSeed || Date.now());
   const startQuarter = clamp(Math.round(options.startQuarter ?? 1), 1, 4);
@@ -2024,45 +2096,51 @@ export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimRes
 
     const quarterPlays: string[] = [];
     const mergedHighlights: QuarterHighlight[] = [];
-    const aHighlights = [...aQuarter.highlights];
-    const bHighlights = [...bQuarter.highlights];
+    const aDrives = groupHighlightsByDrive(aQuarter.highlights);
+    const bDrives = groupHighlightsByDrive(bQuarter.highlights);
     let quarterRunningA = quarters[quarters.length - 1]?.scoreA ?? runningA - aQuarter.points;
     let quarterRunningB = quarters[quarters.length - 1]?.scoreB ?? runningB - bQuarter.points;
     let highlightIndex = 0;
+    let mergedDriveIndex = 0;
     const startWithA = rand() < 0.5;
 
-    while (aHighlights.length > 0 || bHighlights.length > 0) {
+    while (aDrives.length > 0 || bDrives.length > 0) {
       const pullFromA =
-        aHighlights.length === 0
+        aDrives.length === 0
           ? false
-          : bHighlights.length === 0
+          : bDrives.length === 0
             ? true
-            : (mergedHighlights.length % 2 === 0 ? startWithA : !startWithA);
+            : (mergedDriveIndex % 2 === 0 ? startWithA : !startWithA);
 
-      const next = pullFromA ? aHighlights.shift() : bHighlights.shift();
-      if (!next) continue;
+      const nextDrive = pullFromA ? aDrives.shift() : bDrives.shift();
+      if (!nextDrive) continue;
 
-      quarterRunningA += next.pointsA;
-      quarterRunningB += next.pointsB;
-      quarterPlays.push(next.text);
-      mergedHighlights.push({
-        id: `q${quarterNumber}-h${highlightIndex + 1}`,
-        text: next.text,
-        clock: "15:00",
-        scoreA: quarterRunningA,
-        scoreB: quarterRunningB,
-        isScore: next.isScore,
-        possession: next.possession,
-        eventType: next.eventType,
-        ...(next.eventDetail ? { eventDetail: next.eventDetail } : {}),
-        playKind: next.playKind,
-        startYardLine: next.startYardLine,
-        endYardLine: next.endYardLine,
-        yards: next.yards,
-        driveSummary: next.driveSummary,
-        closeMoment: next.closeMoment,
+      nextDrive.forEach((next) => {
+        quarterRunningA += next.pointsA;
+        quarterRunningB += next.pointsB;
+        quarterPlays.push(next.text);
+        mergedHighlights.push({
+          id: `q${quarterNumber}-h${highlightIndex + 1}`,
+          text: next.text,
+          clock: "15:00",
+          scoreA: quarterRunningA,
+          scoreB: quarterRunningB,
+          isScore: next.isScore,
+          possession: next.possession,
+          eventType: next.eventType,
+          ...(next.eventDetail ? { eventDetail: next.eventDetail } : {}),
+          playKind: next.playKind,
+          downDistance: next.downDistance,
+          driveId: next.driveId,
+          startYardLine: next.startYardLine,
+          endYardLine: next.endYardLine,
+          yards: next.yards,
+          driveSummary: next.driveSummary,
+          closeMoment: next.closeMoment,
+        });
+        highlightIndex += 1;
       });
-      highlightIndex += 1;
+      mergedDriveIndex += 1;
     }
 
     const highlightsInQuarter = Math.max(mergedHighlights.length, 1);
@@ -2081,6 +2159,8 @@ export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimRes
         possession: quarterNumber % 2 === 1 ? "A" : "B",
         eventType: "stop",
         playKind: "run",
+        downDistance: "1st & 10",
+        driveId: `fallback-q${quarterNumber}`,
         startYardLine: 25,
         endYardLine: 37,
         yards: 12,

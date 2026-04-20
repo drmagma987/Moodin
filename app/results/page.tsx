@@ -26,8 +26,8 @@ import {
 } from "@/lib/sim";
 
 const FIRST_REVEAL_DELAY_MS = 900;
-const NORMAL_REVEAL_STEP_MS = 1200;
-const SCORE_REVEAL_STEP_MS = 3300;
+const NORMAL_REVEAL_STEP_MS = 1500;
+const SCORE_REVEAL_STEP_MS = 2600;
 const CLOSE_REVEAL_STEP_MS = 1900;
 const SCORE_CALLOUT_MS = 2400;
 const TURNOVER_CALLOUT_MS = 2200;
@@ -170,8 +170,10 @@ function buildRatings(players: DraftedPlayer[]): TeamRatings {
   };
 }
 
-function eventTypeLabel(eventType: QuarterHighlight["eventType"]) {
-  switch (eventType) {
+function eventTypeLabel(highlight: QuarterHighlight) {
+  if (highlight.playKind === "punt") return "Punt";
+
+  switch (highlight.eventType) {
     case "explosive":
       return "Big play";
     case "touchdown":
@@ -437,12 +439,28 @@ function FieldDriveView({
       ? highlight.endYardLine
       : 100 - highlight.endYardLine
     : 25;
+  const [ballPosition, setBallPosition] = useState(end);
   const movingRight = end >= start;
-  const isPassShape = highlight?.playKind === "pass";
+  const isPassShape = highlight?.playKind === "pass" || highlight?.playKind === "punt";
   const arrowColor = highlight && highlight.yards < 0 ? "rgb(220 38 38)" : "rgb(15 23 42)";
-  const passArc = `M ${start} 54 Q ${(start + end) / 2} ${start === end ? 32 : 18} ${end} 54`;
+  const passArc = `M ${start} 54 Q ${(start + end) / 2} ${highlight?.playKind === "punt" ? 10 : start === end ? 32 : 18} ${end} 54`;
   const runLine = `M ${start} 54 L ${end} 54`;
   const possessionArrow = highlight?.possession === "A" ? ">" : "<";
+
+  useEffect(() => {
+    let frame = 0;
+    const reset = window.setTimeout(() => {
+      setBallPosition(start);
+      frame = window.requestAnimationFrame(() => {
+        setBallPosition(end);
+      });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(reset);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [end, highlight?.id, start]);
 
   return (
     <div className="rounded-2xl border bg-emerald-950 p-4 text-white shadow-sm sm:p-5">
@@ -477,7 +495,7 @@ function FieldDriveView({
           <div className="flex justify-start sm:justify-end">
             {highlight && phase === "live" ? (
               <span className={`w-fit rounded-full border px-3 py-1 text-xs font-semibold ${eventTypeClass(highlight.eventType)}`}>
-                {eventTypeLabel(highlight.eventType)}
+                {eventTypeLabel(highlight)}
               </span>
             ) : (
               <span className="w-fit rounded-full border border-amber-200 bg-amber-300 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-emerald-950">
@@ -500,7 +518,7 @@ function FieldDriveView({
                 : "Final Whistle"
               : phase === "halftime"
                 ? "Halftime Reset"
-                : `${possessionName} possession`}
+                : highlight?.downDistance ?? "Ball ready"}
           </h2>
         </div>
         <div className="text-sm font-semibold">
@@ -555,6 +573,11 @@ function FieldDriveView({
             {possessionArrow} {possessionName} ball
           </div>
         )}
+        {highlight && phase === "live" && (
+          <div className="absolute bottom-2 left-1/2 max-w-[88%] -translate-x-1/2 rounded border border-white/20 bg-slate-950/70 px-3 py-1 text-center text-[10px] font-black uppercase tracking-[0.16em] text-white shadow">
+            {highlight.downDistance}
+          </div>
+        )}
         {highlight && (
           <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
             <path
@@ -581,11 +604,10 @@ function FieldDriveView({
           }}
         />
         <div
-          key={highlight?.id ?? "football"}
           className={`absolute top-[54%] -translate-x-1/2 -translate-y-1/2 transition-all duration-700 ${
             movingRight ? "rotate-12" : "-rotate-12"
           }`}
-          style={{ left: `${clamp(end, 3, 97)}%` }}
+          style={{ left: `${clamp(ballPosition, 3, 97)}%` }}
         >
           <div className="relative h-4 w-7 rounded-[50%] border border-white/80 bg-amber-900 shadow-[0_0_20px_rgba(252,211,77,0.75)]">
             <div className="absolute left-1/2 top-1/2 h-px w-4 -translate-x-1/2 -translate-y-1/2 bg-white/75" />
@@ -836,6 +858,7 @@ function ResultsTimeline({
           if (quarterHighlights.length === 0) return null;
 
           const quarterScore = quarterHighlights[quarterHighlights.length - 1];
+          const recentQuarterHighlights = quarterHighlights.slice(-5);
 
           return (
             <div key={quarter.quarter} className="rounded-2xl border p-4 sm:p-5">
@@ -843,10 +866,11 @@ function ResultsTimeline({
                 Q{quarter.quarter} — {teamAName} {quarterScore.scoreA}, {teamBName} {quarterScore.scoreB}
               </h2>
               <ul className="mt-3 space-y-2 text-sm opacity-90">
-                {quarterHighlights.map((highlight, index) => {
-                  const previous = quarterHighlights[index - 1] ?? null;
+                {recentQuarterHighlights.map((highlight, index) => {
+                  const fullIndex = quarterHighlights.length - recentQuarterHighlights.length + index;
+                  const previous = quarterHighlights[fullIndex - 1] ?? null;
                   const changedPossession =
-                    index > 0 &&
+                    fullIndex > 0 &&
                     previous?.possession !== highlight.possession &&
                     previous.eventType !== "turnover";
                   const turnoverPossession = otherPossession(highlight.possession);
@@ -861,7 +885,7 @@ function ResultsTimeline({
                       )}
                       <li className={highlight.isScore ? "font-medium text-slate-950" : ""}>
                         <span className="mr-2 font-semibold tabular-nums text-slate-500">
-                          {highlight.clock}
+                          {highlight.clock} {highlight.downDistance ?? ""}
                         </span>
                         {highlight.text}
                         {highlight.isScore && (
