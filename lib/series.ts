@@ -1,6 +1,14 @@
 import { generateProspects } from "./game/prospects";
 import type { CareerStage, DraftedPlayer, Position, Prospect } from "./game/types";
-import { ageAdjustedPlayer, getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical } from "./game/playerRatings";
+import {
+  ageAdjustedPlayer,
+  getPlayerIQ,
+  getPlayerPotential,
+  getPlayerPower,
+  getPlayerSpeed,
+  getPlayerTechnical,
+  overallFromCoreRatings,
+} from "./game/playerRatings";
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -45,17 +53,6 @@ export function nextCareerStage(
   }
 }
 
-function careerStageDelta(stage: CareerStage) {
-  switch (stage) {
-    case "Prime":
-      return 2;
-    case "Unc":
-      return -2;
-    case "Rook":
-      return 0;
-  }
-}
-
 function careerStageAttributeDeltas(stage: CareerStage) {
   switch (stage) {
     case "Prime":
@@ -65,6 +62,66 @@ function careerStageAttributeDeltas(stage: CareerStage) {
     case "Rook":
       return { speed: 0, technical: 0, power: 0, iq: 0 };
   }
+}
+
+function growthVariance(player: Pick<DraftedPlayer, "id">, nextGameNumber: number) {
+  return simpleHash(`${player.id}:${nextGameNumber}:growth`) % 4;
+}
+
+function applyPotentialGrowth(
+  player: DraftedPlayer,
+  nextRatings: ReturnType<typeof ageAdjustedPlayer>,
+  nextStage: CareerStage,
+  nextGameNumber: number
+) {
+  const potentialGrade = Math.max(player.trueGrade, player.potentialGrade ?? getPlayerPotential(player));
+  const gap = Math.max(0, potentialGrade - player.trueGrade);
+  const jumpedStraightToUnc = currentCareerStage(player) === "Rook" && nextStage === "Unc";
+
+  if (gap <= 0) {
+    return {
+      ...nextRatings,
+      potentialGrade,
+    };
+  }
+
+  const variance = growthVariance(player, nextGameNumber);
+  const targetGrade =
+    nextStage === "Prime"
+      ? clamp(
+          Math.round(player.trueGrade + Math.max(4, gap * 0.82) + variance),
+          player.trueGrade + 3,
+          Math.min(98, potentialGrade)
+        )
+      : jumpedStraightToUnc
+        ? clamp(
+            Math.round(player.trueGrade + Math.max(2, gap * 0.52) - 1 + variance * 0.5),
+            player.trueGrade,
+            Math.min(95, potentialGrade - 1)
+          )
+        : clamp(
+            Math.round(player.trueGrade + Math.max(0, gap * 0.28) - 2 + variance * 0.25),
+            50,
+            Math.min(95, potentialGrade)
+          );
+  const currentAdjustedGrade = overallFromCoreRatings(nextRatings);
+  const neededBoost = clamp(Math.ceil((targetGrade - currentAdjustedGrade) * 0.82), 0, 12);
+  const speedBoost = nextStage === "Unc" ? Math.max(0, neededBoost - 2) : neededBoost;
+  const technicalBoost = neededBoost + (nextStage === "Prime" ? 1 : 0);
+  const powerBoost = Math.max(0, neededBoost - (nextStage === "Unc" ? 1 : 0));
+  const iqBoost = neededBoost + (jumpedStraightToUnc ? 1 : nextStage === "Prime" ? 2 : 0);
+  const grown = {
+    speedRating: clamp(nextRatings.speedRating + speedBoost, 45, 97),
+    technicalRating: clamp(nextRatings.technicalRating + technicalBoost, 45, 97),
+    powerRating: clamp(nextRatings.powerRating + powerBoost, 45, 97),
+    iqRating: clamp(nextRatings.iqRating + iqBoost, 45, 97),
+  };
+
+  return {
+    ...grown,
+    trueGrade: clamp(Math.max(targetGrade, overallFromCoreRatings(grown)), 50, 98),
+    potentialGrade,
+  };
 }
 
 export function describeNextCareerStage(
@@ -93,17 +150,22 @@ export function agePlayerForSeries(
   }
 
   const nextStage = nextCareerStage(currentCareerStage(player), player, nextGameNumber);
-  const delta = careerStageDelta(nextStage);
-  const nextRatings = ageAdjustedPlayer(player, careerStageAttributeDeltas(nextStage));
+  const nextRatings = applyPotentialGrowth(
+    player,
+    ageAdjustedPlayer(player, careerStageAttributeDeltas(nextStage)),
+    nextStage,
+    nextGameNumber
+  );
 
   return {
     ...player,
     id: `${acquisitionType}-${nextGameNumber}-${side}-${player.id}`,
-    trueGrade: clamp(nextRatings.trueGrade + (delta > 0 ? 0 : 0), 50, 95),
+    trueGrade: clamp(nextRatings.trueGrade, 50, 98),
     speedRating: nextRatings.speedRating,
     technicalRating: nextRatings.technicalRating,
     powerRating: nextRatings.powerRating,
     iqRating: nextRatings.iqRating,
+    potentialGrade: nextRatings.potentialGrade,
     careerStage: nextStage,
     acquisitionType,
     originalOverallPick: player.originalOverallPick ?? player.overallPick,

@@ -39,7 +39,7 @@ const FINAL_SCOREBOARD_HOLD_MS = 3200;
 type RevealStep =
   | { kind: "play"; quarter: number; highlight: QuarterHighlight; revealAt: number }
   | { kind: "halftime"; quarter: 2; revealAt: number; scoreA: number; scoreB: number }
-  | { kind: "final"; quarter: 4; revealAt: number; scoreA: number; scoreB: number };
+  | { kind: "final"; quarter: number; revealAt: number; scoreA: number; scoreB: number };
 
 const OFFENSE_STRATEGIES = ["Balanced", "Pass Heavy", "Run Heavy"];
 const DEFENSE_STRATEGIES = ["Balanced", "Pressure", "Coverage"];
@@ -190,6 +190,8 @@ function eventTypeLabel(highlight: QuarterHighlight) {
       return "Field goal";
     case "turnover":
       return "Turnover";
+    case "fourthDown":
+      return highlight.eventDetail === "fourthDownConversion" ? "Fourth down" : "Turnover on downs";
     case "stop":
       return "Play";
   }
@@ -203,6 +205,8 @@ function eventTypeClass(eventType: QuarterHighlight["eventType"]) {
       return "border-sky-200 bg-sky-50 text-sky-800";
     case "turnover":
       return "border-red-200 bg-red-50 text-red-800";
+    case "fourthDown":
+      return "border-violet-200 bg-violet-50 text-violet-800";
     case "explosive":
       return "border-amber-200 bg-amber-50 text-amber-800";
     case "stop":
@@ -323,6 +327,14 @@ function eventCalloutLabel(highlight: QuarterHighlight, teamAName: string, teamB
     return `FUMBLE ${defenseName}!`;
   }
 
+  if (highlight.eventType === "fourthDown") {
+    const offenseName = highlight.possession === "A" ? teamAName : teamBName;
+    const defenseName = highlight.possession === "A" ? teamBName : teamAName;
+    return highlight.eventDetail === "fourthDownConversion"
+      ? `CONVERTED ${offenseName}!`
+      : `TURNOVER ON DOWNS ${defenseName}!`;
+  }
+
   return "";
 }
 
@@ -336,10 +348,15 @@ function EventCallout({
   teamBName: string;
 }) {
   const missedFieldGoal = highlight?.playKind === "fieldGoal" && !highlight.isScore;
-  if (!highlight || (!highlight.isScore && highlight.eventType !== "turnover" && !missedFieldGoal)) return null;
+  const fourthDown = highlight?.eventType === "fourthDown";
+  if (!highlight || (!highlight.isScore && highlight.eventType !== "turnover" && !missedFieldGoal && !fourthDown)) return null;
   const tone =
     highlight.eventType === "turnover"
       ? "border-red-100 bg-red-950 text-white"
+      : fourthDown
+        ? highlight.eventDetail === "fourthDownConversion"
+          ? "border-emerald-100 bg-emerald-950 text-white"
+          : "border-red-100 bg-red-950 text-white"
       : missedFieldGoal
         ? "border-amber-100 bg-amber-950 text-white"
       : "border-white bg-slate-950 text-white";
@@ -351,7 +368,13 @@ function EventCallout({
         className={`animate-bounce rounded-[2rem] border-4 px-8 py-6 text-center shadow-2xl sm:px-12 sm:py-8 ${tone}`}
       >
         <p className="text-xs font-black uppercase tracking-[0.35em] text-amber-300">
-          {highlight.eventType === "turnover" ? "Turnover" : missedFieldGoal ? "Kick Missed" : "Score Update"}
+          {highlight.eventType === "turnover"
+            ? "Turnover"
+            : fourthDown
+              ? "Fourth Down"
+              : missedFieldGoal
+                ? "Kick Missed"
+                : "Score Update"}
         </p>
         <p className="mt-2 text-4xl font-black uppercase tracking-tight sm:text-6xl">
           {eventCalloutLabel(highlight, teamAName, teamBName)}
@@ -364,6 +387,7 @@ function EventCallout({
 function revealStepMs(highlight: QuarterHighlight) {
   if (highlight.isScore || highlight.playKind === "fieldGoal") return SCORE_REVEAL_STEP_MS;
   if (highlight.eventType === "turnover") return TURNOVER_CALLOUT_MS;
+  if (highlight.eventType === "fourthDown") return TURNOVER_CALLOUT_MS;
   if (highlight.closeMoment || highlight.eventType === "explosive" || Math.abs(highlight.yards) >= 16) {
     return CLOSE_REVEAL_STEP_MS;
   }
@@ -397,6 +421,39 @@ function getGameMvp(result: SimResult, teamAName: string, teamBName: string) {
   const player = [...winnerStats].sort((a, b) => impactScore(b) - impactScore(a))[0];
 
   return player ? { player, teamName } : null;
+}
+
+function teamAbbreviation(name: string) {
+  const cleaned = name.trim();
+  if (!cleaned) return "TM";
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return words.slice(0, 2).map((word) => word[0]).join("").toUpperCase();
+  return cleaned.slice(0, 3).toUpperCase();
+}
+
+function ballSpotLabel(highlight: QuarterHighlight | null, teamAName: string, teamBName: string) {
+  if (!highlight) return "";
+  const offenseName = highlight.possession === "A" ? teamAName : teamBName;
+  const defenseName = highlight.possession === "A" ? teamBName : teamAName;
+  const yardLine = clamp(Math.round(highlight.startYardLine), 0, 100);
+
+  if (yardLine === 50) return "50";
+  if (yardLine >= 100) return `${teamAbbreviation(defenseName)} goal line`;
+  if (yardLine <= 0) return `${teamAbbreviation(offenseName)} goal line`;
+
+  const teamName = yardLine < 50 ? offenseName : defenseName;
+  const displayYard = yardLine < 50 ? yardLine : 100 - yardLine;
+  return `${teamAbbreviation(teamName)} ${displayYard}`;
+}
+
+function downDistanceWithSpot(
+  highlight: QuarterHighlight | null,
+  teamAName: string,
+  teamBName: string
+) {
+  if (!highlight) return "Ball ready";
+  const spot = ballSpotLabel(highlight, teamAName, teamBName);
+  return spot ? `${highlight.downDistance} at ${spot}` : highlight.downDistance;
 }
 
 function estimateWinProbabilityA(
@@ -475,6 +532,7 @@ function FieldDriveView({
   const runLine = `M ${start} 54 L ${end} 54`;
   const possessionArrow = highlight?.possession === "A" ? ">" : "<";
   const arrowMarkerId = highlight ? `play-arrow-${highlight.id.replace(/[^a-zA-Z0-9_-]/g, "-")}` : "play-arrow";
+  const liveDownDistance = downDistanceWithSpot(highlight, teamAName, teamBName);
 
   useEffect(() => {
     let frame = 0;
@@ -497,7 +555,7 @@ function FieldDriveView({
         <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-emerald-200">
-              {phase === "final" ? "Final" : phase === "halftime" ? "Halftime" : `Q${quarter} • ${clock}`}
+              {phase === "final" ? "Final" : phase === "halftime" ? "Halftime" : `${quarter === 5 ? "OT" : `Q${quarter}`} • ${clock}`}
             </p>
             <p className="mt-1 truncate text-sm font-semibold text-white/85">
               {possessionName}
@@ -547,7 +605,7 @@ function FieldDriveView({
                 : "Final Whistle"
               : phase === "halftime"
                 ? "Halftime Reset"
-                : highlight?.downDistance ?? "Ball ready"}
+                : liveDownDistance}
           </h2>
         </div>
         <div className="text-sm font-semibold">
@@ -604,7 +662,7 @@ function FieldDriveView({
         )}
         {highlight && phase === "live" && (
           <div className="absolute bottom-2 left-1/2 max-w-[88%] -translate-x-1/2 rounded border border-white/20 bg-slate-950/70 px-3 py-1 text-center text-[10px] font-black uppercase tracking-[0.16em] text-white shadow">
-            {highlight.downDistance}
+            {liveDownDistance}
           </div>
         )}
         {highlight && (
@@ -741,9 +799,10 @@ function ResultsTimeline({
       });
 
     if (!awaitingHalftimeAdjustments) {
+      const finalQuarter = result.quarters[result.quarters.length - 1]?.quarter ?? 4;
       steps.push({
         kind: "final",
-        quarter: 4,
+        quarter: finalQuarter,
         revealAt: nextRevealAt,
         scoreA: result.finalA,
         scoreB: result.finalB,
@@ -832,6 +891,11 @@ function ResultsTimeline({
     currentRevealStep.highlight.playKind === "fieldGoal" &&
     !currentRevealStep.highlight.isScore &&
     elapsed - currentRevealStep.revealAt <= MISSED_FG_CALLOUT_MS;
+  const showFourthDownCallout =
+    !!currentRevealStep &&
+    currentRevealStep.kind === "play" &&
+    currentRevealStep.highlight.eventType === "fourthDown" &&
+    elapsed - currentRevealStep.revealAt <= TURNOVER_CALLOUT_MS;
   const revealedQuarterMap = new Map<number, QuarterHighlight[]>();
 
   allVisibleHighlights.forEach(({ quarter, highlight }) => {
@@ -843,7 +907,9 @@ function ResultsTimeline({
   const finalScoreHoldActive =
     !!currentRevealStep &&
     currentRevealStep.kind === "play" &&
-    (currentRevealStep.highlight.isScore || currentRevealStep.highlight.eventType === "turnover") &&
+    (currentRevealStep.highlight.isScore ||
+      currentRevealStep.highlight.eventType === "turnover" ||
+      currentRevealStep.highlight.eventType === "fourthDown") &&
     elapsed - currentRevealStep.revealAt <=
       (currentRevealStep.highlight.isScore ? SCORE_CALLOUT_MS : TURNOVER_CALLOUT_MS);
   const finalStep = revealSchedule[revealSchedule.length - 1];
@@ -872,7 +938,7 @@ function ResultsTimeline({
 
   return (
     <>
-      {(showScoreCallout || showTurnoverCallout || showMissedFieldGoalCallout) && (
+      {(showScoreCallout || showTurnoverCallout || showMissedFieldGoalCallout || showFourthDownCallout) && (
         <EventCallout
           highlight={currentHighlight}
           teamAName={teamAName}
@@ -904,7 +970,7 @@ function ResultsTimeline({
           return (
             <div key={quarter.quarter} className="rounded-2xl border p-4 sm:p-5">
               <h2 className="text-lg font-semibold sm:text-xl">
-                Q{quarter.quarter} — {teamAName} {quarterScore.scoreA}, {teamBName} {quarterScore.scoreB}
+                {quarter.quarter === 5 ? "OT" : `Q${quarter.quarter}`} — {teamAName} {quarterScore.scoreA}, {teamBName} {quarterScore.scoreB}
               </h2>
               <ul className="mt-3 space-y-2 text-sm opacity-90">
                 {recentQuarterHighlights.map((highlight, index) => {
@@ -926,7 +992,7 @@ function ResultsTimeline({
                       )}
                       <li className={highlight.isScore ? "font-medium text-slate-950" : ""}>
                         <span className="mr-2 font-semibold tabular-nums text-slate-500">
-                          {highlight.clock} {highlight.downDistance ?? ""}
+                          {highlight.clock} {downDistanceWithSpot(highlight, teamAName, teamBName)}
                         </span>
                         {highlight.text}
                         {highlight.isScore && (

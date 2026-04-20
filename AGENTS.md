@@ -375,6 +375,14 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - The selected caller chooses heads/tails, the toss resolves, and the winner chooses receive or defer.
   - Opening and second-half possession are stored in room state and passed into the Q1 and Q3 simulations.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Tightened sim chain/late-game rules:
+  - Drive highlights now insert realistic setup downs before field goals, punts, and fourth-down attempts so down/distance and yard line context align more closely with the actual spot.
+  - Stop drives are constrained to avoid accidental hidden first downs before punts.
+  - The score bug and play log now show ball position in `1st & 10 at VJ 35` style.
+  - Tied games automatically continue into sudden-death overtime with random first possession and first score wins.
+  - Late fourth-quarter teams down multiple scores are more likely to go for it on fourth down near midfield/opponent territory, with dramatic conversion/turnover-on-downs overlays.
+  - Prospect generation now stores a hidden potential ceiling, and series aging lets high-potential players break out in Prime while Rook-to-`Unc` jumps still retain a meaningful portion of that upside.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

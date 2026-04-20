@@ -39,6 +39,7 @@ export type Prospect = {
   iqRating: number;
   projectedRound: number;
   trueGrade: number;
+  potentialGrade?: number;
   careerStage?: CareerStage;
   acquisitionType?: AcquisitionType;
   seriesSourceSeed?: number | null;

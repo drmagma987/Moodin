@@ -16,6 +16,7 @@ type PlayerLike = Pick<
       | "vertical"
       | "archetype"
       | "careerStage"
+      | "potentialGrade"
     >
   >;
 
@@ -143,6 +144,10 @@ function positionUpsideBlend(player: PlayerLike) {
 }
 
 export function getPlayerPotential(player: PlayerLike) {
+  if (typeof player.potentialGrade === "number" && Number.isFinite(player.potentialGrade)) {
+    return clamp(Math.round(player.potentialGrade), 45, 99);
+  }
+
   return clamp(
     Math.round(
       player.trueGrade * 0.42 +

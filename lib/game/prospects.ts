@@ -1,6 +1,6 @@
 import { Archetype, Position, Prospect } from "./types";
 import { makeRng } from "./rng";
-import { overallFromCoreRatings } from "./playerRatings";
+import { getPlayerPotential, overallFromCoreRatings } from "./playerRatings";
 import {
   FIRST_NAMES,
   LAST_NAMES,
@@ -558,26 +558,33 @@ export function generateProspects(seed: number): Prospect[] {
   const sorted = [...generated].sort((a, b) => b.scoutGrade - a.scoutGrade);
   const projected = assignProjectedRounds(sorted, rand);
 
-  return projected.map((player) => ({
-    id: player.id,
-    name: player.name,
-    position: player.position,
-    archetype: player.archetype,
-    height: player.height,
-    weight: player.weight,
-    forty: player.forty,
-    bench: player.bench,
-    vertical: player.vertical,
-    speedRating: player.speedRating,
-    technicalRating: player.technicalRating,
-    powerRating: player.powerRating,
-    iqRating: player.iqRating,
-    projectedRound: player.projectedRound,
-    trueGrade: player.trueGrade,
-    careerStage: "Rook" as const,
-    acquisitionType: "draft" as const,
-    seriesSourceSeed: seed,
-    originalOverallPick: null,
-    freeAgencyTag: null,
-  }));
+  return projected.map((player) => {
+    const rookie = {
+      id: player.id,
+      name: player.name,
+      position: player.position,
+      archetype: player.archetype,
+      height: player.height,
+      weight: player.weight,
+      forty: player.forty,
+      bench: player.bench,
+      vertical: player.vertical,
+      speedRating: player.speedRating,
+      technicalRating: player.technicalRating,
+      powerRating: player.powerRating,
+      iqRating: player.iqRating,
+      projectedRound: player.projectedRound,
+      trueGrade: player.trueGrade,
+      careerStage: "Rook" as const,
+      acquisitionType: "draft" as const,
+      seriesSourceSeed: seed,
+      originalOverallPick: null,
+      freeAgencyTag: null,
+    };
+
+    return {
+      ...rookie,
+      potentialGrade: Math.max(rookie.trueGrade, getPlayerPotential(rookie)),
+    };
+  });
 }
