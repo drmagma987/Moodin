@@ -34,6 +34,13 @@ export type GameSetup = {
   simSeed: number;
 };
 
+export type SimOptions = {
+  startQuarter?: number;
+  endQuarter?: number;
+  initialScoreA?: number;
+  initialScoreB?: number;
+};
+
 export type QuarterResult = {
   quarter: number;
   scoreA: number;
@@ -1918,8 +1925,56 @@ function simulateQuarterTeamPoints(
   };
 }
 
-export function simulateGame(setup: GameSetup): SimResult {
+function mergePlayerStats(
+  first: PlayerGameStats[],
+  second: PlayerGameStats[]
+) {
+  const byPlayer = new Map<string, PlayerGameStats>();
+
+  [...first, ...second].forEach((statLine) => {
+    const current = byPlayer.get(statLine.playerId);
+
+    if (!current) {
+      byPlayer.set(statLine.playerId, { ...statLine });
+      return;
+    }
+
+    byPlayer.set(statLine.playerId, {
+      ...current,
+      passingYards: current.passingYards + statLine.passingYards,
+      passingTD: current.passingTD + statLine.passingTD,
+      interceptions: current.interceptions + statLine.interceptions,
+      fumblesLost: current.fumblesLost + statLine.fumblesLost,
+      tackles: current.tackles + statLine.tackles,
+      sacks: current.sacks + statLine.sacks,
+      forcedFumbles: current.forcedFumbles + statLine.forcedFumbles,
+      fumbleRecoveries: current.fumbleRecoveries + statLine.fumbleRecoveries,
+      rushYards: current.rushYards + statLine.rushYards,
+      rushTD: current.rushTD + statLine.rushTD,
+      carries: current.carries + statLine.carries,
+      receivingYards: current.receivingYards + statLine.receivingYards,
+      receivingTD: current.receivingTD + statLine.receivingTD,
+      receptions: current.receptions + statLine.receptions,
+    });
+  });
+
+  return sortPlayerStats(byPlayer);
+}
+
+export function combineSimResults(firstHalf: SimResult, secondHalf: SimResult): SimResult {
+  return {
+    finalA: secondHalf.finalA,
+    finalB: secondHalf.finalB,
+    quarters: [...firstHalf.quarters, ...secondHalf.quarters],
+    teamAStats: mergePlayerStats(firstHalf.teamAStats, secondHalf.teamAStats),
+    teamBStats: mergePlayerStats(firstHalf.teamBStats, secondHalf.teamBStats),
+  };
+}
+
+export function simulateGame(setup: GameSetup, options: SimOptions = {}): SimResult {
   const rand = mulberry32(setup.simSeed || Date.now());
+  const startQuarter = clamp(Math.round(options.startQuarter ?? 1), 1, 4);
+  const endQuarter = clamp(Math.round(options.endQuarter ?? 4), startQuarter, 4);
 
   const teamAProfile = buildTeamProfile(
     setup.teamA,
@@ -1932,15 +1987,14 @@ export function simulateGame(setup: GameSetup): SimResult {
     setup.teamBStrategy
   );
 
-  let runningA = 0;
-  let runningB = 0;
+  let runningA = Math.max(0, Math.round(options.initialScoreA ?? 0));
+  let runningB = Math.max(0, Math.round(options.initialScoreB ?? 0));
   let totalsA = emptyTotals();
   let totalsB = emptyTotals();
 
   const quarters: QuarterResult[] = [];
 
-  for (let i = 0; i < 4; i++) {
-    const quarterNumber = i + 1;
+  for (let quarterNumber = startQuarter; quarterNumber <= endQuarter; quarterNumber++) {
     const preQuarterDiff = runningA - runningB;
     const aQuarter = simulateQuarterTeamPoints(
       setup.teamAName,
@@ -1972,8 +2026,8 @@ export function simulateGame(setup: GameSetup): SimResult {
     const mergedHighlights: QuarterHighlight[] = [];
     const aHighlights = [...aQuarter.highlights];
     const bHighlights = [...bQuarter.highlights];
-    let quarterRunningA = i > 0 ? quarters[i - 1].scoreA : 0;
-    let quarterRunningB = i > 0 ? quarters[i - 1].scoreB : 0;
+    let quarterRunningA = quarters[quarters.length - 1]?.scoreA ?? runningA - aQuarter.points;
+    let quarterRunningB = quarters[quarters.length - 1]?.scoreB ?? runningB - bQuarter.points;
     let highlightIndex = 0;
     const startWithA = rand() < 0.5;
 
@@ -1992,7 +2046,7 @@ export function simulateGame(setup: GameSetup): SimResult {
       quarterRunningB += next.pointsB;
       quarterPlays.push(next.text);
       mergedHighlights.push({
-        id: `q${i + 1}-h${highlightIndex + 1}`,
+        id: `q${quarterNumber}-h${highlightIndex + 1}`,
         text: next.text,
         clock: "15:00",
         scoreA: quarterRunningA,
@@ -2018,26 +2072,26 @@ export function simulateGame(setup: GameSetup): SimResult {
 
     if (mergedHighlights.length === 0) {
       mergedHighlights.push({
-        id: `q${i + 1}-h1`,
-        text: `Q${i + 1}: both defenses trade clean stops and keep the scoreboard frozen.`,
+        id: `q${quarterNumber}-h1`,
+        text: `Q${quarterNumber}: both defenses trade clean stops and keep the scoreboard frozen.`,
         clock: "0:00",
         scoreA: runningA,
         scoreB: runningB,
         isScore: false,
-        possession: i % 2 === 0 ? "A" : "B",
+        possession: quarterNumber % 2 === 1 ? "A" : "B",
         eventType: "stop",
         playKind: "run",
         startYardLine: 25,
         endYardLine: 37,
         yards: 12,
         driveSummary: "5 plays, +12 yards, PUNT",
-        closeMoment: i === 3 && Math.abs(runningA - runningB) <= 8,
+        closeMoment: quarterNumber === 4 && Math.abs(runningA - runningB) <= 8,
       });
-      quarterPlays.push(`Q${i + 1}: both defenses trade clean stops and keep the scoreboard frozen.`);
+      quarterPlays.push(`Q${quarterNumber}: both defenses trade clean stops and keep the scoreboard frozen.`);
     }
 
     quarters.push({
-      quarter: i + 1,
+      quarter: quarterNumber,
       scoreA: runningA,
       scoreB: runningB,
       plays: quarterPlays.slice(0, 4),

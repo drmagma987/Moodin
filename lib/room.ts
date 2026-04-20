@@ -19,7 +19,12 @@ function notNull<T>(value: T | null): value is T {
   return value !== null;
 }
 
-export type RoomStatus = "lobby" | "draft" | "recap" | "results" | "betweenGames";
+export type RoomStatus = "lobby" | "draft" | "recap" | "halftime" | "results" | "betweenGames";
+export type StrategyState = {
+  offense: string;
+  defense: string;
+  locked: boolean;
+};
 export type BetweenGamePhase =
   | "none"
   | "keepers"
@@ -49,17 +54,13 @@ export type RoomData = {
   teamA: DraftedPlayer[];
   teamB: DraftedPlayer[];
 
-  teamAStrategy: {
-    offense: string;
-    defense: string;
-    locked: boolean;
-  };
+  teamAStrategy: StrategyState;
 
-  teamBStrategy: {
-    offense: string;
-    defense: string;
-    locked: boolean;
-  };
+  teamBStrategy: StrategyState;
+
+  halftimeTeamAStrategy: StrategyState;
+
+  halftimeTeamBStrategy: StrategyState;
 
   simResult: SimResult | null;
 
@@ -168,6 +169,8 @@ export function getRoomStatusHref(room: Pick<RoomData, "roomId" | "status">) {
       return `/draft?roomId=${room.roomId}`;
     case "recap":
       return `/recap?roomId=${room.roomId}`;
+    case "halftime":
+      return `/results?roomId=${room.roomId}`;
     case "results":
       return `/results?roomId=${room.roomId}`;
     case "betweenGames":
@@ -261,6 +264,16 @@ function resetStrategyState() {
       locked: false,
     },
     teamBStrategy: {
+      offense: "Balanced",
+      defense: "Balanced",
+      locked: false,
+    },
+    halftimeTeamAStrategy: {
+      offense: "Balanced",
+      defense: "Balanced",
+      locked: false,
+    },
+    halftimeTeamBStrategy: {
       offense: "Balanced",
       defense: "Balanced",
       locked: false,
@@ -673,6 +686,61 @@ export async function saveTeamStrategy(
       teamBStrategy: { offense, defense, locked },
     });
   }
+}
+
+export async function saveHalftimeStrategy(
+  roomId: string,
+  side: "A" | "B",
+  offense: string,
+  defense: string,
+  locked: boolean
+) {
+  const roomRef = doc(db, "rooms", roomId);
+
+  if (side === "A") {
+    await updateDoc(roomRef, {
+      halftimeTeamAStrategy: { offense, defense, locked },
+    });
+  } else {
+    await updateDoc(roomRef, {
+      halftimeTeamBStrategy: { offense, defense, locked },
+    });
+  }
+}
+
+export async function startHalftime(roomId: string, firstHalfResult: SimResult) {
+  const roomRef = doc(db, "rooms", roomId);
+  const cleanFirstHalfResult = sanitizeSimResult(firstHalfResult);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(roomRef);
+
+    if (!snap.exists()) {
+      throw new Error("Room not found");
+    }
+
+    const room = snap.data() as RoomData;
+
+    if (room.simResult) {
+      transaction.update(roomRef, { status: room.status === "recap" ? "halftime" : room.status });
+      return;
+    }
+
+    transaction.update(roomRef, {
+      simResult: cleanFirstHalfResult,
+      status: "halftime",
+      halftimeTeamAStrategy: {
+        offense: room.teamAStrategy.offense,
+        defense: room.teamAStrategy.defense,
+        locked: false,
+      },
+      halftimeTeamBStrategy: {
+        offense: room.teamBStrategy.offense,
+        defense: room.teamBStrategy.defense,
+        locked: false,
+      },
+    });
+  });
 }
 
 export async function finalizeSeriesGame(roomId: string, simResult: SimResult) {

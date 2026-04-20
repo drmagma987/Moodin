@@ -8,25 +8,40 @@ import { getSeriesPressureMessage } from "@/lib/series";
 import {
   acceptRematch,
   beginBetweenGamePhase,
+  finalizeSeriesGame,
   getRoomStatusHref,
   subscribeToRoom,
+  saveHalftimeStrategy,
   RoomData,
 } from "@/lib/room";
-import { PlayerGameStats, type QuarterHighlight, SimResult } from "@/lib/sim";
+import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical } from "@/lib/game/playerRatings";
+import type { DraftedPlayer } from "@/lib/game/types";
+import {
+  combineSimResults,
+  GameSetup,
+  PlayerGameStats,
+  type QuarterHighlight,
+  SimResult,
+  simulateGame,
+  TeamRatings,
+} from "@/lib/sim";
 
 const FIRST_REVEAL_DELAY_MS = 900;
-const NORMAL_REVEAL_STEP_MS = 1650;
-const SCORE_REVEAL_STEP_MS = 4300;
-const CLOSE_REVEAL_STEP_MS = 2300;
+const NORMAL_REVEAL_STEP_MS = 1200;
+const SCORE_REVEAL_STEP_MS = 3300;
+const CLOSE_REVEAL_STEP_MS = 1900;
 const SCORE_CALLOUT_MS = 2400;
 const TURNOVER_CALLOUT_MS = 2200;
-const HALFTIME_HOLD_MS = 3600;
-const FINAL_SCOREBOARD_HOLD_MS = 3600;
+const HALFTIME_HOLD_MS = 2800;
+const FINAL_SCOREBOARD_HOLD_MS = 3200;
 
 type RevealStep =
   | { kind: "play"; quarter: number; highlight: QuarterHighlight; revealAt: number }
   | { kind: "halftime"; quarter: 2; revealAt: number; scoreA: number; scoreB: number }
   | { kind: "final"; quarter: 4; revealAt: number; scoreA: number; scoreB: number };
+
+const OFFENSE_STRATEGIES = ["Balanced", "Pass Heavy", "Run Heavy"];
+const DEFENSE_STRATEGIES = ["Balanced", "Pressure", "Coverage"];
 
 function statSummary(statLine: PlayerGameStats) {
   const chunks: string[] = [];
@@ -73,6 +88,89 @@ function TeamBoxScore({
   );
 }
 
+function buildRatings(players: DraftedPlayer[]): TeamRatings {
+  const byPosition = (position: DraftedPlayer["position"]) =>
+    players.filter((player) => player.position === position);
+  const avg = (
+    group: DraftedPlayer[],
+    selector: (player: DraftedPlayer) => number
+  ) => {
+    if (group.length === 0) return 60;
+    return group.reduce((sum, player) => sum + selector(player), 0) / group.length;
+  };
+
+  const qbs = byPosition("QB");
+  const rbs = byPosition("RB");
+  const wrs = byPosition("WR");
+  const tes = byPosition("TE");
+  const dls = byPosition("DL");
+  const lbs = byPosition("LB");
+  const secs = byPosition("SEC");
+
+  const pass =
+    avg(qbs, getPlayerTechnical) * 0.36 +
+    avg(qbs, getPlayerIQ) * 0.2 +
+    avg(wrs, getPlayerSpeed) * 0.18 +
+    avg(wrs, getPlayerTechnical) * 0.16 +
+    avg(tes, getPlayerTechnical) * 0.1;
+  const run =
+    avg(rbs, getPlayerPower) * 0.34 +
+    avg(rbs, getPlayerSpeed) * 0.22 +
+    avg(tes, getPlayerPower) * 0.12 +
+    avg(qbs, getPlayerIQ) * 0.12 +
+    avg(wrs, getPlayerPower) * 0.08 +
+    avg(rbs, getPlayerTechnical) * 0.12;
+  const bigPlay =
+    avg(wrs, getPlayerSpeed) * 0.32 +
+    avg(rbs, getPlayerSpeed) * 0.22 +
+    avg(qbs, getPlayerPower) * 0.12 +
+    avg(qbs, getPlayerTechnical) * 0.14 +
+    avg(tes, getPlayerSpeed) * 0.08 +
+    avg(wrs, getPlayerTechnical) * 0.12;
+  const ballSecurity =
+    avg(qbs, getPlayerIQ) * 0.3 +
+    avg(rbs, getPlayerTechnical) * 0.22 +
+    avg(tes, getPlayerTechnical) * 0.12 +
+    avg(wrs, getPlayerTechnical) * 0.12 +
+    avg(rbs, getPlayerPower) * 0.12 +
+    7;
+  const passD =
+    avg(secs, getPlayerIQ) * 0.26 +
+    avg(secs, getPlayerSpeed) * 0.22 +
+    avg(lbs, getPlayerIQ) * 0.18 +
+    avg(dls, getPlayerPower) * 0.12 +
+    avg(secs, getPlayerTechnical) * 0.22;
+  const runD =
+    avg(dls, getPlayerPower) * 0.32 +
+    avg(lbs, getPlayerPower) * 0.24 +
+    avg(lbs, getPlayerIQ) * 0.18 +
+    avg(secs, getPlayerPower) * 0.1 +
+    avg(dls, getPlayerTechnical) * 0.16;
+  const pressure =
+    avg(dls, getPlayerPower) * 0.28 +
+    avg(dls, getPlayerTechnical) * 0.22 +
+    avg(lbs, getPlayerSpeed) * 0.18 +
+    avg(lbs, getPlayerPower) * 0.18 +
+    avg(secs, getPlayerIQ) * 0.14;
+  const takeaways =
+    avg(secs, getPlayerIQ) * 0.28 +
+    avg(secs, getPlayerSpeed) * 0.18 +
+    avg(lbs, getPlayerIQ) * 0.18 +
+    avg(dls, getPlayerPower) * 0.1 +
+    avg(secs, getPlayerTechnical) * 0.26;
+
+  return {
+    pass: Math.round(pass),
+    run: Math.round(run),
+    bigPlay: Math.round(bigPlay),
+    ballSecurity: Math.round(ballSecurity),
+    passD: Math.round(passD),
+    runD: Math.round(runD),
+    pressure: Math.round(pressure),
+    takeaways: Math.round(takeaways),
+  };
+}
+
 function eventTypeLabel(eventType: QuarterHighlight["eventType"]) {
   switch (eventType) {
     case "explosive":
@@ -101,6 +199,97 @@ function eventTypeClass(eventType: QuarterHighlight["eventType"]) {
     case "stop":
       return "border-slate-200 bg-slate-50 text-slate-700";
   }
+}
+
+function strategyStatusClasses(locked: boolean) {
+  return locked
+    ? "border-green-200 bg-green-50 text-green-700"
+    : "border-amber-200 bg-amber-50 text-amber-700";
+}
+
+function offenseStrategyDescription(strategy: string) {
+  switch (strategy) {
+    case "Pass Heavy":
+      return "Push the ball downfield, chase chunk plays, accept more turnover danger.";
+    case "Run Heavy":
+      return "Shorten the game, protect the ball, test whether their front can hold up.";
+    default:
+      return "Stay flexible and let the roster answer what the defense gives.";
+  }
+}
+
+function defenseStrategyDescription(strategy: string) {
+  switch (strategy) {
+    case "Pressure":
+      return "Heat up the quarterback and create strip-sack chaos, with some coverage risk.";
+    case "Coverage":
+      return "Take away explosives and bait throws, but give up more underneath space.";
+    default:
+      return "Keep the shell steady and avoid overcommitting.";
+  }
+}
+
+function halftimeAssessment(result: SimResult, side: "A" | "B", teamAName: string, teamBName: string) {
+  const firstHalfHighlights = result.quarters
+    .filter((quarter) => quarter.quarter <= 2)
+    .flatMap((quarter) => quarter.highlights);
+  const halftimeQuarter = result.quarters.find((quarter) => quarter.quarter === 2) ?? result.quarters[result.quarters.length - 1];
+  const ownName = side === "A" ? teamAName : teamBName;
+  const ownScore = side === "A" ? halftimeQuarter?.scoreA ?? 0 : halftimeQuarter?.scoreB ?? 0;
+  const opponentScore = side === "A" ? halftimeQuarter?.scoreB ?? 0 : halftimeQuarter?.scoreA ?? 0;
+  const margin = ownScore - opponentScore;
+  const ownPlays = firstHalfHighlights.filter((highlight) => highlight.possession === side);
+  const opponentPlays = firstHalfHighlights.filter((highlight) => highlight.possession !== side);
+  const ownTurnovers = ownPlays.filter((highlight) => highlight.eventType === "turnover").length;
+  const takeaways = opponentPlays.filter((highlight) => highlight.eventType === "turnover").length;
+  const ownExplosives = ownPlays.filter((highlight) => highlight.eventType === "explosive").length;
+  const opponentExplosives = opponentPlays.filter((highlight) => highlight.eventType === "explosive").length;
+  const ownScores = ownPlays.filter((highlight) => highlight.isScore).length;
+  const opponentScores = opponentPlays.filter((highlight) => highlight.isScore).length;
+  const sacksTaken = ownPlays.filter((highlight) => highlight.playKind === "sack").length;
+  const pressureCreated = opponentPlays.filter((highlight) => highlight.playKind === "sack").length;
+
+  if (margin <= -9 && ownTurnovers > 0) {
+    return `${ownName} is chasing a two-score game because giveaways have erased possessions, so halftime is about protecting the ball or choosing a higher-variance comeback plan.`;
+  }
+
+  if (margin <= -9 && opponentExplosives >= 2) {
+    return `${ownName} is down two scores because chunk plays are tilting the field, so decide whether to limit space or gamble harder for disruption.`;
+  }
+
+  if (margin < 0 && sacksTaken >= 2) {
+    return `${ownName} is still within reach, but pressure is squeezing key downs, so the adjustment is whether to calm the game down or keep hunting explosives.`;
+  }
+
+  if (margin < 0 && ownScores <= 1) {
+    return `${ownName} is behind because drives are not turning into points, so pick the plan that creates the cleanest scoring chances without handing over short fields.`;
+  }
+
+  if (margin >= 9 && ownTurnovers + opponentExplosives > 1) {
+    return `${ownName} has a two-score lead, but the first half still had volatility, so choose whether to protect the edge or keep pressing for the knockout.`;
+  }
+
+  if (margin >= 9) {
+    return `${ownName} is in control because the current identity is holding up, so the safest question is whether the opponent has shown enough to force a change.`;
+  }
+
+  if (margin > 0 && takeaways > ownTurnovers) {
+    return `${ownName} has the lead because the defense stole possessions, so halftime is about deciding whether to stay opportunistic or reduce risk with the ball.`;
+  }
+
+  if (margin > 0) {
+    return `${ownName} has the lead, but it is still a one-score game, so the next call is whether to protect the advantage or make the first aggressive move.`;
+  }
+
+  if (ownExplosives + opponentExplosives >= 4 || ownScores + opponentScores >= 5) {
+    return `This is turning into a track meet, so halftime is about choosing whether to keep trading punches or make the first defensive gamble.`;
+  }
+
+  if (takeaways > 0 || pressureCreated >= 2) {
+    return `${ownName} is being kept alive by defensive swings, so the adjustment is finding just enough offense without giving the game away.`;
+  }
+
+  return `Both teams are fighting for inches, which means one turnover or explosive play could swing everything, so aim your adjustment at the cleanest visible edge.`;
 }
 
 function scoreCalloutLabel(highlight: QuarterHighlight, teamAName: string, teamBName: string) {
@@ -447,11 +636,15 @@ function ResultsTimeline({
   result,
   teamAName,
   teamBName,
+  awaitingHalftimeAdjustments,
+  onHalftimeRevealComplete,
   onRevealComplete,
 }: {
   result: SimResult;
   teamAName: string;
   teamBName: string;
+  awaitingHalftimeAdjustments: boolean;
+  onHalftimeRevealComplete: () => void;
   onRevealComplete: () => void;
 }) {
   const [startedAt] = useState(() => Date.now());
@@ -500,16 +693,18 @@ function ResultsTimeline({
       }
     });
 
-    steps.push({
-      kind: "final",
-      quarter: 4,
-      revealAt: nextRevealAt,
-      scoreA: result.finalA,
-      scoreB: result.finalB,
-    });
+    if (!awaitingHalftimeAdjustments) {
+      steps.push({
+        kind: "final",
+        quarter: 4,
+        revealAt: nextRevealAt,
+        scoreA: result.finalA,
+        scoreB: result.finalB,
+      });
+    }
 
     return steps;
-  }, [result]);
+  }, [awaitingHalftimeAdjustments, result]);
 
   const elapsed = now - startedAt;
   const revealedSteps = revealSchedule.filter((step) => elapsed >= step.revealAt).length;
@@ -592,9 +787,13 @@ function ResultsTimeline({
 
   useEffect(() => {
     if (allHighlightsRevealed) {
-      onRevealComplete();
+      if (awaitingHalftimeAdjustments) {
+        onHalftimeRevealComplete();
+      } else {
+        onRevealComplete();
+      }
     }
-  }, [allHighlightsRevealed, onRevealComplete]);
+  }, [allHighlightsRevealed, awaitingHalftimeAdjustments, onHalftimeRevealComplete, onRevealComplete]);
 
   return (
     <>
@@ -674,7 +873,7 @@ function ResultsTimeline({
         })}
       </div>
 
-      {allHighlightsRevealed && (
+      {allHighlightsRevealed && !awaitingHalftimeAdjustments && (
         <div className="rounded-2xl border bg-gray-50 p-4 sm:p-5">
           <h2 className="text-xl font-bold sm:text-2xl">Final</h2>
           <p className="mt-2 text-base sm:text-lg">
@@ -720,6 +919,13 @@ function ResultsPageContent() {
   const [rematchLoading, setRematchLoading] = useState(false);
   const [continuingSeries, setContinuingSeries] = useState(false);
   const [timelineComplete, setTimelineComplete] = useState(false);
+  const [halftimeRevealComplete, setHalftimeRevealComplete] = useState(false);
+  const [halftimeError, setHalftimeError] = useState("");
+  const [halftimeSubmitting, setHalftimeSubmitting] = useState(false);
+  const [halftimeTeamAOffense, setHalftimeTeamAOffense] = useState<string | null>(null);
+  const [halftimeTeamADefense, setHalftimeTeamADefense] = useState<string | null>(null);
+  const [halftimeTeamBOffense, setHalftimeTeamBOffense] = useState<string | null>(null);
+  const [halftimeTeamBDefense, setHalftimeTeamBDefense] = useState<string | null>(null);
 
   useEffect(() => {
     if (!roomId) return;
@@ -745,7 +951,7 @@ function ResultsPageContent() {
 
   useEffect(() => {
     if (!roomId || !room) return;
-    if (room.status !== "results") {
+    if (room.status !== "results" && room.status !== "halftime") {
       router.replace(getRoomStatusHref(room));
     }
   }, [roomId, room, router]);
@@ -754,6 +960,7 @@ function ResultsPageContent() {
   const resultKey = useMemo(() => (result ? JSON.stringify(result) : ""), [result]);
   const teamAName = room?.teamAName ?? "Team A";
   const teamBName = room?.teamBName ?? "Team B";
+  const awaitingHalftimeAdjustments = room?.status === "halftime" && !!result && result.quarters.length === 2;
   const mySide = useMemo<"A" | "B" | null>(() => {
     if (!room || !uid) return null;
     if (room.playerAId === uid) return "A";
@@ -769,7 +976,7 @@ function ResultsPageContent() {
   const seriesGameNumber = room?.seriesGameNumber ?? 1;
   const seriesWinsA = room?.seriesWinsA ?? 0;
   const seriesWinsB = room?.seriesWinsB ?? 0;
-  const canContinueSeries = !!room && !!result && !seriesWinner;
+  const canContinueSeries = !!room && room.status === "results" && !!result && !seriesWinner;
   const seriesPressureMessage = getSeriesPressureMessage({
     seriesGameNumber,
     seriesWinsA,
@@ -780,7 +987,94 @@ function ResultsPageContent() {
 
   useEffect(() => {
     setTimelineComplete(false);
+    setHalftimeRevealComplete(false);
   }, [resultKey]);
+
+  const selectedHalftimeTeamAOffense =
+    halftimeTeamAOffense ?? room?.halftimeTeamAStrategy?.offense ?? room?.teamAStrategy.offense ?? "Balanced";
+  const selectedHalftimeTeamADefense =
+    halftimeTeamADefense ?? room?.halftimeTeamAStrategy?.defense ?? room?.teamAStrategy.defense ?? "Balanced";
+  const selectedHalftimeTeamBOffense =
+    halftimeTeamBOffense ?? room?.halftimeTeamBStrategy?.offense ?? room?.teamBStrategy.offense ?? "Balanced";
+  const selectedHalftimeTeamBDefense =
+    halftimeTeamBDefense ?? room?.halftimeTeamBStrategy?.defense ?? room?.teamBStrategy.defense ?? "Balanced";
+  const halftimeTeamALocked = room?.halftimeTeamAStrategy?.locked ?? false;
+  const halftimeTeamBLocked = room?.halftimeTeamBStrategy?.locked ?? false;
+  const myHalftimeLocked =
+    mySide === "A" ? halftimeTeamALocked : mySide === "B" ? halftimeTeamBLocked : false;
+  const otherHalftimeLocked =
+    mySide === "A" ? halftimeTeamBLocked : mySide === "B" ? halftimeTeamALocked : false;
+  const bothHalftimeLocked = halftimeTeamALocked && halftimeTeamBLocked;
+  const myHalftimeAssessment =
+    result && mySide ? halftimeAssessment(result, mySide, teamAName, teamBName) : "";
+
+  async function lockHalftimeStrategy() {
+    if (!roomId || !room || room.status !== "halftime" || !mySide || myHalftimeLocked) {
+      return;
+    }
+
+    const offense = mySide === "A" ? selectedHalftimeTeamAOffense : selectedHalftimeTeamBOffense;
+    const defense = mySide === "A" ? selectedHalftimeTeamADefense : selectedHalftimeTeamBDefense;
+
+    try {
+      setHalftimeSubmitting(true);
+      setHalftimeError("");
+      await saveHalftimeStrategy(roomId, mySide, offense, defense, true);
+    } catch (error) {
+      console.error(error);
+      setHalftimeError("Could not lock halftime adjustments.");
+    } finally {
+      setHalftimeSubmitting(false);
+    }
+  }
+
+  useEffect(() => {
+    async function maybeFinishSecondHalf() {
+      if (!roomId || !room || room.status !== "halftime" || !result) return;
+      if (!room.halftimeTeamAStrategy?.locked || !room.halftimeTeamBStrategy?.locked) return;
+      if (result.quarters.length !== 2) return;
+
+      const teamARatings = buildRatings(room.teamA);
+      const teamBRatings = buildRatings(room.teamB);
+      const secondHalfSetup: GameSetup = {
+        teamAName: room.teamAName,
+        teamBName: room.teamBName,
+        teamA: room.teamA,
+        teamB: room.teamB,
+        teamARatings,
+        teamBRatings,
+        teamAStrategy: {
+          offense: room.halftimeTeamAStrategy.offense,
+          defense: room.halftimeTeamAStrategy.defense,
+        },
+        teamBStrategy: {
+          offense: room.halftimeTeamBStrategy.offense,
+          defense: room.halftimeTeamBStrategy.defense,
+        },
+        simSeed:
+          room.seed +
+          room.seriesGameNumber * 1_000_003 +
+          room.seriesWinsA * 10_007 +
+          room.seriesWinsB * 101 +
+          2_000_029,
+      };
+
+      try {
+        const secondHalf = simulateGame(secondHalfSetup, {
+          startQuarter: 3,
+          endQuarter: 4,
+          initialScoreA: result.finalA,
+          initialScoreB: result.finalB,
+        });
+        await finalizeSeriesGame(roomId, combineSimResults(result, secondHalf));
+      } catch (error) {
+        console.error("Could not finalize second half", error);
+        setHalftimeError("Could not start the second half.");
+      }
+    }
+
+    maybeFinishSecondHalf();
+  }, [roomId, room, result]);
 
   async function handleRematch() {
     if (
@@ -900,8 +1194,144 @@ function ResultsPageContent() {
           result={result}
           teamAName={teamAName}
           teamBName={teamBName}
+          awaitingHalftimeAdjustments={awaitingHalftimeAdjustments}
+          onHalftimeRevealComplete={() => setHalftimeRevealComplete(true)}
           onRevealComplete={() => setTimelineComplete(true)}
         />
+
+        {awaitingHalftimeAdjustments && (
+          <div className="rounded-2xl border p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold sm:text-2xl">Halftime Adjustments</h2>
+                <p className="mt-1 text-sm opacity-70">
+                  {halftimeRevealComplete
+                    ? "Switch the plan, lock it in, and the second half starts when both coaches are ready."
+                    : "Adjustments unlock once the halftime scoreboard hits the screen."}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 text-sm sm:flex-row">
+                <span className={`rounded-full border px-3 py-1 ${strategyStatusClasses(halftimeTeamALocked)}`}>
+                  {teamAName}: {halftimeTeamALocked ? "Locked" : "Adjusting"}
+                </span>
+                <span className={`rounded-full border px-3 py-1 ${strategyStatusClasses(halftimeTeamBLocked)}`}>
+                  {teamBName}: {halftimeTeamBLocked ? "Locked" : "Adjusting"}
+                </span>
+              </div>
+            </div>
+
+            {halftimeRevealComplete && myHalftimeAssessment && (
+              <p className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm font-medium text-sky-950">
+                {myHalftimeAssessment}
+              </p>
+            )}
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="space-y-3 rounded-xl border p-3">
+                <h3 className="font-semibold">{teamAName}</h3>
+                {mySide === "A" ? (
+                  <>
+                    <label className="block text-sm font-medium">Offense</label>
+                    <select
+                      value={selectedHalftimeTeamAOffense}
+                      onChange={(event) => setHalftimeTeamAOffense(event.target.value)}
+                      disabled={!halftimeRevealComplete || halftimeTeamALocked}
+                      className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
+                    >
+                      {OFFENSE_STRATEGIES.map((strategy) => (
+                        <option key={strategy}>{strategy}</option>
+                      ))}
+                    </select>
+                    <p className="text-sm opacity-70">{offenseStrategyDescription(selectedHalftimeTeamAOffense)}</p>
+                    <label className="block text-sm font-medium">Defense</label>
+                    <select
+                      value={selectedHalftimeTeamADefense}
+                      onChange={(event) => setHalftimeTeamADefense(event.target.value)}
+                      disabled={!halftimeRevealComplete || halftimeTeamALocked}
+                      className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
+                    >
+                      {DEFENSE_STRATEGIES.map((strategy) => (
+                        <option key={strategy}>{strategy}</option>
+                      ))}
+                    </select>
+                    <p className="text-sm opacity-70">{defenseStrategyDescription(selectedHalftimeTeamADefense)}</p>
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Opponent counters stay hidden until the second half kicks off.
+                    </p>
+                  </>
+                ) : (
+                  <p className="rounded-xl border border-dashed p-3 text-sm opacity-70">
+                    {halftimeTeamALocked ? "Locked. Hidden until the second half kicks off." : "Coach is making adjustments."}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-3 rounded-xl border p-3">
+                <h3 className="font-semibold">{teamBName}</h3>
+                {mySide === "B" ? (
+                  <>
+                    <label className="block text-sm font-medium">Offense</label>
+                    <select
+                      value={selectedHalftimeTeamBOffense}
+                      onChange={(event) => setHalftimeTeamBOffense(event.target.value)}
+                      disabled={!halftimeRevealComplete || halftimeTeamBLocked}
+                      className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
+                    >
+                      {OFFENSE_STRATEGIES.map((strategy) => (
+                        <option key={strategy}>{strategy}</option>
+                      ))}
+                    </select>
+                    <p className="text-sm opacity-70">{offenseStrategyDescription(selectedHalftimeTeamBOffense)}</p>
+                    <label className="block text-sm font-medium">Defense</label>
+                    <select
+                      value={selectedHalftimeTeamBDefense}
+                      onChange={(event) => setHalftimeTeamBDefense(event.target.value)}
+                      disabled={!halftimeRevealComplete || halftimeTeamBLocked}
+                      className="w-full rounded-xl border px-3 py-3 disabled:opacity-50 sm:rounded-md sm:py-2"
+                    >
+                      {DEFENSE_STRATEGIES.map((strategy) => (
+                        <option key={strategy}>{strategy}</option>
+                      ))}
+                    </select>
+                    <p className="text-sm opacity-70">{defenseStrategyDescription(selectedHalftimeTeamBDefense)}</p>
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                      Opponent counters stay hidden until the second half kicks off.
+                    </p>
+                  </>
+                ) : (
+                  <p className="rounded-xl border border-dashed p-3 text-sm opacity-70">
+                    {halftimeTeamBLocked ? "Locked. Hidden until the second half kicks off." : "Coach is making adjustments."}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm opacity-70">
+                {!mySide
+                  ? "Waiting for player assignment."
+                  : !halftimeRevealComplete
+                    ? "Reach halftime before locking changes."
+                    : bothHalftimeLocked
+                      ? "Both staffs locked in. Starting the second half..."
+                      : myHalftimeLocked
+                        ? otherHalftimeLocked
+                          ? "Both staffs locked in. Starting the second half..."
+                          : "Your changes are locked. Waiting for the other sideline..."
+                        : "Make the call that gives you the best shot after halftime."}
+              </p>
+              <button
+                type="button"
+                onClick={lockHalftimeStrategy}
+                disabled={!mySide || !halftimeRevealComplete || myHalftimeLocked || bothHalftimeLocked || halftimeSubmitting}
+                className="w-full rounded-xl border px-4 py-3 font-medium hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:rounded-md sm:py-2"
+              >
+                {myHalftimeLocked ? "Adjustments Locked" : halftimeSubmitting ? "Locking..." : "Lock Adjustments"}
+              </button>
+            </div>
+            {halftimeError && <p className="mt-3 text-sm text-red-600">{halftimeError}</p>}
+          </div>
+        )}
 
         {timelineComplete ? (
           <div className="grid gap-4 lg:grid-cols-2 sm:gap-6">

@@ -9,10 +9,10 @@ import type { ScoutAttribute, ScoutingMap } from "@/lib/game/scouting";
 import type { DraftedPlayer, Prospect } from "@/lib/game/types";
 import { getPlayerIQ, getPlayerPower, getPlayerSpeed, getPlayerTechnical, iqLabel } from "@/lib/game/playerRatings";
 import {
-  finalizeSeriesGame,
   getRoomStatusHref,
   RoomData,
   saveTeamStrategy,
+  startHalftime,
   subscribeToRoom,
 } from "@/lib/room";
 import { GameSetup, simulateGame, TeamRatings } from "@/lib/sim";
@@ -366,26 +366,6 @@ function defenseStrategyDescription(strategy: string) {
   }
 }
 
-function matchupHint(offenseStrategy: string, defenseStrategy: string) {
-  if (offenseStrategy === "Pass Heavy" && defenseStrategy === "Pressure") {
-    return "Counter alert: Pressure can wreck Pass Heavy with sacks and strip chances.";
-  }
-
-  if (offenseStrategy === "Run Heavy" && defenseStrategy === "Pressure") {
-    return "Counter alert: Run Heavy can punish Pressure if the front misses its fits.";
-  }
-
-  if (offenseStrategy === "Run Heavy" && defenseStrategy === "Coverage") {
-    return "Counter alert: Coverage protects the sky, but Run Heavy can grind underneath it.";
-  }
-
-  if (offenseStrategy === "Pass Heavy" && defenseStrategy === "Coverage") {
-    return "Chess match: Coverage lowers explosives, but a good passing roster can still find volume.";
-  }
-
-  return "Balanced matchup: roster quality and turnovers should decide the swing plays.";
-}
-
 function RecapPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -529,8 +509,8 @@ function RecapPageContent() {
       };
 
       try {
-        const result = simulateGame(gameSetup);
-        await finalizeSeriesGame(roomId, result);
+        const result = simulateGame(gameSetup, { startQuarter: 1, endQuarter: 2 });
+        await startHalftime(roomId, result);
       } catch (error) {
         console.error("Could not finalize simulated game", error);
       }
@@ -752,9 +732,11 @@ function RecapPageContent() {
               ) : (
                 <HiddenStrategyState locked={teamALocked} />
               )}
-              <p className="text-sm opacity-70">
-                {offenseStrategyDescription(selectedTeamAOffense)}
-              </p>
+              {mySide === "A" && (
+                <p className="text-sm opacity-70">
+                  {offenseStrategyDescription(selectedTeamAOffense)}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -773,12 +755,16 @@ function RecapPageContent() {
               ) : (
                 <HiddenStrategyState locked={teamALocked} />
               )}
-              <p className="text-sm opacity-70">
-                {defenseStrategyDescription(selectedTeamADefense)}
-              </p>
-              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                {matchupHint(selectedTeamAOffense, selectedTeamBDefense)}
-              </p>
+              {mySide === "A" && (
+                <>
+                  <p className="text-sm opacity-70">
+                    {defenseStrategyDescription(selectedTeamADefense)}
+                  </p>
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    Opponent counters stay hidden until kickoff.
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -810,9 +796,11 @@ function RecapPageContent() {
               ) : (
                 <HiddenStrategyState locked={teamBLocked} />
               )}
-              <p className="text-sm opacity-70">
-                {offenseStrategyDescription(selectedTeamBOffense)}
-              </p>
+              {mySide === "B" && (
+                <p className="text-sm opacity-70">
+                  {offenseStrategyDescription(selectedTeamBOffense)}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -831,12 +819,16 @@ function RecapPageContent() {
               ) : (
                 <HiddenStrategyState locked={teamBLocked} />
               )}
-              <p className="text-sm opacity-70">
-                {defenseStrategyDescription(selectedTeamBDefense)}
-              </p>
-              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                {matchupHint(selectedTeamBOffense, selectedTeamADefense)}
-              </p>
+              {mySide === "B" && (
+                <>
+                  <p className="text-sm opacity-70">
+                    {defenseStrategyDescription(selectedTeamBDefense)}
+                  </p>
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    Opponent counters stay hidden until kickoff.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -307,6 +307,20 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Win probability is more conservative early and only reaches extreme values later in the game.
   - Play-by-play logs now call out possession changes, including explicit turnover handoffs.
   - Average generated play count per drive was reduced by about 15% while keeping 15-minute quarters.
+- Added halftime adjustments:
+  - Recap now simulates only the first half before sending players to results.
+  - Results pauses at halftime and lets each player secretly switch offense and defense strategy.
+  - Once both halftime plans are locked, quarters 3-4 simulate from the actual halftime score and the full result is finalized.
+  - First-half and second-half player/team stats are merged for the final box score.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Added a halftime locker-room read:
+  - Results derives a one-sentence, side-specific first-half assessment from visible score, turnovers, sacks, explosives, and scoring patterns.
+  - The assessment appears once the halftime reveal completes so players can make a more informed adjustment without exposing hidden strategy choices.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Tuned sim reveal pacing after halftime was added:
+  - Normal plays, scoring holds, close moments, halftime, and final scoreboard holds were shortened to make the game feel more like a brisk RedZone-style reveal.
+  - Scoring and turnover callouts still keep their dramatic overlay timing.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 
