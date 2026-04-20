@@ -344,6 +344,48 @@ function HiddenStrategyState({ locked }: { locked: boolean }) {
   );
 }
 
+function offenseStrategyDescription(strategy: string) {
+  switch (strategy) {
+    case "Pass Heavy":
+      return "Pros: more explosive shots and comeback juice. Cons: more sacks, picks, and strip-sack risk against Pressure.";
+    case "Run Heavy":
+      return "Pros: controls tempo and punishes light boxes. Cons: fewer quick-strike chances and more ball-carrier fumble exposure.";
+    default:
+      return "Pros: safest floor and flexible play calling. Cons: fewer extreme matchup wins if your roster has a clear identity.";
+  }
+}
+
+function defenseStrategyDescription(strategy: string) {
+  switch (strategy) {
+    case "Pressure":
+      return "Pros: more sacks, rushed throws, and strip fumbles. Cons: can give up chunk gains, especially if the offense runs through it.";
+    case "Coverage":
+      return "Pros: better against deep passing and more interception chances. Cons: lighter against committed run games.";
+    default:
+      return "Pros: steady against both run and pass. Cons: fewer havoc plays than Pressure or Coverage.";
+  }
+}
+
+function matchupHint(offenseStrategy: string, defenseStrategy: string) {
+  if (offenseStrategy === "Pass Heavy" && defenseStrategy === "Pressure") {
+    return "Counter alert: Pressure can wreck Pass Heavy with sacks and strip chances.";
+  }
+
+  if (offenseStrategy === "Run Heavy" && defenseStrategy === "Pressure") {
+    return "Counter alert: Run Heavy can punish Pressure if the front misses its fits.";
+  }
+
+  if (offenseStrategy === "Run Heavy" && defenseStrategy === "Coverage") {
+    return "Counter alert: Coverage protects the sky, but Run Heavy can grind underneath it.";
+  }
+
+  if (offenseStrategy === "Pass Heavy" && defenseStrategy === "Coverage") {
+    return "Chess match: Coverage lowers explosives, but a good passing roster can still find volume.";
+  }
+
+  return "Balanced matchup: roster quality and turnovers should decide the swing plays.";
+}
+
 function RecapPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -704,6 +746,9 @@ function RecapPageContent() {
               ) : (
                 <HiddenStrategyState locked={teamALocked} />
               )}
+              <p className="text-sm opacity-70">
+                {offenseStrategyDescription(selectedTeamAOffense)}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -722,6 +767,12 @@ function RecapPageContent() {
               ) : (
                 <HiddenStrategyState locked={teamALocked} />
               )}
+              <p className="text-sm opacity-70">
+                {defenseStrategyDescription(selectedTeamADefense)}
+              </p>
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                {matchupHint(selectedTeamAOffense, selectedTeamBDefense)}
+              </p>
             </div>
           </div>
 
@@ -753,6 +804,9 @@ function RecapPageContent() {
               ) : (
                 <HiddenStrategyState locked={teamBLocked} />
               )}
+              <p className="text-sm opacity-70">
+                {offenseStrategyDescription(selectedTeamBOffense)}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -771,6 +825,12 @@ function RecapPageContent() {
               ) : (
                 <HiddenStrategyState locked={teamBLocked} />
               )}
+              <p className="text-sm opacity-70">
+                {defenseStrategyDescription(selectedTeamBDefense)}
+              </p>
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                {matchupHint(selectedTeamBOffense, selectedTeamADefense)}
+              </p>
             </div>
           </div>
         </div>

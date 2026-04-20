@@ -658,7 +658,7 @@ function DraftPageContent() {
                         }`}
                         aria-pressed={playerTag === "gem"}
                       >
-                        💎
+                        Target
                       </button>
                       <button
                         type="button"
@@ -673,7 +673,7 @@ function DraftPageContent() {
                         }`}
                         aria-pressed={playerTag === "avoid"}
                       >
-                        ❌
+                        Fade
                       </button>
                     </div>
 

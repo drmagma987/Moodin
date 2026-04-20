@@ -14,14 +14,24 @@ import {
 } from "@/lib/room";
 import { PlayerGameStats, type QuarterHighlight, SimResult } from "@/lib/sim";
 
+const FIRST_REVEAL_DELAY_MS = 900;
+const NORMAL_REVEAL_STEP_MS = 3400;
+const SCORE_REVEAL_STEP_MS = 5600;
+const CLOSE_REVEAL_STEP_MS = 6400;
+const SCORE_CALLOUT_MS = 2400;
+const TURNOVER_CALLOUT_MS = 2200;
+
 function statSummary(statLine: PlayerGameStats) {
   const chunks: string[] = [];
 
   if (statLine.passingYards > 0) chunks.push(`${statLine.passingYards} pass yds`);
   if (statLine.passingTD > 0) chunks.push(`${statLine.passingTD} pass TD`);
   if (statLine.interceptions > 0) chunks.push(`${statLine.interceptions} INT`);
+  if (statLine.fumblesLost > 0) chunks.push(`${statLine.fumblesLost} fumble lost`);
   if (statLine.tackles > 0) chunks.push(`${statLine.tackles} tackles`);
   if (statLine.sacks > 0) chunks.push(`${statLine.sacks} sacks`);
+  if (statLine.forcedFumbles > 0) chunks.push(`${statLine.forcedFumbles} FF`);
+  if (statLine.fumbleRecoveries > 0) chunks.push(`${statLine.fumbleRecoveries} FR`);
   if (statLine.carries > 0) chunks.push(`${statLine.carries} car`);
   if (statLine.rushYards > 0) chunks.push(`${statLine.rushYards} rush yds`);
   if (statLine.rushTD > 0) chunks.push(`${statLine.rushTD} rush TD`);
@@ -86,7 +96,27 @@ function eventTypeClass(eventType: QuarterHighlight["eventType"]) {
   }
 }
 
-function FieldDriveView({
+function scoreCalloutLabel(highlight: QuarterHighlight, teamAName: string, teamBName: string) {
+  const teamName = highlight.possession === "A" ? teamAName : teamBName;
+  const scoreType = highlight.eventType === "fieldGoal" ? "FG" : "TD";
+
+  return `${scoreType} ${teamName}!`;
+}
+
+function eventCalloutLabel(highlight: QuarterHighlight, teamAName: string, teamBName: string) {
+  if (highlight.isScore) return scoreCalloutLabel(highlight, teamAName, teamBName);
+
+  if (highlight.eventType === "turnover") {
+    const defenseName = highlight.possession === "A" ? teamBName : teamAName;
+    if (highlight.eventDetail === "interception") return `PICK ${defenseName}!`;
+    if (highlight.eventDetail === "stripSack") return `STRIP SACK ${defenseName}!`;
+    return `FUMBLE ${defenseName}!`;
+  }
+
+  return "";
+}
+
+function EventCallout({
   highlight,
   teamAName,
   teamBName,
@@ -94,6 +124,86 @@ function FieldDriveView({
   highlight: QuarterHighlight | null;
   teamAName: string;
   teamBName: string;
+}) {
+  if (!highlight || (!highlight.isScore && highlight.eventType !== "turnover")) return null;
+  const tone =
+    highlight.eventType === "turnover"
+      ? "border-red-100 bg-red-950 text-white"
+      : "border-white bg-slate-950 text-white";
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-slate-950/20 px-4 backdrop-blur-[1px]">
+      <div
+        key={highlight.id}
+        className={`animate-bounce rounded-[2rem] border-4 px-8 py-6 text-center shadow-2xl sm:px-12 sm:py-8 ${tone}`}
+      >
+        <p className="text-xs font-black uppercase tracking-[0.35em] text-amber-300">
+          {highlight.eventType === "turnover" ? "Turnover" : "Score Update"}
+        </p>
+        <p className="mt-2 text-4xl font-black uppercase tracking-tight sm:text-6xl">
+          {eventCalloutLabel(highlight, teamAName, teamBName)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function impactScore(statLine: PlayerGameStats) {
+  return (
+    statLine.passingTD * 14 +
+    statLine.receivingTD * 10 +
+    statLine.rushTD * 10 +
+    statLine.interceptions * (statLine.position === "QB" ? -6 : 12) +
+    statLine.fumblesLost * -7 +
+    statLine.sacks * 9 +
+    statLine.forcedFumbles * 9 +
+    statLine.fumbleRecoveries * 8 +
+    statLine.tackles * 0.8 +
+    statLine.passingYards * 0.08 +
+    statLine.receivingYards * 0.11 +
+    statLine.rushYards * 0.11
+  );
+}
+
+function getGameMvp(result: SimResult, teamAName: string, teamBName: string) {
+  const winnerSide = result.finalA >= result.finalB ? "A" : "B";
+  const winnerStats = winnerSide === "A" ? result.teamAStats : result.teamBStats;
+  const teamName = winnerSide === "A" ? teamAName : teamBName;
+  const player = [...winnerStats].sort((a, b) => impactScore(b) - impactScore(a))[0];
+
+  return player ? { player, teamName } : null;
+}
+
+function estimateWinProbabilityA(
+  scoreA: number,
+  scoreB: number,
+  currentQuarter: number,
+  progressRatio: number,
+  possession: "A" | "B" | null
+) {
+  const scoreDiff = scoreA - scoreB;
+  const leverage = 2.6 + currentQuarter * 1.2 + progressRatio * 4;
+  const possessionBump = possession === "A" ? 2 : possession === "B" ? -2 : 0;
+
+  return clamp(Math.round(50 + scoreDiff * leverage + possessionBump), 4, 96);
+}
+
+function FieldDriveView({
+  highlight,
+  teamAName,
+  teamBName,
+  scoreA,
+  scoreB,
+  quarter,
+  winProbabilityA,
+}: {
+  highlight: QuarterHighlight | null;
+  teamAName: string;
+  teamBName: string;
+  scoreA: number;
+  scoreB: number;
+  quarter: number;
+  winProbabilityA: number;
 }) {
   const possessionName =
     highlight?.possession === "A" ? teamAName : highlight?.possession === "B" ? teamBName : "Awaiting kickoff";
@@ -125,6 +235,39 @@ function FieldDriveView({
             {eventTypeLabel(highlight.eventType)}
           </span>
         )}
+      </div>
+
+      <div className="mt-4 grid gap-3 rounded-2xl border border-white/15 bg-white/10 p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-200">
+              Q{quarter}
+            </p>
+            <p className="mt-1 font-semibold">
+              {teamAName} {scoreA} - {scoreB} {teamBName}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-200">
+              Win Prob
+            </p>
+            <p className="mt-1 font-semibold">
+              {teamAName} {winProbabilityA}% / {teamBName} {100 - winProbabilityA}%
+            </p>
+          </div>
+        </div>
+        {highlight?.closeMoment && (
+          <span className="w-fit rounded-full border border-amber-200 bg-amber-300 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-emerald-950">
+            One-score finish
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15">
+        <div
+          className="h-full rounded-full bg-amber-300 transition-all duration-700"
+          style={{ width: `${winProbabilityA}%` }}
+        />
       </div>
 
       <div className="relative mt-4 h-28 overflow-hidden rounded-2xl border border-white/20 bg-[linear-gradient(90deg,rgba(6,78,59,0.95),rgba(5,150,105,0.75),rgba(6,78,59,0.95))]">
@@ -173,7 +316,14 @@ function FieldDriveView({
       </div>
 
       <div className="mt-3 flex flex-col gap-1 text-sm text-emerald-50 sm:flex-row sm:items-center sm:justify-between">
-        <p>{highlight ? highlight.text : "The first possession is loading..."}</p>
+        <div>
+          <p>{highlight ? highlight.text : "The first possession is loading..."}</p>
+          {highlight && (
+            <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
+              {highlight.driveSummary}
+            </p>
+          )}
+        </div>
         {highlight && (
           <p className="shrink-0 font-semibold">
             {highlight.yards >= 0 ? "+" : ""}
@@ -226,15 +376,46 @@ function ResultsTimeline({
 
     return steps;
   }, [result]);
+  const revealSchedule = useMemo(() => {
+    let nextRevealAt = FIRST_REVEAL_DELAY_MS;
+
+    return revealPlan.map((step) => {
+      const revealAt = nextRevealAt;
+      nextRevealAt += step.highlight.isScore
+        ? SCORE_REVEAL_STEP_MS
+        : step.highlight.closeMoment
+          ? CLOSE_REVEAL_STEP_MS
+          : NORMAL_REVEAL_STEP_MS;
+      return { ...step, revealAt };
+    });
+  }, [revealPlan]);
 
   const elapsed = now - startedAt;
-  const revealedHighlights = clamp(Math.floor(Math.max(0, elapsed - 500) / 1200) + 1, 0, revealPlan.length);
-  const visibleHighlights = revealPlan.slice(0, revealedHighlights);
+  const revealedHighlights = revealSchedule.filter((step) => elapsed >= step.revealAt).length;
+  const visibleHighlights = revealSchedule.slice(0, revealedHighlights);
   const visibleScore =
     visibleHighlights.length > 0
       ? visibleHighlights[visibleHighlights.length - 1].highlight
       : { scoreA: 0, scoreB: 0 };
-  const currentHighlight = visibleHighlights[visibleHighlights.length - 1]?.highlight ?? null;
+  const currentRevealStep = visibleHighlights[visibleHighlights.length - 1] ?? null;
+  const currentHighlight = currentRevealStep?.highlight ?? null;
+  const currentQuarter = currentRevealStep?.quarter ?? 1;
+  const progressRatio = revealSchedule.length > 0 ? revealedHighlights / revealSchedule.length : 0;
+  const winProbabilityA = estimateWinProbabilityA(
+    visibleScore.scoreA,
+    visibleScore.scoreB,
+    currentQuarter,
+    progressRatio,
+    currentHighlight?.possession ?? null
+  );
+  const showScoreCallout =
+    !!currentRevealStep &&
+    currentRevealStep.highlight.isScore &&
+    elapsed - currentRevealStep.revealAt <= SCORE_CALLOUT_MS;
+  const showTurnoverCallout =
+    !!currentRevealStep &&
+    currentRevealStep.highlight.eventType === "turnover" &&
+    elapsed - currentRevealStep.revealAt <= TURNOVER_CALLOUT_MS;
   const revealedQuarterMap = new Map<number, QuarterHighlight[]>();
 
   visibleHighlights.forEach(({ quarter, highlight }) => {
@@ -243,7 +424,13 @@ function ResultsTimeline({
     revealedQuarterMap.set(quarter, current);
   });
 
-  const allHighlightsRevealed = revealedHighlights >= revealPlan.length;
+  const finalScoreHoldActive =
+    !!currentRevealStep &&
+    (currentRevealStep.highlight.isScore || currentRevealStep.highlight.eventType === "turnover") &&
+    elapsed - currentRevealStep.revealAt <=
+      (currentRevealStep.highlight.isScore ? SCORE_CALLOUT_MS : TURNOVER_CALLOUT_MS);
+  const allHighlightsRevealed =
+    revealedHighlights >= revealPlan.length && !finalScoreHoldActive;
 
   useEffect(() => {
     if (allHighlightsRevealed) {
@@ -253,10 +440,22 @@ function ResultsTimeline({
 
   return (
     <>
+      {(showScoreCallout || showTurnoverCallout) && (
+        <EventCallout
+          highlight={currentHighlight}
+          teamAName={teamAName}
+          teamBName={teamBName}
+        />
+      )}
+
       <FieldDriveView
         highlight={currentHighlight}
         teamAName={teamAName}
         teamBName={teamBName}
+        scoreA={visibleScore.scoreA}
+        scoreB={visibleScore.scoreB}
+        quarter={currentQuarter}
+        winProbabilityA={winProbabilityA}
       />
 
       <div className="rounded-2xl border p-4 sm:p-5">
@@ -313,6 +512,20 @@ function ResultsTimeline({
               ? "Tie game"
               : `${result.finalA > result.finalB ? teamAName : teamBName} wins`}
           </p>
+          {(() => {
+            const mvp = getGameMvp(result, teamAName, teamBName);
+            return mvp ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950">
+                <p className="text-xs font-black uppercase tracking-[0.18em]">
+                  Game MVP
+                </p>
+                <p className="mt-1 font-semibold">
+                  {mvp.player.position} {mvp.player.name}, {mvp.teamName}
+                </p>
+                <p className="mt-1 text-sm opacity-80">{statSummary(mvp.player)}</p>
+              </div>
+            ) : null;
+          })()}
         </div>
       )}
     </>

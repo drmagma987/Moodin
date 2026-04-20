@@ -260,6 +260,27 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - The visual field is intentionally drive/event based, not full 11-player animation yet.
   - Existing text timeline, live score reveal, and box-score flow remain intact.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Tuned sim reveal pacing:
+  - Highlight reveal timing is now slower so users can read and digest each drive result.
+  - Scoring plays hold longer than normal events.
+  - TD and FG events trigger a full-screen `TD/FG Team!` callout before the reveal continues.
+  - Final reveal waits for any active scoring callout to finish.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Added explicit fumble support:
+  - Turnover events now resolve as interceptions or fumbles instead of generic turnovers only.
+  - Offensive box scores track fumbles lost.
+  - Defensive box scores track forced fumbles and fumble recoveries.
+  - Pressure defense increases strip-sack style fumbles; run-heavy offense exposes more ball-carrier fumbles; Coverage remains more interception-skewed.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Added broadcast/drama pass:
+  - Sim highlights now include drive summaries and close-game metadata.
+  - Results field view includes a mini scoreboard, win-probability meter, one-score-finish banner, and post-game MVP award.
+  - Turnovers trigger full-screen `PICK`, `FUMBLE`, or `STRIP SACK` callouts.
+  - Close fourth-quarter moments reveal more slowly.
+  - Strategy selectors now explain pros/cons and show matchup counter hints.
+  - Draft note buttons are labeled `Target` and `Fade` instead of emoji-only buttons.
+  - Free-agency resolution adds a short offer-envelope suspense reveal before showing the result.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

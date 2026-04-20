@@ -42,8 +42,11 @@ function statSummary(statLine: PlayerGameStats) {
   if (statLine.passingYards > 0) chunks.push(`${statLine.passingYards} pass yds`);
   if (statLine.passingTD > 0) chunks.push(`${statLine.passingTD} pass TD`);
   if (statLine.interceptions > 0) chunks.push(`${statLine.interceptions} INT`);
+  if (statLine.fumblesLost > 0) chunks.push(`${statLine.fumblesLost} fumble lost`);
   if (statLine.tackles > 0) chunks.push(`${statLine.tackles} tackles`);
   if (statLine.sacks > 0) chunks.push(`${statLine.sacks} sacks`);
+  if (statLine.forcedFumbles > 0) chunks.push(`${statLine.forcedFumbles} FF`);
+  if (statLine.fumbleRecoveries > 0) chunks.push(`${statLine.fumbleRecoveries} FR`);
   if (statLine.carries > 0) chunks.push(`${statLine.carries} car`);
   if (statLine.rushYards > 0) chunks.push(`${statLine.rushYards} rush yds`);
   if (statLine.rushTD > 0) chunks.push(`${statLine.rushTD} rush TD`);
@@ -86,8 +89,11 @@ function emptyStatLine(playerId: string, name: string, position: PlayerGameStats
     passingYards: 0,
     passingTD: 0,
     interceptions: 0,
+    fumblesLost: 0,
     tackles: 0,
     sacks: 0,
+    forcedFumbles: 0,
+    fumbleRecoveries: 0,
     rushYards: 0,
     rushTD: 0,
     carries: 0,
@@ -107,6 +113,7 @@ function SeriesPageContent() {
   const [actionError, setActionError] = useState("");
   const [loadingAction, setLoadingAction] = useState(false);
   const [selectedFreeAgentId, setSelectedFreeAgentId] = useState<string | null>(null);
+  const [freeAgencyRevealReady, setFreeAgencyRevealReady] = useState(false);
 
   useEffect(() => {
     if (!roomId) return;
@@ -136,6 +143,17 @@ function SeriesPageContent() {
       router.replace(getRoomStatusHref(room));
     }
   }, [roomId, room, router]);
+
+  useEffect(() => {
+    if (room?.betweenGamePhase !== "freeAgencyResolution") {
+      setFreeAgencyRevealReady(false);
+      return;
+    }
+
+    setFreeAgencyRevealReady(false);
+    const timeout = window.setTimeout(() => setFreeAgencyRevealReady(true), 2400);
+    return () => window.clearTimeout(timeout);
+  }, [room?.betweenGamePhase, room?.freeAgencyResolutionText]);
 
   const mySide = useMemo<"A" | "B" | null>(() => {
     if (!room || !uid) return null;
@@ -516,24 +534,34 @@ function SeriesPageContent() {
 
         {room.betweenGamePhase === "freeAgencyResolution" && (
           <>
-            <div className="rounded-2xl border p-4 sm:p-5">
-              <h2 className="text-xl font-semibold sm:text-2xl">Free Agency Resolution</h2>
-              <p className="mt-1 text-sm opacity-70">{room.freeAgencyResolutionText}</p>
-              {room.freeAgencyAwardedSide && room.freeAgencyContestedPlayerId && (
-                <p className="mt-2 text-sm opacity-70">
-                  {room.freeAgencyAwardedSide === mySide
-                    ? "You won the contested signing."
-                    : "Your opponent won the contested signing."}
+            {!freeAgencyRevealReady ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950 sm:p-6">
+                <p className="text-xs font-black uppercase tracking-[0.25em]">Free Agency Wire</p>
+                <h2 className="mt-2 text-2xl font-black sm:text-3xl">Opening the offer envelopes...</h2>
+                <p className="mt-2 text-sm opacity-80">
+                  Both coaches made their pitch. One signing can change Game {room.seriesGameNumber + 1}.
                 </p>
-              )}
-              <p className="mt-2 text-sm font-medium">
-                {room.freeAgencyAwardedSide === mySide
-                  ? "You landed the player both coaches wanted."
-                  : "The board broke against you. Answer with the replacement pick."}
-              </p>
-            </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border p-4 sm:p-5">
+                <h2 className="text-xl font-semibold sm:text-2xl">Free Agency Resolution</h2>
+                <p className="mt-1 text-sm opacity-70">{room.freeAgencyResolutionText}</p>
+                {room.freeAgencyAwardedSide && room.freeAgencyContestedPlayerId && (
+                  <p className="mt-2 text-sm opacity-70">
+                    {room.freeAgencyAwardedSide === mySide
+                      ? "You won the contested signing."
+                      : "Your opponent won the contested signing."}
+                  </p>
+                )}
+                <p className="mt-2 text-sm font-medium">
+                  {room.freeAgencyAwardedSide === mySide
+                    ? "You landed the player both coaches wanted."
+                    : "The board broke against you. Answer with the replacement pick."}
+                </p>
+              </div>
+            )}
 
-            {isReplacementSide ? (
+            {freeAgencyRevealReady && isReplacementSide ? (
               <>
                 <p className="text-sm opacity-70">
                   You must choose a replacement FA.
@@ -609,11 +637,11 @@ function SeriesPageContent() {
                   </button>
                 </div>
               </>
-            ) : (
+            ) : freeAgencyRevealReady ? (
               <div className="rounded-2xl border p-4 sm:p-5">
                 <p className="text-sm opacity-70">Waiting for the other player to choose a replacement FA...</p>
               </div>
-            )}
+            ) : null}
           </>
         )}
 

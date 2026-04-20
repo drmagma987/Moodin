@@ -50,9 +50,12 @@ export type QuarterHighlight = {
   isScore: boolean;
   possession: "A" | "B";
   eventType: "explosive" | "touchdown" | "fieldGoal" | "turnover" | "stop";
+  eventDetail?: "interception" | "fumble" | "stripSack";
   startYardLine: number;
   endYardLine: number;
   yards: number;
+  driveSummary: string;
+  closeMoment: boolean;
 };
 
 export type PlayerGameStats = {
@@ -62,8 +65,11 @@ export type PlayerGameStats = {
   passingYards: number;
   passingTD: number;
   interceptions: number;
+  fumblesLost: number;
   tackles: number;
   sacks: number;
+  forcedFumbles: number;
+  fumbleRecoveries: number;
   rushYards: number;
   rushTD: number;
   carries: number;
@@ -254,19 +260,21 @@ function strategyMatchupBonus(
   if (offenseStyle === "Pass Heavy") {
     offenseBonus += clamp((offense.passAttack - offense.runAttack) * 0.04, -1.5, 3);
     if (defenseStyle === "Pressure") {
-      defenseBonus += clamp((defense.pressure - offense.ballSecurity) * 0.05, -1, 3.5);
+      defenseBonus += clamp((defense.pressure - offense.ballSecurity) * 0.075, -1, 4.5);
+      offenseBonus -= clamp((defense.pressure - offense.ballSecurity) * 0.018, 0, 1.2);
     }
     if (defenseStyle === "Coverage") {
-      defenseBonus += clamp((defense.passDefense - offense.bigPlayAttack) * 0.04, -1, 2.5);
+      defenseBonus += clamp((defense.passDefense - offense.bigPlayAttack) * 0.055, -1, 3.3);
     }
   } else if (offenseStyle === "Run Heavy") {
     offenseBonus += clamp((offense.runAttack - offense.passAttack) * 0.04, -1.5, 3);
     if (defenseStyle === "Pressure") {
-      offenseBonus += 1.2;
-      defenseBonus -= 0.5;
+      offenseBonus += 1.8;
+      defenseBonus -= 0.9;
     }
     if (defenseStyle === "Coverage") {
-      offenseBonus += clamp((offense.runAttack - defense.runDefense) * 0.04, -0.5, 2.5);
+      offenseBonus += clamp((offense.runAttack - defense.runDefense) * 0.055, -0.5, 3.2);
+      defenseBonus -= 0.5;
     }
   } else {
     offenseBonus += 0.5;
@@ -563,8 +571,11 @@ function initPlayerStats(team: DraftedPlayer[]) {
         passingYards: 0,
         passingTD: 0,
         interceptions: 0,
+        fumblesLost: 0,
         tackles: 0,
         sacks: 0,
+        forcedFumbles: 0,
+        fumbleRecoveries: 0,
         rushYards: 0,
         rushTD: 0,
         carries: 0,
@@ -621,6 +632,7 @@ type OffensiveOutput = {
   passingTD: number;
   rushingTD: number;
   interceptionsThrown: number;
+  fumblesLost: number;
   totalYards: number;
   totalCarries: number;
   totalReceptions: number;
@@ -638,6 +650,7 @@ type TeamSimTotals = {
   rushingTD: number;
   fieldGoals: number;
   interceptionsThrown: number;
+  fumblesLost: number;
   sacksAllowed: number;
   totalCarries: number;
   totalReceptions: number;
@@ -653,9 +666,12 @@ type LocalSimHighlight = {
   isScore: boolean;
   possession: "A" | "B";
   eventType: QuarterHighlight["eventType"];
+  eventDetail?: QuarterHighlight["eventDetail"];
   startYardLine: number;
   endYardLine: number;
   yards: number;
+  driveSummary: string;
+  closeMoment: boolean;
 };
 
 function buildOffenseGameStats(
@@ -671,6 +687,7 @@ function buildOffenseGameStats(
   const totalReceptions = totals.totalReceptions;
   const totalCarries = totals.totalCarries;
   const interceptionsThrown = totals.interceptionsThrown;
+  const fumblesLost = totals.fumblesLost;
   const totalYards = totals.passingYards + totals.rushingYards;
 
   const qb = profile.qb;
@@ -690,6 +707,18 @@ function buildOffenseGameStats(
       qbStats.interceptions = interceptionsThrown;
     }
   }
+
+  const fumbleShares = distributeIntegerTotal(
+    [
+      ...(rb ? [{ id: rb.id, weight: 26 }] : []),
+      ...(rb2 ? [{ id: rb2.id, weight: 8 }] : []),
+      ...(qb ? [{ id: qb.id, weight: 16 }] : []),
+      ...(wr1 ? [{ id: wr1.id, weight: 7 }] : []),
+      ...(wr2 ? [{ id: wr2.id, weight: 5 }] : []),
+      ...(te ? [{ id: te.id, weight: 5 }] : []),
+    ],
+    fumblesLost
+  );
 
   const receptionShares = distributeIntegerTotal(
     [
@@ -784,6 +813,11 @@ function buildOffenseGameStats(
     if (statLine) statLine.rushTD = touchdownsForPlayer;
   }
 
+  for (const [playerId, playerFumblesLost] of fumbleShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.fumblesLost = playerFumblesLost;
+  }
+
   return {
     stats,
     passingYards,
@@ -791,6 +825,7 @@ function buildOffenseGameStats(
     passingTD: passTouchdowns,
     rushingTD: rushTouchdowns,
     interceptionsThrown,
+    fumblesLost,
     totalYards,
     totalCarries,
     totalReceptions,
@@ -819,6 +854,7 @@ function applyDefensiveGameStats(
         opponentOutput.totalReceptions * 0.75 +
         opponentOutput.redZoneTrips * 1.5 +
         opponentOutput.interceptionsThrown * 1.4 +
+        opponentOutput.fumblesLost * 1.2 +
         rand() * 7
     ),
     24,
@@ -834,6 +870,8 @@ function applyDefensiveGameStats(
     6
   );
   const totalInterceptions = opponentOutput.interceptionsThrown;
+  const totalFumbleRecoveries = opponentOutput.fumblesLost;
+  const totalForcedFumbles = opponentOutput.fumblesLost;
 
   const tackleShares = distributeIntegerTotal(
     [
@@ -879,6 +917,49 @@ function applyDefensiveGameStats(
     ],
     totalInterceptions
   );
+  const forcedFumbleShares = distributeIntegerTotal(
+    [
+      ...dls.slice(0, 3).map((player, index) => ({
+        id: player.id,
+        weight:
+          ([14, 10, 6][index] ?? 4) +
+          defensivePlayBonus(player) * 0.7 +
+          (profile.defenseStyle === "Pressure" ? 5 : 0),
+      })),
+      ...lbs.slice(0, 3).map((player, index) => ({
+        id: player.id,
+        weight:
+          ([15, 11, 7][index] ?? 4) +
+          defensivePlayBonus(player) * 0.65 +
+          (profile.defenseStyle === "Pressure" ? 3 : 0),
+      })),
+      ...secs.slice(0, 2).map((player, index) => ({
+        id: player.id,
+        weight:
+          ([8, 5][index] ?? 3) +
+          defensivePlayBonus(player) * 0.35 +
+          (profile.defenseStyle === "Coverage" ? 2 : 0),
+      })),
+    ],
+    totalForcedFumbles
+  );
+  const fumbleRecoveryShares = distributeIntegerTotal(
+    [
+      ...dls.slice(0, 3).map((player, index) => ({
+        id: player.id,
+        weight: ([10, 8, 5][index] ?? 3) + defensivePlayBonus(player) * 0.35,
+      })),
+      ...lbs.slice(0, 3).map((player, index) => ({
+        id: player.id,
+        weight: ([12, 9, 6][index] ?? 3) + defensivePlayBonus(player) * 0.4,
+      })),
+      ...secs.slice(0, 3).map((player, index) => ({
+        id: player.id,
+        weight: ([8, 6, 4][index] ?? 2) + defensivePlayBonus(player) * 0.35,
+      })),
+    ],
+    totalFumbleRecoveries
+  );
 
   for (const [playerId, tackles] of tackleShares) {
     const statLine = stats.get(playerId);
@@ -894,6 +975,16 @@ function applyDefensiveGameStats(
     const statLine = stats.get(playerId);
     if (statLine) statLine.interceptions += interceptions;
   }
+
+  for (const [playerId, forcedFumbles] of forcedFumbleShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.forcedFumbles = forcedFumbles;
+  }
+
+  for (const [playerId, fumbleRecoveries] of fumbleRecoveryShares) {
+    const statLine = stats.get(playerId);
+    if (statLine) statLine.fumbleRecoveries = fumbleRecoveries;
+  }
 }
 
 function sortPlayerStats(stats: Map<string, PlayerGameStats>) {
@@ -903,7 +994,10 @@ function sortPlayerStats(stats: Map<string, PlayerGameStats>) {
       a.receivingTD * 8 +
       a.rushTD * 8 +
       a.interceptions * (a.position === "QB" ? -5 : 10) +
+      a.fumblesLost * -6 +
       a.sacks * 8 +
+      a.forcedFumbles * 7 +
+      a.fumbleRecoveries * 7 +
       a.tackles * 0.75 +
       a.passingYards * 0.08 +
       a.receivingYards * 0.1 +
@@ -913,7 +1007,10 @@ function sortPlayerStats(stats: Map<string, PlayerGameStats>) {
       b.receivingTD * 8 +
       b.rushTD * 8 +
       b.interceptions * (b.position === "QB" ? -5 : 10) +
+      b.fumblesLost * -6 +
       b.sacks * 8 +
+      b.forcedFumbles * 7 +
+      b.fumbleRecoveries * 7 +
       b.tackles * 0.75 +
       b.passingYards * 0.08 +
       b.receivingYards * 0.1 +
@@ -953,9 +1050,18 @@ function fieldGoalText(scoringTeamName: string, yardage: number, quarter: number
   return `${tickerPrefix(quarter)} FG: ${scoringTeamName} settles for a ${yardage}-yarder after the red-zone door closes.`;
 }
 
-function turnoverText(defenseTeamName: string, preferPass: boolean, quarter: number) {
-  if (preferPass) {
+function turnoverText(
+  defenseTeamName: string,
+  turnoverType: "interception" | "fumble",
+  quarter: number,
+  stripSack: boolean
+) {
+  if (turnoverType === "interception") {
     return `${tickerPrefix(quarter)}: ${defenseTeamName} jumps the route and steals a drive before points can hit.`;
+  }
+
+  if (stripSack) {
+    return `${tickerPrefix(quarter)}: ${defenseTeamName} brings heat, strips the quarterback, and recovers the loose ball.`;
   }
 
   return `${tickerPrefix(quarter)}: ${defenseTeamName} punches the ball loose and flips possession in scoring range.`;
@@ -1019,6 +1125,7 @@ function emptyTotals(): TeamSimTotals {
     rushingTD: 0,
     fieldGoals: 0,
     interceptionsThrown: 0,
+    fumblesLost: 0,
     sacksAllowed: 0,
     totalCarries: 0,
     totalReceptions: 0,
@@ -1037,6 +1144,7 @@ function addTotals(base: TeamSimTotals, next: TeamSimTotals) {
     rushingTD: base.rushingTD + next.rushingTD,
     fieldGoals: base.fieldGoals + next.fieldGoals,
     interceptionsThrown: base.interceptionsThrown + next.interceptionsThrown,
+    fumblesLost: base.fumblesLost + next.fumblesLost,
     sacksAllowed: base.sacksAllowed + next.sacksAllowed,
     totalCarries: base.totalCarries + next.totalCarries,
     totalReceptions: base.totalReceptions + next.totalReceptions,
@@ -1116,8 +1224,11 @@ function localHighlight({
   isScore,
   possession,
   eventType,
+  eventDetail,
   startYardLine,
   endYardLine,
+  driveSummary,
+  closeMoment,
 }: Omit<LocalSimHighlight, "yards">) {
   const clampedStart = clamp(Math.round(startYardLine), 0, 100);
   const clampedEnd = clamp(Math.round(endYardLine), 0, 100);
@@ -1129,10 +1240,23 @@ function localHighlight({
     isScore,
     possession,
     eventType,
+    eventDetail,
     startYardLine: clampedStart,
     endYardLine: clampedEnd,
     yards: clampedEnd - clampedStart,
+    driveSummary,
+    closeMoment,
   };
+}
+
+function driveSummaryText(
+  playCount: number,
+  yards: number,
+  result: "TD" | "FG" | "INT" | "FUM" | "PUNT" | "BIG"
+) {
+  const yardText = yards >= 0 ? `+${yards}` : `${yards}`;
+  const playLabel = playCount === 1 ? "play" : "plays";
+  return `${playCount} ${playLabel}, ${yardText} yards, ${result}`;
 }
 
 function simulateQuarterTeamPoints(
@@ -1152,6 +1276,7 @@ function simulateQuarterTeamPoints(
   let rushingTD = 0;
   let fieldGoals = 0;
   let interceptionsThrown = 0;
+  let fumblesLost = 0;
   let sacksAllowed = 0;
   let totalCarries = 0;
   let totalReceptions = 0;
@@ -1162,6 +1287,8 @@ function simulateQuarterTeamPoints(
 
   for (let drive = 0; drive < drives; drive++) {
     const startYardLine = driveStartYardLine(rand, scoreDiff, quarter);
+    const playCount = clamp(Math.round(3 + rand() * 7), 2, 11);
+    const closeMoment = quarter >= 4 && Math.abs(scoreDiff) <= 8;
     const passEdge = offense.passAttack - defense.passDefense;
     const runEdge = offense.runAttack - defense.runDefense;
     const bigPlayEdge =
@@ -1224,6 +1351,7 @@ function simulateQuarterTeamPoints(
         turnoverPressure * 0.0025 +
         (preferPass ? 0.02 : 0) +
         (defense.defenseStyle === "Coverage" ? 0.015 : 0) +
+        (defense.defenseStyle === "Pressure" ? 0.012 : 0) +
         defenseVolatility * 0.45,
       0.02,
       0.28
@@ -1231,23 +1359,56 @@ function simulateQuarterTeamPoints(
 
     if (rand() < turnoverChance) {
       const turnoverYards = clamp(Math.round(6 + rand() * 18), 4, 20);
-      if (preferPass) {
+      const stripSackChance = clamp(
+        0.16 +
+          (defense.pressure - offense.ballSecurity) * 0.003 +
+          (defense.defenseStyle === "Pressure" ? 0.14 : 0) +
+          (preferPass ? 0.08 : 0),
+        0.08,
+        0.5
+      );
+      const fumbleChance = clamp(
+        (preferPass ? 0.18 : 0.56) +
+          (offense.offenseStyle === "Run Heavy" ? 0.12 : 0) +
+          (defense.defenseStyle === "Pressure" ? 0.08 : 0) -
+          (defense.defenseStyle === "Coverage" && preferPass ? 0.13 : 0) +
+          (defense.pressure - offense.ballSecurity) * 0.002,
+        0.1,
+        0.72
+      );
+      const turnoverType: "interception" | "fumble" =
+        rand() < fumbleChance ? "fumble" : "interception";
+      const stripSack = turnoverType === "fumble" && preferPass && rand() < stripSackChance;
+
+      if (turnoverType === "interception") {
         passingYards += turnoverYards;
         totalReceptions += 1;
         interceptionsThrown += 1;
       } else {
-        rushingYards += turnoverYards;
-        totalCarries += 2;
+        fumblesLost += 1;
+        if (stripSack) {
+          sacksAllowed += 1;
+          passingYards += clamp(Math.round(2 + rand() * 8), 0, 10);
+        } else if (preferPass) {
+          passingYards += turnoverYards;
+          totalReceptions += 1;
+        } else {
+          rushingYards += turnoverYards;
+          totalCarries += 2;
+        }
       }
       highlights.push(localHighlight({
-        text: turnoverText(defenseTeamName, preferPass, quarter),
+        text: turnoverText(defenseTeamName, turnoverType, quarter, stripSack),
         pointsA: 0,
         pointsB: 0,
         isScore: false,
         possession: side,
         eventType: "turnover",
+        eventDetail: turnoverType === "interception" ? "interception" : stripSack ? "stripSack" : "fumble",
         startYardLine,
         endYardLine: startYardLine + turnoverYards,
+        driveSummary: driveSummaryText(playCount, turnoverYards, turnoverType === "interception" ? "INT" : "FUM"),
+        closeMoment,
       }));
       continue;
     }
@@ -1278,6 +1439,8 @@ function simulateQuarterTeamPoints(
         eventType: "explosive",
         startYardLine,
         endYardLine: startYardLine + yardage,
+        driveSummary: driveSummaryText(Math.max(1, Math.round(playCount / 2)), yardage, "BIG"),
+        closeMoment,
       }));
     }
 
@@ -1305,6 +1468,8 @@ function simulateQuarterTeamPoints(
         eventType: "stop",
         startYardLine,
         endYardLine: startYardLine + stopYards,
+        driveSummary: driveSummaryText(playCount, stopYards, "PUNT"),
+        closeMoment,
       }));
       continue;
     }
@@ -1355,6 +1520,8 @@ function simulateQuarterTeamPoints(
           eventType: "touchdown",
           startYardLine,
           endYardLine: 100,
+          driveSummary: driveSummaryText(playCount, 100 - startYardLine, "TD"),
+          closeMoment,
         }));
       } else {
         points += 3;
@@ -1379,6 +1546,8 @@ function simulateQuarterTeamPoints(
           eventType: "fieldGoal",
           startYardLine,
           endYardLine: kickSpotYardLine,
+          driveSummary: driveSummaryText(playCount, kickSpotYardLine - startYardLine, "FG"),
+          closeMoment,
         }));
       }
       continue;
@@ -1402,6 +1571,8 @@ function simulateQuarterTeamPoints(
         eventType: "stop",
         startYardLine,
         endYardLine: startYardLine + emptyDriveYards,
+        driveSummary: driveSummaryText(playCount, emptyDriveYards, "PUNT"),
+        closeMoment,
       }));
     }
   }
@@ -1417,6 +1588,7 @@ function simulateQuarterTeamPoints(
       rushingTD,
       fieldGoals,
       interceptionsThrown,
+      fumblesLost,
       sacksAllowed,
       totalCarries,
       totalReceptions,
@@ -1508,9 +1680,12 @@ export function simulateGame(setup: GameSetup): SimResult {
         isScore: next.isScore,
         possession: next.possession,
         eventType: next.eventType,
+        eventDetail: next.eventDetail,
         startYardLine: next.startYardLine,
         endYardLine: next.endYardLine,
         yards: next.yards,
+        driveSummary: next.driveSummary,
+        closeMoment: next.closeMoment,
       });
       highlightIndex += 1;
     }
@@ -1527,6 +1702,8 @@ export function simulateGame(setup: GameSetup): SimResult {
         startYardLine: 25,
         endYardLine: 37,
         yards: 12,
+        driveSummary: "5 plays, +12 yards, PUNT",
+        closeMoment: i === 3 && Math.abs(runningA - runningB) <= 8,
       });
       quarterPlays.push(`Q${i + 1}: both defenses trade clean stops and keep the scoreboard frozen.`);
     }
