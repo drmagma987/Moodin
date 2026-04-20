@@ -359,6 +359,10 @@ function getGameWinner(room: RoomData, simResult: SimResult): "A" | "B" {
   return room.seed % 2 === 0 ? "A" : "B";
 }
 
+function sanitizeSimResult(simResult: SimResult): SimResult {
+  return JSON.parse(JSON.stringify(simResult)) as SimResult;
+}
+
 function getPlayerSide(room: RoomData, uid: string): "A" | "B" | null {
   if (room.playerAId === uid) return "A";
   if (room.playerBId === uid) return "B";
@@ -673,6 +677,7 @@ export async function saveTeamStrategy(
 
 export async function finalizeSeriesGame(roomId: string, simResult: SimResult) {
   const roomRef = doc(db, "rooms", roomId);
+  const cleanSimResult = sanitizeSimResult(simResult);
 
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(roomRef);
@@ -688,14 +693,14 @@ export async function finalizeSeriesGame(roomId: string, simResult: SimResult) {
       return;
     }
 
-    const winnerSide = getGameWinner(room, simResult);
+    const winnerSide = getGameWinner(room, cleanSimResult);
     const nextWinsA = room.seriesWinsA + (winnerSide === "A" ? 1 : 0);
     const nextWinsB = room.seriesWinsB + (winnerSide === "B" ? 1 : 0);
     const seriesWinner =
       nextWinsA >= 2 ? "A" : nextWinsB >= 2 ? "B" : null;
 
     transaction.update(roomRef, {
-      simResult,
+      simResult: cleanSimResult,
       status: "results",
       seriesWinsA: nextWinsA,
       seriesWinsB: nextWinsB,

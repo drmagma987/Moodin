@@ -1680,7 +1680,7 @@ export function simulateGame(setup: GameSetup): SimResult {
         isScore: next.isScore,
         possession: next.possession,
         eventType: next.eventType,
-        eventDetail: next.eventDetail,
+        ...(next.eventDetail ? { eventDetail: next.eventDetail } : {}),
         startYardLine: next.startYardLine,
         endYardLine: next.endYardLine,
         yards: next.yards,
