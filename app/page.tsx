@@ -85,45 +85,57 @@ export default function Home() {
               One player creates the room. The other joins with their code.
             </p>
 
-            <input
-              type="text"
-              placeholder="Your team name"
-              value={onlineTeamName}
-              onChange={(e) => setOnlineTeamName(e.target.value)}
-              className="w-full rounded-lg border-2 border-[#9aa6ba] px-3 py-3 text-base font-semibold outline-none transition focus:border-[#064789] focus:ring-2 focus:ring-[#064789]/20"
-            />
-
-            <button
-              onClick={handleCreateRoom}
-              disabled={loading}
-              className="w-full rounded-lg border-2 border-[#071229] bg-[#064789] px-4 py-3 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#073a70] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Create Room
-            </button>
-
-            <div className="flex items-center gap-3 py-1">
-              <div className="h-px flex-1 bg-[#9aa6ba]" />
-              <span className="text-xs font-black uppercase tracking-[0.24em] text-[#62708a]">
-                or
-              </span>
-              <div className="h-px flex-1 bg-[#9aa6ba]" />
+            <div className="space-y-3 rounded-xl border-2 border-[#d6deea] bg-[#fbfcfe] p-3 sm:p-4">
+              <div className="space-y-1">
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-[#064789]">
+                  Player Name
+                </p>
+                <p className="text-sm font-medium text-[#50607d]">
+                  Enter this first. It is your team name whether you create a room or join one.
+                </p>
+              </div>
+              <input
+                type="text"
+                placeholder="Your team name"
+                value={onlineTeamName}
+                onChange={(e) => setOnlineTeamName(e.target.value)}
+                className="w-full rounded-lg border-2 border-[#9aa6ba] px-3 py-3 text-base font-semibold outline-none transition focus:border-[#064789] focus:ring-2 focus:ring-[#064789]/20"
+              />
             </div>
 
-            <input
-              type="text"
-              placeholder="Enter room code"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              className="w-full rounded-lg border-2 border-[#9aa6ba] px-3 py-3 text-base font-black uppercase tracking-[0.2em] outline-none transition focus:border-[#c8102e] focus:ring-2 focus:ring-[#c8102e]/20"
-            />
+            <div className="space-y-4 pt-2">
+              <button
+                onClick={handleCreateRoom}
+                disabled={loading}
+                className="w-full rounded-lg border-2 border-[#071229] bg-[#064789] px-4 py-3 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#073a70] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Create Room
+              </button>
 
-            <button
-              onClick={handleJoinRoom}
-              disabled={loading}
-              className="w-full rounded-lg border-2 border-[#071229] bg-[#c8102e] px-4 py-3 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#a70c25] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Join Room
-            </button>
+              <div className="flex items-center gap-3 py-1">
+                <div className="h-px flex-1 bg-[#9aa6ba]" />
+                <span className="text-xs font-black uppercase tracking-[0.24em] text-[#62708a]">
+                  or
+                </span>
+                <div className="h-px flex-1 bg-[#9aa6ba]" />
+              </div>
+
+              <input
+                type="text"
+                placeholder="Enter room code"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                className="w-full rounded-lg border-2 border-[#9aa6ba] px-3 py-3 text-base font-black uppercase tracking-[0.2em] outline-none transition focus:border-[#c8102e] focus:ring-2 focus:ring-[#c8102e]/20"
+              />
+
+              <button
+                onClick={handleJoinRoom}
+                disabled={loading}
+                className="w-full rounded-lg border-2 border-[#071229] bg-[#c8102e] px-4 py-3 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#a70c25] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Join Room
+              </button>
+            </div>
 
             {error && (
               <p className="border-l-4 border-red-600 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">

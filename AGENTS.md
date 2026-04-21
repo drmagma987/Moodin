@@ -397,6 +397,12 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - Fixed punt-drive setup so continued drives visibly earn conversions and final punt setup plays cannot accidentally reset down/distance.
   - The harness found zero remaining down/distance mismatches, possession skips, punt handoff mismatches, or fourth-down continuation errors.
   - Verified with `npm run lint` and `npx tsc --noEmit`.
+- Polished the results and landing-page UX:
+  - Reduced play-arrow marker size on mobile while keeping the desktop arrowhead look intact.
+  - Field-goal setup downs now use varied short gains/losses instead of repeated zero-yard placeholders before the kick.
+  - Live win probability is now always rendered as whole-number percentages within a 1-99 style range.
+  - Separated the landing-page player-name entry from the create/join room actions so it reads clearly as required for both paths.
+  - Verified with `npm run lint` and `npx tsc --noEmit`.
 
 ## Ongoing Maintenance Notes
 

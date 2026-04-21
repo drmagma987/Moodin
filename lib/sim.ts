@@ -1535,6 +1535,60 @@ function buildDriveHighlights({
     return `${shortPlayerName(defender)} fills the lane and keeps it short.`;
   }
 
+  function buildSetupPlay(maxYards: number): DrivePlay {
+    const passPlay = rand() < (preferPass ? 0.58 : 0.34);
+    const kind: PlayKind = passPlay ? "pass" : "run";
+    const absoluteCap = Math.max(0, maxYards);
+    const ceiling = Math.min(absoluteCap, currentDown >= 3 ? 4 : 6);
+    const allowLoss = currentDown <= 2 || rand() < 0.3;
+    const low = allowLoss ? -3 : 0;
+    const high = Math.max(low, ceiling);
+    let yards = clamp(Math.round(low + rand() * (high - low)), low, high);
+
+    if (currentDown >= 3 && yards >= yardsToGo) {
+      yards = Math.max(low, yardsToGo - 1);
+    }
+
+    if (passPlay && yards <= -2 && rand() < 0.45) {
+      const defender = chooseDefender(defense, rand, "sack");
+      return {
+        kind: "sack",
+        yards,
+        eventType: "stop",
+        text: playText({
+          offense,
+          defense,
+          yards,
+          kind: "sack",
+          defenderName: defender,
+        }),
+      };
+    }
+
+    if (yards === 0 && rand() < 0.35) {
+      return {
+        kind,
+        yards,
+        eventType: "stop",
+        text: setupStopText(currentDown),
+      };
+    }
+
+    return {
+      kind,
+      yards,
+      eventType: "stop",
+      text: playText({
+        offense,
+        defense,
+        yards,
+        kind,
+        targetName: kind === "pass" ? choosePassTarget(offense, rand) : undefined,
+        runnerName: kind === "run" ? chooseRunner(offense, rand) : undefined,
+      }),
+    };
+  }
+
   function pushPlay(play: DrivePlay, isFinalPlay: boolean) {
     const finalKickPlay = isFinalPlay && (result === "FG" || result === "MISS");
     const finalPuntSetup = isFinalPlay && result === "PUNT";
@@ -1606,12 +1660,7 @@ function buildDriveHighlights({
     }
 
     while ((finalKickPlay || finalFourthDown) && currentDown < 4) {
-      pushPlay({
-        kind: preferPass ? "pass" : "run",
-        yards: 0,
-        eventType: "stop",
-        text: setupStopText(currentDown),
-      }, false);
+      pushPlay(buildSetupPlay(Math.max(0, yardsToGo - 1)), false);
     }
 
     while (finalPuntSetup && currentDown < 3) {

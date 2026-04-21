@@ -468,10 +468,10 @@ function estimateWinProbabilityA(
   const gameProgress = clamp(progressRatio, (currentQuarter - 1) / 4, 0.98);
   const leverage = 1.05 + gameProgress * 3.45;
   const possessionBump = possession === "A" ? 1.5 : possession === "B" ? -1.5 : 0;
-  const liveCap = 68 + gameProgress * 28;
-  const liveFloor = 100 - liveCap;
+  const liveCap = Math.round(68 + gameProgress * 28);
+  const liveFloor = Math.round(100 - liveCap);
 
-  return clamp(Math.round(50 + scoreDiff * leverage + possessionBump), liveFloor, liveCap);
+  return Math.round(clamp(Math.round(50 + scoreDiff * leverage + possessionBump), liveFloor, liveCap));
 }
 
 function possessionLabel(possession: "A" | "B", teamAName: string, teamBName: string) {
@@ -536,6 +536,21 @@ function FieldDriveView({
   const possessionArrow = highlight?.possession === "A" ? ">" : "<";
   const arrowMarkerId = highlight ? `play-arrow-${highlight.id.replace(/[^a-zA-Z0-9_-]/g, "-")}` : "play-arrow";
   const liveDownDistance = downDistanceWithSpot(highlight, teamAName, teamBName);
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 640px)");
+    const syncViewport = () => {
+      setIsCompactViewport(mediaQuery.matches);
+    };
+
+    syncViewport();
+    mediaQuery.addEventListener("change", syncViewport);
+
+    return () => {
+      mediaQuery.removeEventListener("change", syncViewport);
+    };
+  }, []);
 
   useEffect(() => {
     let frame = 0;
@@ -673,11 +688,11 @@ function FieldDriveView({
             <defs>
               <marker
                 id={arrowMarkerId}
-                markerHeight="4"
-                markerWidth="5"
+                markerHeight={isCompactViewport ? "2.8" : "4"}
+                markerWidth={isCompactViewport ? "3.4" : "5"}
                 orient="auto"
-                refX="4.5"
-                refY="2"
+                refX={isCompactViewport ? "3.1" : "4.5"}
+                refY={isCompactViewport ? "1.4" : "2"}
                 viewBox="0 0 5 4"
               >
                 <path d="M 0 0 L 5 2 L 0 4 z" fill={arrowColor} />
