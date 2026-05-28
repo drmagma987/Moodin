@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createRoom, joinRoom } from "@/lib/room";
@@ -143,6 +144,15 @@ export default function Home() {
               </p>
             )}
           </div>
+        </div>
+
+        <div className="mx-auto w-full max-w-xl">
+          <Link
+            href="/bachelor-party-blitz"
+            className="flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#071229] bg-[#071229] px-4 py-4 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#0f2040]"
+          >
+            🎉 Jimmy&apos;s Bachelor Party Blitz
+          </Link>
         </div>
       </div>
     </main>

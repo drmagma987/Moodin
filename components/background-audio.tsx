@@ -12,6 +12,7 @@ export function BackgroundAudio() {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem("moodinMusicMuted") !== "false";
   });
+  const onGamePage = pathname === "/bachelor-party-blitz";
   const onIntroScreen = pathname === "/";
 
   useEffect(() => {
@@ -20,19 +21,19 @@ export function BackgroundAudio() {
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || onGamePage) return;
 
     audio.muted = muted;
     audio.volume = 0.45;
 
-    if (muted) {
-      return;
-    }
+    if (muted) return;
 
     void audio.play().catch(() => {
       // Playback can still be blocked until the user interacts again.
     });
-  }, [muted]);
+  }, [muted, onGamePage]);
+
+  if (onGamePage) return null;
 
   return (
     <>
