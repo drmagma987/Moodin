@@ -13,7 +13,7 @@ const CATCHER_BOTTOM = 90;     // px from canvas bottom to catcher center
 const CATCHER_SPEED = 310;     // px/s
 const HIT_SLOP = 1.22;         // hitbox is 22% larger than visual for forgiving mobile feel
 
-const BASE_FALL_SPEED = 130;   // px/s at game start
+const BASE_FALL_SPEED = 78;    // px/s at game start (~40% slower than original)
 const SPEED_RAMP = 0.013;      // speed multiplier growth per second
 const BASE_SPAWN_INTERVAL = 1.3;
 const MIN_SPAWN_INTERVAL = 0.38;
@@ -138,8 +138,7 @@ interface GS {
   bill: boolean;
   billTimer: number;
   jimmyNoTimer: number;
-  leftDown: boolean;
-  rightDown: boolean;
+  targetX: number;            // drag-to-follow: finger X position
   W: number;
   H: number;
   lastTs: number;
@@ -147,13 +146,13 @@ interface GS {
 
 function makeGS(W: number, H: number): GS {
   return {
-    score: 0, lives: 3, bagMeter: 1, speed: 1, elapsed: 0,
+    score: 0, lives: 6, bagMeter: 1, speed: 1, elapsed: 0,
     objs: [], nextId: 0, spawnTimer: 1,
     cx: W / 2, cy: H - CATCHER_BOTTOM,
     bachelor: false, bachelorTimer: 0,
     bill: false, billTimer: 0,
     jimmyNoTimer: 0,
-    leftDown: false, rightDown: false,
+    targetX: W / 2,
     W, H, lastTs: 0,
   };
 }
@@ -250,10 +249,12 @@ function stepGS(gs: GS, dt: number, onGameOver: (score: number) => void) {
   gs.elapsed += dt;
   gs.speed = 1 + gs.elapsed * SPEED_RAMP;
 
-  // Catcher movement — chaotic speed in bachelor mode
-  const cs = gs.bachelor ? CATCHER_SPEED * (0.55 + Math.random() * 0.9) : CATCHER_SPEED;
-  if (gs.leftDown)  gs.cx -= cs * dt;
-  if (gs.rightDown) gs.cx += cs * dt;
+  // Catcher movement — drag-to-follow; bachelor mode adds lag and jitter
+  if (gs.bachelor) {
+    gs.cx += (gs.targetX - gs.cx) * Math.min(1, 5 * dt) + (Math.random() - 0.5) * CATCHER_SPEED * 0.5 * dt;
+  } else {
+    gs.cx = gs.targetX;
+  }
   gs.cx = Math.max(CATCHER_W / 2, Math.min(gs.W - CATCHER_W / 2, gs.cx));
 
   // Mode timers
@@ -328,25 +329,38 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
   ctx.closePath();
 }
 
+function borderColor(catchType: CatchType): string | null {
+  if (catchType === "catch" || catchType === "bill_catch") return "#22c55e";
+  if (catchType === "dodge" || catchType === "bill_dodge") return "#ef4444";
+  return null;
+}
+
 function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean) {
+  const border = borderColor(o.catchType);
+  const x = o.x - OBJ_SIZE / 2;
+  const y = o.y - OBJ_SIZE / 2;
   const img = imgCache.get(o.type);
+
   if (img) {
     if (bachelor) { ctx.shadowColor = o.color; ctx.shadowBlur = 20; }
-    ctx.drawImage(img, o.x - OBJ_SIZE / 2, o.y - OBJ_SIZE / 2, OBJ_SIZE, OBJ_SIZE);
+    ctx.drawImage(img, x, y, OBJ_SIZE, OBJ_SIZE);
     ctx.shadowBlur = 0;
+    if (border) {
+      rr(ctx, x, y, OBJ_SIZE, OBJ_SIZE, 12);
+      ctx.strokeStyle = border;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
     return;
   }
 
   // Colored placeholder — used until a real PNG is loaded
-  const x = o.x - OBJ_SIZE / 2;
-  const y = o.y - OBJ_SIZE / 2;
-
   if (bachelor) { ctx.shadowColor = o.color; ctx.shadowBlur = 20; }
   rr(ctx, x, y, OBJ_SIZE, OBJ_SIZE, 12);
   ctx.fillStyle = o.color;
   ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.45)";
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = border ?? "rgba(255,255,255,0.45)";
+  ctx.lineWidth = border ? 4 : 2.5;
   ctx.stroke();
   ctx.shadowBlur = 0;
 
@@ -416,10 +430,10 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
   const bmDisplay = Number.isInteger(gs.bagMeter) ? `${gs.bagMeter}x` : `${gs.bagMeter.toFixed(1)}x`;
   ctx.fillText(bmDisplay, 110, 54);
 
-  // Lives as beer mugs
-  ctx.font = "22px serif";
+  // Lives as beer mugs — smaller to fit 6
+  ctx.font = "17px serif";
   ctx.textAlign = "right";
-  for (let i = 0; i < gs.lives; i++) ctx.fillText("🍺", W - 14 - i * 34, 26);
+  for (let i = 0; i < gs.lives; i++) ctx.fillText("🍺", W - 10 - i * 26, 26);
 
   // Mode labels (center of HUD)
   if (bill) {
@@ -606,13 +620,7 @@ export function BachelorPartyGame() {
       e.preventDefault();
       const gs = gsRef.current;
       if (!gs) return;
-      gs.leftDown = false;
-      gs.rightDown = false;
-      for (let i = 0; i < e.touches.length; i++) {
-        const t = e.touches[i];
-        if (t.clientX < gs.W / 2) gs.leftDown = true;
-        else gs.rightDown = true;
-      }
+      if (e.touches.length > 0) gs.targetX = e.touches[0].clientX;
     };
 
     canvas.addEventListener("touchstart", sync, { passive: false });
@@ -693,6 +701,10 @@ export function BachelorPartyGame() {
               <p className="text-5xl font-black leading-none text-white">
                 JIMMY&apos;S<br />BACHELOR<br />PARTY BLITZ
               </p>
+              <div className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 space-y-1 text-sm font-bold">
+                <p className="text-green-400">🟢 catch green items</p>
+                <p className="text-red-400">🔴 dodge red items</p>
+              </div>
               <button
                 onClick={e => { e.stopPropagation(); startGame(); }}
                 className="w-full rounded-2xl border-4 border-white bg-[#c8102e] py-5 text-2xl font-black uppercase tracking-widest text-white"
