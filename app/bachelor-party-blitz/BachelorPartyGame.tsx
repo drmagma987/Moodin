@@ -557,15 +557,12 @@ export function BachelorPartyGame() {
     return () => clearTimeout(t);
   }, [screen, splashIdx]);
 
-  // Prevent default mobile scroll/zoom on the whole page
+  // Prevent scroll during gameplay — touchAction:none on the wrapper handles zoom/tap-delay,
+  // but touchmove still needs explicit preventDefault to block overscroll on iOS.
   useEffect(() => {
     const prevent = (e: TouchEvent) => e.preventDefault();
     document.addEventListener("touchmove", prevent, { passive: false });
-    document.addEventListener("touchstart", prevent, { passive: false });
-    return () => {
-      document.removeEventListener("touchmove", prevent);
-      document.removeEventListener("touchstart", prevent);
-    };
+    return () => document.removeEventListener("touchmove", prevent);
   }, []);
 
   const handleGameOver = useCallback((score: number) => {
