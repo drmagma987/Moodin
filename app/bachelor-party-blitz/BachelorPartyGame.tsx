@@ -495,9 +495,9 @@ type SplashCredit =
   | { type: "image"; src: string; alt: string };
 
 const SPLASH_CREDITS: SplashCredit[] = [
-  { type: "image", src: "/bachelor-party-blitz/zimmys-head.png", alt: "Sponsored by Zimmy's Head" },
-  { type: "image", src: "/bachelor-party-blitz/vj-spice.png", alt: "VJ Spice Productions" },
-  { type: "image", src: "/bachelor-party-blitz/br-studios.png", alt: "BR Studios" },
+  { type: "image", src: "/bachelor-party-blitz/zimmy.png",    alt: "Sponsored by Zimmy's Head" },
+  { type: "image", src: "/bachelor-party-blitz/vjspice.png",  alt: "VJ Spice Productions" },
+  { type: "image", src: "/bachelor-party-blitz/brstudios.png", alt: "BR Studios" },
 ];
 
 // Edit this line to change the game-over roast
