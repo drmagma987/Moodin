@@ -735,7 +735,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const [screen, setScreen] = useState<Screen>("splash");
   const [splashIdx, setSplashIdx] = useState(0);
   const [finalScore, setFinalScore] = useState(0);
-  const [playerName, setPlayerName] = useState("I LUV JIMMY");
+  const [playerName, setPlayerName] = useState("");
   const [personalBest, setPersonalBest] = useState(() => {
     if (typeof window === "undefined") return 0;
     return parseInt(localStorage.getItem("blitz_best") || "0", 10);
@@ -2388,13 +2388,37 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                 <button
                   type="button"
                   onClick={handleAudioToggle}
-                  className={`w-full rounded-2xl border px-4 py-2.5 text-[0.62rem] uppercase tracking-[0.22em] sm:py-3 sm:text-[0.78rem] ${
+                  aria-pressed={audioEnabled}
+                  className={`w-full rounded-2xl border px-4 py-2.5 text-left uppercase sm:py-3 ${
                     audioEnabled
                       ? "border-emerald-400 bg-emerald-500/15 text-emerald-300"
                       : "border-slate-600 bg-slate-900/85 text-slate-300"
                   }`}
                 >
-                  Slipknot: {audioEnabled ? "Yes" : "No"}
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[0.62rem] tracking-[0.22em] sm:text-[0.78rem]">
+                      Slipknot Mode
+                    </span>
+                    <span
+                      className={`relative inline-flex h-8 w-[7.5rem] items-center rounded-full border px-1 transition-colors ${
+                        audioEnabled
+                          ? "border-emerald-300 bg-emerald-400/20"
+                          : "border-slate-500 bg-slate-950/80"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 h-6 w-[3.3rem] rounded-full transition-transform ${
+                          audioEnabled
+                            ? "translate-x-[3.35rem] bg-emerald-400"
+                            : "translate-x-0 bg-slate-500"
+                        }`}
+                      />
+                      <span className="relative z-10 flex w-full items-center justify-between px-2 text-[0.58rem] font-black tracking-[0.18em] text-white sm:text-[0.68rem]">
+                        <span>No</span>
+                        <span>Yes</span>
+                      </span>
+                    </span>
+                  </div>
                 </button>
               </div>
             </div>
@@ -2456,9 +2480,13 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                     maxLength={11}
                     value={playerName}
                     onChange={e => setPlayerName(e.target.value.toUpperCase().slice(0, 11))}
-                    className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-3 text-center text-base font-black uppercase tracking-[0.14em] text-white outline-none focus:border-yellow-400 sm:py-4 sm:text-2xl"
+                    placeholder="___ ___ ___"
+                    className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-2 text-center text-[0.95rem] font-black uppercase tracking-[0.14em] text-white outline-none placeholder:text-slate-500 focus:border-yellow-400 sm:py-2.5 sm:text-[1.45rem]"
                     style={{ touchAction: "auto" }}
                   />
+                  <p className="text-[0.6rem] uppercase tracking-[0.18em] text-slate-500 sm:text-[0.68rem]">
+                    Type your name for the leaderboard
+                  </p>
                 </div>
 
                 <button
