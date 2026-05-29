@@ -2083,7 +2083,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       {/* ── SPLASH ──────────────────────────────────────────────────────────── */}
       {screen === "splash" && (
         <div
-          className="absolute inset-0 flex flex-col items-center justify-center bg-black/96"
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/96"
           style={{ touchAction: "manipulation" }}
           onPointerUp={splashIdx < SPLASH_CREDITS.length ? handleSplashAdvance : undefined}
         >
