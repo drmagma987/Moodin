@@ -1,6 +1,20 @@
+import type { Metadata } from "next";
 import Script from "next/script";
 
 import { BachelorPartyGame } from "./BachelorPartyGame";
+
+export const metadata: Metadata = {
+  title: "Jimmy's Bachelor Blitz",
+  description: "Arcade chaos from Jimmy's bachelor party.",
+  openGraph: {
+    title: "Jimmy's Bachelor Blitz",
+    description: "Arcade chaos from Jimmy's bachelor party.",
+  },
+  twitter: {
+    title: "Jimmy's Bachelor Blitz",
+    description: "Arcade chaos from Jimmy's bachelor party.",
+  },
+};
 
 interface BachelorPartyBlitzPageProps {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
