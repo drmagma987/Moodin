@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 
 declare global {
@@ -70,7 +71,7 @@ const SPAWN_RAMP = 0.009;
 
 const BACHELOR_DURATION = 10;  // seconds
 const SPLASH_CARD_DURATION_MS = 2800;
-const BR_STUDIOS_CARD_SRC = "/bachelor-party-blitz/brstudios.png";
+const BR_STUDIOS_CARD_SRC = "/bachelor-party-blitz/brstudios-intro.jpg";
 const BACHELOR_BLITZ_FONT = '"Press Start 2P", "SF Pro Display", "Segoe UI", sans-serif';
 const BACKGROUND_MUSIC_PLACEHOLDER = "/music/background.mp3";
 const BILL_SPAWN_CHANCE = 0.008; // Rare trigger target: roughly once every 2-3 minutes
@@ -760,10 +761,12 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   // Prevent scroll during gameplay — touchAction:none on the wrapper handles zoom/tap-delay,
   // but touchmove still needs explicit preventDefault to block overscroll on iOS.
   useEffect(() => {
+    if (screen !== "playing") return;
+
     const prevent = (e: TouchEvent) => e.preventDefault();
     document.addEventListener("touchmove", prevent, { passive: false });
     return () => document.removeEventListener("touchmove", prevent);
-  }, []);
+  }, [screen]);
 
   const handleGameOver = useCallback((score: number) => {
     const prev = parseInt(localStorage.getItem("blitz_best") || "0", 10);
@@ -1229,6 +1232,11 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     setSplashIdx(SPLASH_CREDITS.length);
   }, []);
 
+  const handleSkipIntroPointer = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setSplashIdx(SPLASH_CREDITS.length);
+  }, []);
+
   const handleAudioToggle = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
 
@@ -1280,6 +1288,11 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     if (screen !== "splash") return;
     setSplashIdx(index => Math.min(index + 1, SPLASH_CREDITS.length));
   }, [screen]);
+
+  const handleSplashAdvance = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
+    event?.stopPropagation();
+    advanceSplash();
+  }, [advanceSplash]);
 
   const isNewBest = finalScore > 0 && finalScore >= personalBest;
 
@@ -1702,7 +1715,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       ref={wrapperRef}
       className="fixed inset-0 overflow-hidden bg-[#0f172a]"
       style={{
-        touchAction: "none",
+        touchAction: screen === "playing" ? "none" : "manipulation",
         userSelect: "none",
         WebkitUserSelect: "none",
         fontFamily: BACHELOR_BLITZ_FONT,
@@ -2071,7 +2084,8 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       {screen === "splash" && (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center bg-black/96"
-          onClick={splashIdx < SPLASH_CREDITS.length ? advanceSplash : undefined}
+          style={{ touchAction: "manipulation" }}
+          onPointerUp={splashIdx < SPLASH_CREDITS.length ? handleSplashAdvance : undefined}
         >
           {splashIdx < SPLASH_CREDITS.length ? (
             (() => {
@@ -2082,6 +2096,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   <button
                     type="button"
                     onClick={skipIntro}
+                    onPointerUp={handleSkipIntroPointer}
                     className="absolute right-4 top-4 z-10 rounded-full border border-white/15 bg-black/40 px-4 py-2 text-[0.62rem] uppercase tracking-[0.22em] text-slate-200"
                     style={{ touchAction: "auto" }}
                   >
@@ -2104,6 +2119,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   <button
                     type="button"
                     onClick={skipIntro}
+                    onPointerUp={handleSkipIntroPointer}
                     className="mb-6 rounded-full border border-white/15 bg-black/40 px-4 py-2 text-[0.62rem] uppercase tracking-[0.22em] text-slate-200"
                     style={{ touchAction: "auto" }}
                   >
@@ -2123,7 +2139,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
             })()
           ) : (
             // Title card
-            <div className="pointer-events-auto w-full max-w-lg -translate-y-4 px-4 text-center sm:translate-y-0 sm:px-5">
+            <div className="pointer-events-auto w-full max-w-lg -translate-y-2 px-4 text-center sm:translate-y-0 sm:px-5">
               <div className="space-y-3 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-5 py-5 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:space-y-5 sm:px-6 sm:py-6">
                 <p className="text-[1.7rem] leading-[1.28] text-white sm:text-[2.25rem]">
                   JIMMY&apos;S
