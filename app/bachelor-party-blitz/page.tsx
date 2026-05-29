@@ -9,10 +9,18 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Jimmy's Bachelor Blitz",
     description: "Arcade chaos from Jimmy's bachelor party.",
+    images: [
+      {
+        url: "/bachelor-party-blitz/share-preview.jpg",
+        alt: "Jimmy's Bachelor Blitz share preview",
+      },
+    ],
   },
   twitter: {
+    card: "summary_large_image",
     title: "Jimmy's Bachelor Blitz",
     description: "Arcade chaos from Jimmy's bachelor party.",
+    images: ["/bachelor-party-blitz/share-preview.jpg"],
   },
 };
 

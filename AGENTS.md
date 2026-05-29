@@ -449,6 +449,9 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
   - the Bill Mode wine-glass intro visual is larger
   - the game-over screen now crops the end photo from the bottom and tightens spacing so the name input appears sooner on mobile
   - Verified with `npm run lint` and `npx tsc --noEmit` (`lint` still has the existing single-page font warning on the bachelor-party route).
+- Updated the Bachelor Party route share preview:
+  - copied the supplied portrait to `public/bachelor-party-blitz/share-preview.jpg`
+  - wired the route Open Graph and Twitter metadata to use that image for iMessage/social link previews
 
 Before final responses after code changes, usually run:
 
