@@ -1,6 +1,49 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+declare global {
+  interface Window {
+    gsap?: {
+      fromTo: (...args: unknown[]) => { kill?: () => void } | undefined;
+      to: (...args: unknown[]) => { kill?: () => void } | undefined;
+      set: (...args: unknown[]) => void;
+      timeline: (...args: unknown[]) => {
+        fromTo: (...args: unknown[]) => unknown;
+        to: (...args: unknown[]) => unknown;
+        set: (...args: unknown[]) => unknown;
+        kill?: () => void;
+      };
+    };
+    Splitting?: (options?: { target?: Element | string; by?: string }) => unknown;
+    particlesJS?: (tagId: string, params: Record<string, unknown>) => void;
+    Howl?: new (options: {
+      src: string[];
+      loop?: boolean;
+      volume?: number;
+      html5?: boolean;
+      preload?: boolean;
+      onloaderror?: (id: number, error: unknown) => void;
+      onplayerror?: (id: number, error: unknown) => void;
+    }) => {
+      play: () => number | undefined;
+      pause: () => void;
+      stop: () => void;
+      unload: () => void;
+      playing: () => boolean;
+    };
+    pJSDom?: Array<{
+      pJS?: {
+        fn?: {
+          vendors?: {
+            destroypJS?: () => void;
+          };
+        };
+      };
+    }>;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TUNING CONSTANTS
@@ -20,7 +63,31 @@ const MIN_SPAWN_INTERVAL = 0.38;
 const SPAWN_RAMP = 0.009;
 
 const BACHELOR_DURATION = 10;  // seconds
-const BILL_MODE_DURATION = 6;  // seconds
+const SPLASH_CARD_DURATION_MS = 2800;
+const BR_STUDIOS_CARD_SRC = "/bachelor-party-blitz/brstudios.png";
+const BACHELOR_BLITZ_FONT = '"Press Start 2P", "SF Pro Display", "Segoe UI", sans-serif';
+const BACKGROUND_MUSIC_PLACEHOLDER = "/music/background.mp3";
+const BILL_SPAWN_CHANCE = 0.008; // Rare trigger target: roughly once every 2-3 minutes
+const MUSHROOM_SPAWN_CHANCE = 0.05;
+const DODGE_SPAWN_CHANCE = 0.35;
+const KATIE_WARNING_DURATION = 1.8;
+const BACHELOR_BANNER_DURATION_MS = 1600;
+const PARTICLES_CONTAINER_ID = "bachelor-mode-particles";
+const BILL_DIALOGUE_DURATION_MS = 2000;
+const BILL_FIRST_BEER_DURATION_MS = 1100;
+const BILL_RAPID_BEER_DURATION_MS = 180;
+const BILL_DOOR_DURATION_MS = 4000;
+const BILL_DOOR_TARGET_TAPS = 25;
+const BILL_RESULT_HOLD_MS = 1200;
+const BILL_BLACKOUT_MIN_MS = 650;
+const BILL_BLACKOUT_MAX_MS = 1800;
+const BILL_BLACKOUT_FLASH_MS = 110;
+
+const BILL_DIALOGUES = [
+  "...",
+  "Uhhh no. That's for chicks.",
+  "Thereeeee ya go.",
+] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // IMAGE CACHE
@@ -36,14 +103,8 @@ const IMAGE_NAMES: string[] = [
   "payment",    // ✅ provided
   "bill",       // ✅ provided
   "katie",      // ✅ provided
-  "cass",       // ✅ provided
   "dumbbell",   // ✅ provided
   "mushroom",   // ✅ provided
-  "beer_b",     // ✅ provided
-  "dumpling_b", // ✅ provided
-  "pizza_b",    // ✅ provided
-  "toilet_b",   // ✅ provided
-  "lock_b",     // ✅ provided
   "jimmy",      // ✅ provided — catcher face
 ];
 
@@ -71,21 +132,21 @@ interface ObjDef {
   color: string;
   behavior: Behavior;
   catchType: CatchType;
+  speedMultiplier?: number;
 }
 
 // ── NORMAL MODE: catch these ─────────────────────────────────────────────────
 const CATCH_POOL: ObjDef[] = [
-  { type: "money",    emoji: "💰", label: "MONEY",   color: "#16a34a", behavior: "straight",     catchType: "catch" },
-  { type: "dreidel",  emoji: "🕎", label: "DREIDEL", color: "#7c3aed", behavior: "straight",     catchType: "catch" },
-  { type: "goth",     emoji: "🖤", label: "GOTH",    color: "#334155", behavior: "straight",     catchType: "catch" },
+  { type: "money",    emoji: "💰", label: "MONEY",   color: "#16a34a", behavior: "straight", catchType: "catch" },
+  { type: "dreidel",  emoji: "🕎", label: "DREIDEL", color: "#7c3aed", behavior: "straight", catchType: "catch" },
+  { type: "goth",     emoji: "🖤", label: "GOTH",    color: "#334155", behavior: "straight", catchType: "catch" },
 ];
 
 // ── NORMAL MODE: dodge these ─────────────────────────────────────────────────
 const DODGE_POOL: ObjDef[] = [
-  { type: "katie",    emoji: "💃", label: "KATIE",   color: "#ea580c", behavior: "erratic",      catchType: "dodge" },
-  { type: "cass",     emoji: "⚡", label: "CASS",    color: "#ca8a04", behavior: "accelerating", catchType: "dodge" },
-  { type: "dumbbell", emoji: "🏋️", label: "DUMBBELL",color: "#475569", behavior: "straight",     catchType: "dodge" },
-  { type: "payment",  emoji: "💳", label: "PAYMENT", color: "#dc2626", behavior: "straight",     catchType: "dodge" },
+  { type: "katie",    emoji: "💃", label: "KATIE",    color: "#ea580c", behavior: "erratic", catchType: "dodge", speedMultiplier: 1.85 },
+  { type: "dumbbell", emoji: "🏋️", label: "DUMBBELL", color: "#475569", behavior: "straight", catchType: "dodge" },
+  { type: "payment",  emoji: "💳", label: "PAYMENT",  color: "#dc2626", behavior: "straight", catchType: "dodge" },
 ];
 
 // ── SPECIALS: neutral objects that trigger a game mode when caught ────────────
@@ -97,18 +158,6 @@ const MUSHROOM_DEF: ObjDef = {
 const BILL_DEF: ObjDef = {
   type: "bill", emoji: "🧾", label: "BILL", color: "#f59e0b", behavior: "straight", catchType: "bill_trigger",
 };
-
-// ── BILL MODE: catch food, dodge the rest ────────────────────────────────────
-const BILL_CATCH_POOL: ObjDef[] = [
-  { type: "beer_b",     emoji: "🍺", label: "BEER",    color: "#d97706", behavior: "straight", catchType: "bill_catch" },
-  { type: "dumpling_b", emoji: "🥟", label: "DUMPLING", color: "#ea580c", behavior: "straight", catchType: "bill_catch" },
-  { type: "pizza_b",    emoji: "🍕", label: "PIZZA",   color: "#b91c1c", behavior: "straight", catchType: "bill_catch" },
-];
-
-const BILL_DODGE_POOL: ObjDef[] = [
-  { type: "toilet_b", emoji: "🚽", label: "TOILET",  color: "#94a3b8", behavior: "straight", catchType: "bill_dodge" },
-  { type: "lock_b",   emoji: "🔒", label: "LOCKED",  color: "#334155", behavior: "erratic",  catchType: "bill_dodge" },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GAME STATE — all mutable sim data lives in a ref, never in React state
@@ -136,12 +185,18 @@ interface GS {
   bachelor: boolean;
   bachelorTimer: number;
   bill: boolean;
-  billTimer: number;
   jimmyNoTimer: number;
   targetX: number;            // drag-to-follow: finger X position
   W: number;
   H: number;
   lastTs: number;
+}
+
+interface GameFx {
+  onCatchSuccess: (modeActive: boolean) => void;
+  onLifeLost: (modeActive: boolean) => void;
+  onBachelorModeTriggered: () => void;
+  onSpawn: (id: number) => void;
 }
 
 function makeGS(W: number, H: number): GS {
@@ -150,7 +205,7 @@ function makeGS(W: number, H: number): GS {
     objs: [], nextId: 0, spawnTimer: 1,
     cx: W / 2, cy: H - CATCHER_BOTTOM,
     bachelor: false, bachelorTimer: 0,
-    bill: false, billTimer: 0,
+    bill: false,
     jimmyNoTimer: 0,
     targetX: W / 2,
     W, H, lastTs: 0,
@@ -166,7 +221,7 @@ function pick<T>(arr: T[]): T {
 }
 
 function makeObj(def: ObjDef, gs: GS): FallingObj {
-  const speed = (BASE_FALL_SPEED + gs.elapsed * 3) * gs.speed;
+  const speed = (BASE_FALL_SPEED + gs.elapsed * 3) * gs.speed * (def.speedMultiplier ?? 1);
   return {
     ...def,
     id: gs.nextId++,
@@ -178,28 +233,24 @@ function makeObj(def: ObjDef, gs: GS): FallingObj {
 }
 
 function spawnObj(gs: GS): FallingObj {
-  if (gs.bill) {
-    return makeObj(Math.random() < 0.55 ? pick(BILL_CATCH_POOL) : pick(BILL_DODGE_POOL), gs);
-  }
   const r = Math.random();
-  if (r < 0.05) return makeObj(MUSHROOM_DEF, gs);
-  if (r < 0.10) return makeObj(BILL_DEF, gs);  // ~5% chance — catching him starts Bill Mode
-  if (r < 0.45) return makeObj(pick(DODGE_POOL), gs);
+  if (r < MUSHROOM_SPAWN_CHANCE) return makeObj(MUSHROOM_DEF, gs);
+  if (r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE) return makeObj(BILL_DEF, gs);
+  if (r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE + DODGE_SPAWN_CHANCE) return makeObj(pick(DODGE_POOL), gs);
   return makeObj(pick(CATCH_POOL), gs);
 }
 
-function triggerJimmyNoWave(gs: GS) {
-  gs.jimmyNoTimer = 1.8;
-  // Stagger 3 dodge objects above the screen so they arrive a beat apart
+function triggerKatieWarning(gs: GS) {
+  gs.jimmyNoTimer = KATIE_WARNING_DURATION;
+  // Stagger Katie objects above the screen so they arrive a beat apart.
   for (let i = 1; i <= 3; i++) {
-    const def = pick(DODGE_POOL);
-    const speed = (BASE_FALL_SPEED + gs.elapsed * 3) * gs.speed;
+    const speed = (BASE_FALL_SPEED + gs.elapsed * 3) * gs.speed * 1.85;
     gs.objs.push({
-      ...def,
+      ...DODGE_POOL[0],
       id: gs.nextId++,
       x: OBJ_SIZE + Math.random() * (gs.W - OBJ_SIZE * 2),
       y: -OBJ_SIZE / 2 - i * 130,
-      vx: def.behavior === "erratic" ? (Math.random() - 0.5) * 120 : 0,
+      vx: (Math.random() - 0.5) * 120,
       vy: speed,
     });
   }
@@ -211,41 +262,37 @@ function loseLife(gs: GS, onGameOver: (score: number) => void) {
   if (gs.lives === 0) onGameOver(gs.score);
 }
 
-function onCatch(gs: GS, o: FallingObj, onGameOver: (score: number) => void) {
+function onCatch(gs: GS, o: FallingObj, onGameOver: (score: number) => void, fx: GameFx) {
   const mult = gs.bill ? 3 : gs.bachelor ? 2 : 1;
+  const modeAlreadyActive = gs.bill || gs.bachelor;
 
   switch (o.catchType) {
     case "catch":
       gs.score += Math.round(10 * mult * gs.bagMeter);
       gs.bagMeter = Math.min(4, gs.bagMeter + 0.2);
+      fx.onCatchSuccess(modeAlreadyActive);
       break;
     case "dodge":
       loseLife(gs, onGameOver);
+      fx.onLifeLost(modeAlreadyActive);
       break;
     case "mushroom":
       gs.bachelor = true;
       gs.bachelorTimer = BACHELOR_DURATION;
       gs.score += Math.round(50 * gs.bagMeter);
+      fx.onBachelorModeTriggered();
       break;
     case "bill_trigger":
       // Neutral catch — no score, no life lost, just activates Bill Mode
       if (!gs.bill) {
         gs.bill = true;
-        gs.billTimer = BILL_MODE_DURATION;
         gs.objs = [];
       }
-      break;
-    case "bill_catch":
-      gs.score += Math.round(30 * gs.bagMeter);
-      gs.bagMeter = Math.min(4, gs.bagMeter + 0.3);
-      break;
-    case "bill_dodge":
-      loseLife(gs, onGameOver);
       break;
   }
 }
 
-function stepGS(gs: GS, dt: number, onGameOver: (score: number) => void) {
+function stepGS(gs: GS, dt: number, onGameOver: (score: number) => void, fx: GameFx) {
   gs.elapsed += dt;
   gs.speed = 1 + gs.elapsed * SPEED_RAMP;
 
@@ -262,21 +309,18 @@ function stepGS(gs: GS, dt: number, onGameOver: (score: number) => void) {
     gs.bachelorTimer -= dt;
     if (gs.bachelorTimer <= 0) { gs.bachelor = false; gs.bachelorTimer = 0; }
   }
-  if (gs.bill) {
-    gs.billTimer -= dt;
-    if (gs.billTimer <= 0) {
-      gs.bill = false; gs.billTimer = 0;
-      gs.objs = gs.objs.filter(o => o.catchType !== "bill_catch" && o.catchType !== "bill_dodge");
-    }
-  }
 
   if (gs.jimmyNoTimer > 0) gs.jimmyNoTimer -= dt;
+
+  if (gs.bill) return;
 
   // Spawn
   gs.spawnTimer -= dt;
   if (gs.spawnTimer <= 0) {
-    gs.objs.push(spawnObj(gs));
-    if (!gs.bill && Math.random() < 0.07) triggerJimmyNoWave(gs);
+    const spawned = spawnObj(gs);
+    gs.objs.push(spawned);
+    fx.onSpawn(spawned.id);
+    if (!gs.bill && Math.random() < 0.045) triggerKatieWarning(gs);
     gs.spawnTimer = Math.max(MIN_SPAWN_INTERVAL, BASE_SPAWN_INTERVAL - gs.elapsed * SPAWN_RAMP);
   }
 
@@ -313,7 +357,7 @@ function stepGS(gs: GS, dt: number, onGameOver: (score: number) => void) {
     const hitH = (CATCHER_H + OBJ_SIZE) * HIT_SLOP * 0.5;
     if (Math.abs(o.x - gs.cx) < hitW && Math.abs(o.y - gs.cy) < hitH) {
       dead.push(o.id);
-      onCatch(gs, o, onGameOver);
+      onCatch(gs, o, onGameOver, fx);
     }
   }
   gs.objs = gs.objs.filter(o => !dead.includes(o.id));
@@ -335,28 +379,34 @@ function borderColor(catchType: CatchType): string | null {
   return null;
 }
 
-function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean) {
+function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean, poppingIn: boolean) {
   const border = borderColor(o.catchType);
-  const x = o.x - OBJ_SIZE / 2;
-  const y = o.y - OBJ_SIZE / 2;
   const img = imgCache.get(o.type);
+  const scale = poppingIn ? 0.88 + Math.min(0.18, Math.max(0, (o.y + OBJ_SIZE / 2) / 120) * 0.18) : 1;
+  const drawW = OBJ_SIZE * scale;
+  const drawH = OBJ_SIZE * scale;
+  const drawX = o.x - drawW / 2;
+  const drawY = o.y - drawH / 2;
+
+  ctx.save();
 
   if (img) {
     if (bachelor) { ctx.shadowColor = o.color; ctx.shadowBlur = 20; }
-    ctx.drawImage(img, x, y, OBJ_SIZE, OBJ_SIZE);
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
     ctx.shadowBlur = 0;
     if (border) {
-      rr(ctx, x, y, OBJ_SIZE, OBJ_SIZE, 12);
+      rr(ctx, drawX, drawY, drawW, drawH, 12);
       ctx.strokeStyle = border;
       ctx.lineWidth = 4;
       ctx.stroke();
     }
+    ctx.restore();
     return;
   }
 
   // Colored placeholder — used until a real PNG is loaded
   if (bachelor) { ctx.shadowColor = o.color; ctx.shadowBlur = 20; }
-  rr(ctx, x, y, OBJ_SIZE, OBJ_SIZE, 12);
+  rr(ctx, drawX, drawY, drawW, drawH, 12);
   ctx.fillStyle = o.color;
   ctx.fill();
   ctx.strokeStyle = border ?? "rgba(255,255,255,0.45)";
@@ -372,6 +422,7 @@ function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean
   ctx.font = "bold 11px sans-serif";
   ctx.fillStyle = "rgba(255,255,255,0.92)";
   ctx.fillText(o.label, o.x, o.y + OBJ_SIZE * 0.32);
+  ctx.restore();
 }
 
 function drawCatcher(ctx: CanvasRenderingContext2D, gs: GS) {
@@ -440,10 +491,10 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
     ctx.font = "bold 14px sans-serif";
     ctx.fillStyle = "#fbbf24";
     ctx.textAlign = "center";
-    ctx.fillText(`BILL MODE  ${Math.ceil(gs.billTimer)}s`, W / 2, 26);
+    ctx.fillText("BILL MODE", W / 2, 26);
     ctx.font = "11px sans-serif";
     ctx.fillStyle = "#fde68a";
-    ctx.fillText("3× POINTS · CATCH FOOD · DODGE TOILETS", W / 2, 52);
+    ctx.fillText("BUST IT DOWN", W / 2, 52);
   } else if (bachelor) {
     ctx.font = "bold 14px sans-serif";
     ctx.fillStyle = "#facc15";
@@ -482,22 +533,11 @@ function drawBg(ctx: CanvasRenderingContext2D, gs: GS) {
   }
 }
 
-function drawFrame(ctx: CanvasRenderingContext2D, gs: GS) {
+function drawFrame(ctx: CanvasRenderingContext2D, gs: GS, spawnPopIds: Set<number>) {
   drawBg(ctx, gs);
-  for (const o of gs.objs) drawObj(ctx, o, gs.bachelor);
+  for (const o of gs.objs) drawObj(ctx, o, gs.bachelor, spawnPopIds.has(o.id));
   drawCatcher(ctx, gs);
   drawHUD(ctx, gs);
-
-  if (gs.jimmyNoTimer > 0) {
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, gs.jimmyNoTimer);
-    ctx.font = "bold 46px sans-serif";
-    ctx.fillStyle = "#ef4444";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("⚠️ JIMMY NO! ⚠️", gs.W / 2, gs.H / 2);
-    ctx.restore();
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -511,7 +551,7 @@ type SplashCredit =
 const SPLASH_CREDITS: SplashCredit[] = [
   { type: "image", src: "/bachelor-party-blitz/zimmy.png",    alt: "Sponsored by Zimmy's Head" },
   { type: "image", src: "/bachelor-party-blitz/vjspice.png",  alt: "VJ Spice Productions" },
-  { type: "image", src: "/bachelor-party-blitz/brstudios.png", alt: "BR Studios" },
+  { type: "image", src: BR_STUDIOS_CARD_SRC, alt: "BR Studios" },
 ];
 
 // Edit this line to change the game-over roast
@@ -522,27 +562,104 @@ const ROAST_LINE = "Jimmy, even your bachelor party couldn't save your jump shot
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Screen = "splash" | "playing" | "end";
+type BillStage = "idle" | "dialogue" | "chug" | "door" | "result";
+
+interface CatchBurst {
+  id: number;
+  x: number;
+  y: number;
+}
 
 export function BachelorPartyGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const particlesRef = useRef<HTMLDivElement>(null);
+  const katieWarningRef = useRef<HTMLDivElement>(null);
+  const bachelorBannerRef = useRef<HTMLDivElement>(null);
+  const billWineRef = useRef<HTMLDivElement>(null);
+  const billBeerRackRef = useRef<HTMLDivElement>(null);
+  const billDoorRef = useRef<HTMLButtonElement>(null);
+  const catcherFxRef = useRef<HTMLDivElement>(null);
   const gsRef = useRef<GS | null>(null);
   const rafRef = useRef<number>(0);
+  const musicRef = useRef<{
+    play: () => number | undefined;
+    pause: () => void;
+    stop: () => void;
+    unload: () => void;
+    playing: () => boolean;
+  } | null>(null);
+  const bachelorUiRef = useRef(false);
+  const billUiRef = useRef(false);
+  const warningUiRef = useRef(false);
+  const bachelorBannerTimeoutRef = useRef<number | null>(null);
+  const musicEnabledRef = useRef(false);
+  const billStageTimeoutRef = useRef<number | null>(null);
+  const billDoorIntervalRef = useRef<number | null>(null);
+  const billBlackoutTimeoutRef = useRef<number | null>(null);
+  const billBlackoutResetRef = useRef<number | null>(null);
+  const billDoorTapsRef = useRef(0);
+  const catchBurstIdRef = useRef(0);
+  const spawnPopIdsRef = useRef<Set<number>>(new Set());
 
   const [screen, setScreen] = useState<Screen>("splash");
   const [splashIdx, setSplashIdx] = useState(0);
   const [finalScore, setFinalScore] = useState(0);
-  const [playerName, setPlayerName] = useState("JIM");
-  const [personalBest, setPersonalBest] = useState(0);
+  const [playerName, setPlayerName] = useState("I LUV JIMMY");
+  const [personalBest, setPersonalBest] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return parseInt(localStorage.getItem("blitz_best") || "0", 10);
+  });
+  const [isBachelorMode, setIsBachelorMode] = useState(false);
+  const [isBillMode, setIsBillMode] = useState(false);
+  const [showKatieWarning, setShowKatieWarning] = useState(false);
+  const [showBachelorBanner, setShowBachelorBanner] = useState(false);
+  const [billStage, setBillStage] = useState<BillStage>("idle");
+  const [billDialogueIndex, setBillDialogueIndex] = useState(0);
+  const [billBeerCount, setBillBeerCount] = useState(0);
+  const [billDoorTimeLeft, setBillDoorTimeLeft] = useState(BILL_DOOR_DURATION_MS);
+  const [billDoorTaps, setBillDoorTaps] = useState(0);
+  const [billResult, setBillResult] = useState<{ success: boolean; bonus: number } | null>(null);
+  const [billBlackout, setBillBlackout] = useState(false);
+  const [catchBursts, setCatchBursts] = useState<CatchBurst[]>([]);
 
   useEffect(() => {
-    setPersonalBest(parseInt(localStorage.getItem("blitz_best") || "0", 10));
+    console.debug("[BachelorPartyBlitz] Background music placeholder:", BACKGROUND_MUSIC_PLACEHOLDER);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window.Howl !== "function" || musicRef.current) return;
+
+    musicRef.current = new window.Howl({
+      src: [BACKGROUND_MUSIC_PLACEHOLDER],
+      loop: true,
+      volume: 0.38,
+      html5: true,
+      preload: true,
+      onloaderror: (_id, error) => {
+        console.warn("[BachelorPartyBlitz] Background music failed to load.", error);
+      },
+      onplayerror: (_id, error) => {
+        console.warn("[BachelorPartyBlitz] Background music failed to play.", error);
+      },
+    });
+  }, []);
+
+  useEffect(() => () => {
+    if (bachelorBannerTimeoutRef.current) window.clearTimeout(bachelorBannerTimeoutRef.current);
+    if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
+    if (billDoorIntervalRef.current) window.clearInterval(billDoorIntervalRef.current);
+    if (billBlackoutTimeoutRef.current) window.clearTimeout(billBlackoutTimeoutRef.current);
+    if (billBlackoutResetRef.current) window.clearTimeout(billBlackoutResetRef.current);
+    musicRef.current?.stop();
+    musicRef.current?.unload();
   }, []);
 
   // Preload PNGs listed in IMAGE_NAMES
   useEffect(() => {
     for (const name of IMAGE_NAMES) {
       if (imgCache.has(name)) continue;
-      const img = new Image();
+      const img = new window.Image();
       img.src = `/bachelor-party-blitz/${name}.png`;
       img.onload = () => imgCache.set(name, img);
     }
@@ -567,7 +684,7 @@ export function BachelorPartyGame() {
   useEffect(() => {
     if (screen !== "splash") return;
     if (splashIdx >= SPLASH_CREDITS.length) return;
-    const t = setTimeout(() => setSplashIdx(i => i + 1), 1800);
+    const t = setTimeout(() => setSplashIdx(i => i + 1), SPLASH_CARD_DURATION_MS);
     return () => clearTimeout(t);
   }, [screen, splashIdx]);
 
@@ -585,9 +702,164 @@ export function BachelorPartyGame() {
       localStorage.setItem("blitz_best", String(score));
       setPersonalBest(score);
     }
+    if (navigator.vibrate) navigator.vibrate(200);
     setFinalScore(score);
     setScreen("end");
   }, []);
+
+  const runMusic = useCallback((shouldPlay: boolean) => {
+    const music = musicRef.current;
+    if (!music || !musicEnabledRef.current) return;
+
+    if (shouldPlay) {
+      if (!music.playing()) music.play();
+      return;
+    }
+
+    if (music.playing()) music.pause();
+  }, []);
+
+  const runVibrate = useCallback((pattern: number | number[]) => {
+    if (typeof navigator === "undefined" || !navigator.vibrate) return;
+    navigator.vibrate(pattern);
+  }, []);
+
+  const emitCatchBurst = useCallback(() => {
+    const gs = gsRef.current;
+    if (!gs) return;
+
+    const id = catchBurstIdRef.current++;
+    const burst = { id, x: gs.cx, y: gs.cy - 12 };
+    setCatchBursts(current => [...current, burst]);
+    window.setTimeout(() => {
+      setCatchBursts(current => current.filter(entry => entry.id !== id));
+    }, 520);
+  }, []);
+
+  const shakeScreen = useCallback(() => {
+    const gsap = window.gsap;
+    const el = wrapperRef.current;
+    if (!gsap || !el) return;
+
+    const tween = gsap.fromTo(
+      el,
+      { x: -10, y: 0, rotate: -0.4 },
+      { x: 10, y: 0, rotate: 0.4, duration: 0.08, repeat: 3, yoyo: true, ease: "sine.inOut" },
+    );
+    window.setTimeout(() => tween?.kill?.(), 420);
+  }, []);
+
+  const wobbleCatcherFx = useCallback(() => {
+    const gsap = window.gsap;
+    const el = catcherFxRef.current;
+    if (!gsap || !el) return;
+
+    const tween = gsap.fromTo(
+      el,
+      { scale: 0.95, rotate: -5, opacity: 0.18 },
+      { scale: 1.18, rotate: 5, opacity: 0.52, duration: 0.14, repeat: 1, yoyo: true, ease: "back.out(1.6)" },
+    );
+    window.setTimeout(() => tween?.kill?.(), 380);
+  }, []);
+
+  const handleCatchSuccessFx = useCallback((modeActive: boolean) => {
+    if (!modeActive) {
+      runVibrate(50);
+      wobbleCatcherFx();
+      emitCatchBurst();
+    }
+  }, [emitCatchBurst, runVibrate, wobbleCatcherFx]);
+
+  const handleLifeLostFx = useCallback((modeActive: boolean) => {
+    if (!modeActive) {
+      runVibrate([50, 70, 50]);
+      shakeScreen();
+    }
+  }, [runVibrate, shakeScreen]);
+
+  const handleBachelorModeTriggeredFx = useCallback(() => {
+    runVibrate([30, 40, 30, 40, 30]);
+  }, [runVibrate]);
+
+  const handleSpawnFx = useCallback((id: number) => {
+    spawnPopIdsRef.current.add(id);
+    window.setTimeout(() => {
+      spawnPopIdsRef.current.delete(id);
+    }, 260);
+  }, []);
+
+  const clearBillTimers = useCallback(() => {
+    if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
+    if (billDoorIntervalRef.current) window.clearInterval(billDoorIntervalRef.current);
+    if (billBlackoutTimeoutRef.current) window.clearTimeout(billBlackoutTimeoutRef.current);
+    if (billBlackoutResetRef.current) window.clearTimeout(billBlackoutResetRef.current);
+    billStageTimeoutRef.current = null;
+    billDoorIntervalRef.current = null;
+    billBlackoutTimeoutRef.current = null;
+    billBlackoutResetRef.current = null;
+  }, []);
+
+  const exitBillMode = useCallback(() => {
+    clearBillTimers();
+    const gs = gsRef.current;
+    if (gs) gs.bill = false;
+    billUiRef.current = false;
+    setIsBillMode(false);
+    setBillStage("idle");
+    setBillDialogueIndex(0);
+    setBillBeerCount(0);
+    setBillDoorTaps(0);
+    setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
+    setBillResult(null);
+    setBillBlackout(false);
+    billDoorTapsRef.current = 0;
+  }, [clearBillTimers]);
+
+  const initializeBillMode = useCallback(() => {
+    clearBillTimers();
+    setBillStage("dialogue");
+    setBillDialogueIndex(0);
+    setBillBeerCount(0);
+    setBillDoorTaps(0);
+    setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
+    setBillResult(null);
+    setBillBlackout(false);
+    billDoorTapsRef.current = 0;
+  }, [clearBillTimers]);
+
+  const resolveBillDoor = useCallback((taps: number) => {
+    clearBillTimers();
+    const success = taps >= BILL_DOOR_TARGET_TAPS;
+    const bonus = success ? 300 + Math.max(0, taps - BILL_DOOR_TARGET_TAPS) * 25 : 0;
+
+    if (success) {
+      const gs = gsRef.current;
+      if (gs) gs.score += bonus;
+      runVibrate(100);
+    } else {
+      const gs = gsRef.current;
+      if (gs) {
+        gs.lives = Math.max(0, gs.lives - 1);
+        gs.bagMeter = 1;
+        if (gs.lives === 0) {
+          handleGameOver(gs.score);
+          return;
+        }
+      }
+    }
+
+    setBillResult({ success, bonus });
+    setBillStage("result");
+    setBillBlackout(true);
+    billBlackoutResetRef.current = window.setTimeout(() => setBillBlackout(false), BILL_BLACKOUT_FLASH_MS);
+    billStageTimeoutRef.current = window.setTimeout(() => {
+      setBillBlackout(true);
+      billBlackoutResetRef.current = window.setTimeout(() => {
+        setBillBlackout(false);
+        exitBillMode();
+      }, BILL_BLACKOUT_FLASH_MS);
+    }, BILL_RESULT_HOLD_MS);
+  }, [clearBillTimers, exitBillMode, handleGameOver, runVibrate]);
 
   // Game loop
   useEffect(() => {
@@ -602,13 +874,141 @@ export function BachelorPartyGame() {
       if (!gs) return;
       const dt = gs.lastTs === 0 ? 0.016 : Math.min((ts - gs.lastTs) / 1000, 0.05);
       gs.lastTs = ts;
-      stepGS(gs, dt, handleGameOver);
-      drawFrame(ctx, gs);
+      stepGS(gs, dt, handleGameOver, {
+        onCatchSuccess: handleCatchSuccessFx,
+        onLifeLost: handleLifeLostFx,
+        onBachelorModeTriggered: handleBachelorModeTriggeredFx,
+        onSpawn: handleSpawnFx,
+      });
+
+      if (gs.bachelor !== bachelorUiRef.current) {
+        bachelorUiRef.current = gs.bachelor;
+        setIsBachelorMode(gs.bachelor);
+        if (gs.bachelor) {
+          setShowBachelorBanner(true);
+          if (bachelorBannerTimeoutRef.current) window.clearTimeout(bachelorBannerTimeoutRef.current);
+          bachelorBannerTimeoutRef.current = window.setTimeout(() => setShowBachelorBanner(false), BACHELOR_BANNER_DURATION_MS);
+        } else {
+          setShowBachelorBanner(false);
+        }
+      }
+
+      if (gs.bill !== billUiRef.current) {
+        billUiRef.current = gs.bill;
+        setIsBillMode(gs.bill);
+        if (gs.bill) initializeBillMode();
+      }
+
+      const warningActive = gs.jimmyNoTimer > 0;
+      if (warningActive !== warningUiRef.current) {
+        warningUiRef.current = warningActive;
+        setShowKatieWarning(warningActive);
+      }
+
+      if (catcherFxRef.current) {
+        catcherFxRef.current.style.left = `${gs.cx - CATCHER_W / 2}px`;
+        catcherFxRef.current.style.top = `${gs.cy - CATCHER_H / 2}px`;
+      }
+
+      drawFrame(ctx, gs, spawnPopIdsRef.current);
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [screen, handleGameOver]);
+  }, [screen, handleGameOver, handleCatchSuccessFx, handleLifeLostFx, handleBachelorModeTriggeredFx, handleSpawnFx, initializeBillMode]);
+
+  useEffect(() => {
+    const shouldPlay = screen === "playing" && !isBillMode;
+    runMusic(shouldPlay);
+  }, [isBillMode, runMusic, screen]);
+
+  useEffect(() => {
+    if (!isBillMode || billStage !== "dialogue") return;
+
+    billStageTimeoutRef.current = window.setTimeout(() => {
+      if (billDialogueIndex < BILL_DIALOGUES.length - 1) {
+        setBillDialogueIndex(index => index + 1);
+        return;
+      }
+      setBillStage("chug");
+      setBillBeerCount(1);
+    }, BILL_DIALOGUE_DURATION_MS);
+
+    return () => {
+      if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
+    };
+  }, [billDialogueIndex, billStage, isBillMode]);
+
+  useEffect(() => {
+    if (!isBillMode || billStage !== "chug") return;
+
+    if (billBeerCount <= 1) {
+      billStageTimeoutRef.current = window.setTimeout(() => setBillBeerCount(2), BILL_FIRST_BEER_DURATION_MS);
+      return () => {
+        if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
+      };
+    }
+
+    if (billBeerCount < 6) {
+      billStageTimeoutRef.current = window.setTimeout(
+        () => setBillBeerCount(count => Math.min(6, count + 1)),
+        BILL_RAPID_BEER_DURATION_MS,
+      );
+      return () => {
+        if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
+      };
+    }
+
+    billStageTimeoutRef.current = window.setTimeout(() => {
+      setBillStage("door");
+      setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
+      setBillDoorTaps(0);
+      billDoorTapsRef.current = 0;
+    }, 380);
+
+    return () => {
+      if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
+    };
+  }, [billBeerCount, billStage, isBillMode]);
+
+  useEffect(() => {
+    if (!isBillMode || billStage !== "door") return;
+
+    const startedAt = performance.now();
+    billDoorIntervalRef.current = window.setInterval(() => {
+      const elapsed = performance.now() - startedAt;
+      const nextTimeLeft = Math.max(0, BILL_DOOR_DURATION_MS - elapsed);
+      setBillDoorTimeLeft(nextTimeLeft);
+      if (nextTimeLeft <= 0) resolveBillDoor(billDoorTapsRef.current);
+    }, 50);
+
+    return () => {
+      if (billDoorIntervalRef.current) window.clearInterval(billDoorIntervalRef.current);
+    };
+  }, [billStage, isBillMode, resolveBillDoor]);
+
+  useEffect(() => {
+    if (!isBillMode) return;
+
+    const scheduleBlackout = () => {
+      const nextDelay = BILL_BLACKOUT_MIN_MS + Math.random() * (BILL_BLACKOUT_MAX_MS - BILL_BLACKOUT_MIN_MS);
+      billBlackoutTimeoutRef.current = window.setTimeout(() => {
+        setBillBlackout(true);
+        billBlackoutResetRef.current = window.setTimeout(() => {
+          setBillBlackout(false);
+          scheduleBlackout();
+        }, BILL_BLACKOUT_FLASH_MS);
+      }, nextDelay);
+    };
+
+    scheduleBlackout();
+
+    return () => {
+      if (billBlackoutTimeoutRef.current) window.clearTimeout(billBlackoutTimeoutRef.current);
+      if (billBlackoutResetRef.current) window.clearTimeout(billBlackoutResetRef.current);
+      setBillBlackout(false);
+    };
+  }, [isBillMode]);
 
   // Touch input (only during gameplay)
   useEffect(() => {
@@ -639,6 +1039,7 @@ export function BachelorPartyGame() {
     const c = canvasRef.current;
     if (!c) return;
     gsRef.current = makeGS(c.width, c.height);
+    musicEnabledRef.current = true;
     setScreen("playing");
   }, []);
 
@@ -647,17 +1048,624 @@ export function BachelorPartyGame() {
     if (!c) return;
     gsRef.current = makeGS(c.width, c.height);
     setFinalScore(0);
+    bachelorUiRef.current = false;
+    billUiRef.current = false;
+    warningUiRef.current = false;
+    setIsBachelorMode(false);
+    setIsBillMode(false);
+    setShowKatieWarning(false);
+    setShowBachelorBanner(false);
+    exitBillMode();
+    musicEnabledRef.current = true;
     setScreen("playing");
-  }, []);
+  }, [exitBillMode]);
 
   const isNewBest = finalScore > 0 && finalScore >= personalBest;
 
+  const advanceBillDialogue = useCallback(() => {
+    if (!isBillMode || billStage !== "dialogue") return;
+
+    if (billDialogueIndex < BILL_DIALOGUES.length - 1) {
+      setBillDialogueIndex(index => index + 1);
+      return;
+    }
+
+    setBillStage("chug");
+    setBillBeerCount(1);
+  }, [billDialogueIndex, billStage, isBillMode]);
+
+  const handleBillDoorTap = useCallback(() => {
+    if (!isBillMode || billStage !== "door") return;
+    billDoorTapsRef.current += 1;
+    setBillDoorTaps(billDoorTapsRef.current);
+  }, [billStage, isBillMode]);
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    const gsap = window.gsap;
+    if (!el || !gsap || screen !== "playing") return;
+
+    if (isBillMode) {
+      const swayTween = gsap.to(el, {
+        duration: 2.4,
+        x: 10,
+        rotation: 0.7,
+        yoyo: true,
+        repeat: -1,
+        ease: "sine.inOut",
+        transformOrigin: "center center",
+      });
+      const filterTween = gsap.to(el, {
+        duration: 2,
+        filter: "blur(1px) saturate(0.92)",
+        yoyo: true,
+        repeat: -1,
+        ease: "sine.inOut",
+      });
+
+      return () => {
+        swayTween?.kill?.();
+        filterTween?.kill?.();
+        gsap.set(el, { clearProps: "filter,transform" });
+      };
+    }
+
+    if (!isBachelorMode) {
+      gsap.to(el, {
+        duration: 0.35,
+        filter: "hue-rotate(0deg) saturate(1) blur(0px)",
+        scale: 1,
+        ease: "power2.out",
+      });
+      return;
+    }
+
+    const hueTween = gsap.to(el, {
+      duration: 8,
+      filter: "hue-rotate(360deg) saturate(1.18) blur(0.35px)",
+      ease: "none",
+      repeat: -1,
+    });
+    const breatheTween = gsap.to(el, {
+      duration: 2.8,
+      scale: 1.018,
+      yoyo: true,
+      repeat: -1,
+      ease: "sine.inOut",
+      transformOrigin: "center center",
+    });
+
+    return () => {
+      hueTween?.kill?.();
+      breatheTween?.kill?.();
+      gsap.set(el, { clearProps: "filter,transform" });
+    };
+  }, [isBachelorMode, isBillMode, screen]);
+
+  useEffect(() => {
+    const particlesNode = particlesRef.current;
+    if (!particlesNode) return;
+    particlesNode.innerHTML = "";
+
+    if (!isBachelorMode || isBillMode || typeof window.particlesJS !== "function") return;
+
+    window.particlesJS(PARTICLES_CONTAINER_ID, {
+      particles: {
+        number: { value: 44, density: { enable: true, value_area: 900 } },
+        color: { value: ["#22d3ee", "#f472b6", "#fde047", "#a78bfa"] },
+        shape: { type: "circle" },
+        opacity: { value: 0.42, random: true },
+        size: { value: 3.1, random: true },
+        line_linked: { enable: false },
+        move: {
+          enable: true,
+          speed: 1.2,
+          direction: "top",
+          random: true,
+          straight: false,
+          out_mode: "out",
+        },
+      },
+      interactivity: {
+        detect_on: "canvas",
+        events: {
+          onhover: { enable: false, mode: "grab" },
+          onclick: { enable: false, mode: "push" },
+          resize: true,
+        },
+      },
+      retina_detect: true,
+    });
+
+    return () => {
+      const instances = window.pJSDom ?? [];
+      const latest = instances[instances.length - 1];
+      latest?.pJS?.fn?.vendors?.destroypJS?.();
+      particlesNode.innerHTML = "";
+    };
+  }, [isBachelorMode, isBillMode]);
+
+  useEffect(() => {
+    const el = katieWarningRef.current;
+    const gsap = window.gsap;
+    if (!el || !showKatieWarning) return;
+
+    el.textContent = "KP INBOUND - HIDE!";
+    window.Splitting?.({ target: el, by: "chars" });
+    const chars = el.querySelectorAll(".char");
+
+    if (!chars.length || !gsap) return;
+
+    gsap.set(chars, { opacity: 0, y: 18, rotate: 0, scale: 0.88 });
+    const timeline = gsap.timeline();
+    timeline.fromTo(
+      chars,
+      { opacity: 0, y: 18, rotate: 0, scale: 0.88 },
+      {
+        opacity: 1,
+        y: 0,
+        rotate: () => (Math.random() - 0.5) * 12,
+        scale: 1,
+        duration: 0.35,
+        stagger: 0.018,
+        ease: "back.out(1.7)",
+      },
+    );
+    timeline.to(chars, {
+      y: () => (Math.random() - 0.5) * 18,
+      rotate: () => (Math.random() - 0.5) * 28,
+      duration: 0.24,
+      stagger: 0.012,
+      ease: "power2.out",
+    });
+
+    return () => timeline.kill?.();
+  }, [showKatieWarning]);
+
+  useEffect(() => {
+    const el = bachelorBannerRef.current;
+    const gsap = window.gsap;
+    if (!el || !showBachelorBanner) return;
+
+    el.textContent = "BACHELOR MODE";
+    window.Splitting?.({ target: el, by: "chars" });
+    const chars = el.querySelectorAll(".char");
+    if (!chars.length || !gsap) return;
+
+    gsap.set(chars, { opacity: 0, y: 24, rotateX: -40, scale: 0.82 });
+    const timeline = gsap.timeline();
+    timeline.fromTo(
+      chars,
+      { opacity: 0, y: 24, rotateX: -40, scale: 0.82 },
+      {
+        opacity: 1,
+        y: 0,
+        rotateX: 0,
+        scale: 1,
+        duration: 0.5,
+        stagger: 0.03,
+        ease: "back.out(1.4)",
+      },
+    );
+    timeline.to(chars, {
+      y: -3,
+      scale: 1.05,
+      duration: 0.75,
+      yoyo: true,
+      repeat: 1,
+      stagger: 0.02,
+      ease: "sine.inOut",
+    });
+
+    return () => timeline.kill?.();
+  }, [showBachelorBanner]);
+
+  useEffect(() => {
+    const el = billWineRef.current;
+    const gsap = window.gsap;
+    if (!el || !gsap || !isBillMode || billStage !== "dialogue") return;
+
+    if (billDialogueIndex === 0) {
+      const tween = gsap.fromTo(
+        el,
+        { y: -18, opacity: 0, rotate: -10, scale: 0.82 },
+        { y: 0, opacity: 1, rotate: 0, scale: 1, duration: 0.35, ease: "back.out(1.5)" },
+      );
+      return () => tween?.kill?.();
+    }
+
+    if (billDialogueIndex === 1) {
+      const tween = gsap.to(el, {
+        x: 180,
+        y: -90,
+        rotate: 120,
+        opacity: 0,
+        duration: 0.55,
+        ease: "power2.in",
+      });
+      return () => tween?.kill?.();
+    }
+  }, [billDialogueIndex, billStage, isBillMode]);
+
+  useEffect(() => {
+    const el = billBeerRackRef.current;
+    const gsap = window.gsap;
+    if (!el || !gsap || !isBillMode || billStage !== "chug") return;
+
+    const beers = el.querySelectorAll("[data-bill-beer]");
+    if (!beers.length) return;
+
+    gsap.set(beers, { y: 0, opacity: 0.45, scale: 0.84 });
+    beers.forEach((beer, index) => {
+      if (index < billBeerCount) {
+        gsap.to(beer, {
+          opacity: 1,
+          scale: index === billBeerCount - 1 ? 1.18 : 1,
+          y: index === billBeerCount - 1 ? -8 : 0,
+          duration: index === 0 ? 0.45 : 0.2,
+          ease: "back.out(1.6)",
+        });
+      }
+    });
+  }, [billBeerCount, billStage, isBillMode]);
+
+  useEffect(() => {
+    const el = billDoorRef.current;
+    const gsap = window.gsap;
+    if (!el || !gsap || !isBillMode || billStage !== "door") return;
+
+    const crackLevel = Math.min(1, billDoorTaps / BILL_DOOR_TARGET_TAPS);
+    const shake = crackLevel > 0
+      ? gsap.fromTo(
+        el,
+        { x: -2 - crackLevel * 3, rotate: -0.25 - crackLevel * 0.8 },
+        {
+          x: 2 + crackLevel * 3,
+          rotate: 0.25 + crackLevel * 0.8,
+          duration: Math.max(0.07, 0.18 - crackLevel * 0.06),
+          yoyo: true,
+          repeat: 1,
+          ease: "sine.inOut",
+        },
+      )
+      : undefined;
+
+    return () => shake?.kill?.();
+  }, [billDoorTaps, billStage, isBillMode]);
+
+  useEffect(() => {
+    const el = billDoorRef.current;
+    const gsap = window.gsap;
+    if (!el || !gsap || !billResult) return;
+
+    if (billResult.success) {
+      const tween = gsap.to(el, {
+        scale: 1.06,
+        opacity: 0.2,
+        rotate: 4,
+        duration: 0.24,
+        ease: "power2.out",
+      });
+      return () => tween?.kill?.();
+    }
+
+    const tween = gsap.fromTo(
+      el,
+      { x: -10, rotate: -1.2 },
+      { x: 10, rotate: 1.2, duration: 0.12, repeat: 3, yoyo: true, ease: "sine.inOut" },
+    );
+    return () => tween?.kill?.();
+  }, [billResult]);
+
   return (
     <div
+      ref={wrapperRef}
       className="fixed inset-0 overflow-hidden bg-[#0f172a]"
-      style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
+      style={{
+        touchAction: "none",
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        fontFamily: BACHELOR_BLITZ_FONT,
+      }}
     >
+      <style>{`
+        .bachelor-pulse-char {
+          display: inline-block;
+          will-change: transform, opacity;
+        }
+        .bachelor-overlay-glow {
+          text-shadow:
+            0 0 10px rgba(255, 255, 255, 0.35),
+            0 0 20px rgba(244, 114, 182, 0.5),
+            0 0 34px rgba(34, 211, 238, 0.4);
+        }
+        .bill-door-shell {
+          box-shadow:
+            inset 0 0 0 2px rgba(255, 255, 255, 0.08),
+            inset 0 0 30px rgba(0, 0, 0, 0.35),
+            0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+        .catch-burst {
+          position: absolute;
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(34,197,94,0.85) 55%, transparent 70%);
+          animation: catch-burst-pop 520ms ease-out forwards;
+          pointer-events: none;
+        }
+        @keyframes catch-burst-pop {
+          0% { transform: translate(0, 0) scale(0.55); opacity: 1; }
+          100% { transform: translate(var(--burst-x), var(--burst-y)) scale(1.5); opacity: 0; }
+        }
+      `}</style>
+
       <canvas ref={canvasRef} className="absolute inset-0 block" />
+      {screen === "playing" && (
+        <div
+          ref={catcherFxRef}
+          className="pointer-events-none absolute rounded-full border-2 border-[#86efac]/70 bg-[#22c55e]/12 shadow-[0_0_22px_rgba(34,197,94,0.35)]"
+          style={{
+            width: `${CATCHER_W}px`,
+            height: `${CATCHER_H}px`,
+            left: "0px",
+            top: "0px",
+            opacity: 0.12,
+          }}
+        />
+      )}
+      <div
+        ref={particlesRef}
+        id={PARTICLES_CONTAINER_ID}
+        className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ${
+          isBachelorMode && !isBillMode ? "opacity-100" : "opacity-0"
+        }`}
+      />
+
+      {screen === "playing" && (
+        <div className="pointer-events-none absolute inset-0">
+          <div
+            className={`absolute inset-0 transition-opacity duration-300 ${
+              isBachelorMode ? "opacity-100" : "opacity-0"
+            }`}
+            style={{
+              background:
+                "radial-gradient(circle at top, rgba(244,114,182,0.16), transparent 42%), radial-gradient(circle at bottom, rgba(34,211,238,0.14), transparent 46%)",
+            }}
+          />
+
+          <div
+            className={`absolute inset-x-4 top-[22%] flex justify-center transition-opacity duration-150 ${
+              showKatieWarning ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <div
+              ref={katieWarningRef}
+              className="bachelor-overlay-glow max-w-sm text-center text-[1.6rem] leading-[1.5] text-[#ffe4e6] sm:text-[2rem]"
+            >
+              KP INBOUND - HIDE!
+            </div>
+          </div>
+
+          <div
+            className={`absolute inset-x-6 top-24 flex justify-center transition-opacity duration-200 ${
+              showBachelorBanner ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <div
+              ref={bachelorBannerRef}
+              className="bachelor-overlay-glow text-center text-[1.3rem] leading-[1.7] text-[#fef08a] sm:text-[1.75rem]"
+            >
+              BACHELOR MODE
+            </div>
+          </div>
+
+          {isBillMode && (
+            <div className="pointer-events-auto absolute inset-0 z-20 overflow-hidden bg-[#14181f]/92">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),transparent_42%)]" />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "radial-gradient(circle at center, transparent 42%, rgba(5,8,15,0.74) 100%)",
+                  opacity: 0.9,
+                }}
+              />
+
+              {billStage === "dialogue" && (
+                <button
+                  type="button"
+                  onClick={advanceBillDialogue}
+                  className="absolute inset-0"
+                  aria-label="Skip Bill dialogue"
+                  style={{ touchAction: "auto" }}
+                />
+              )}
+
+              <div className="relative flex h-full flex-col justify-between px-4 py-6 sm:px-8">
+                {(billStage === "dialogue" || billStage === "chug") && (
+                  <>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="rounded-2xl border-4 border-[#f59e0b] bg-[#23160b]/90 p-3 shadow-[0_0_20px_rgba(245,158,11,0.22)]">
+                        <Image
+                          src="/bachelor-party-blitz/bill.png"
+                          alt="Bill"
+                          width={92}
+                          height={92}
+                          className="h-20 w-20 rounded-lg object-cover sm:h-24 sm:w-24"
+                        />
+                      </div>
+                      <div className="max-w-[10rem] rounded-2xl border-2 border-white/10 bg-black/35 px-3 py-2 text-right text-[0.62rem] leading-[1.6] text-[#d1d5db] sm:max-w-xs sm:text-[0.72rem]">
+                        tap to skip
+                      </div>
+                    </div>
+
+                    <div className="flex flex-1 items-center justify-center">
+                      <div className="flex flex-col items-center gap-6">
+                        <div className="min-h-[5rem] text-center text-6xl sm:text-8xl">
+                          {billDialogueIndex <= 1 && (
+                            <span ref={billWineRef} className="inline-block">
+                              🍷
+                            </span>
+                          )}
+                          {billDialogueIndex === 1 && (
+                            <span className="sr-only">Wine tossed away</span>
+                          )}
+                          {(billDialogueIndex === 2 || billStage === "chug") && (
+                            <div ref={billBeerRackRef} className="flex items-center justify-center gap-2 sm:gap-3">
+                              {Array.from({ length: 6 }).map((_, index) => (
+                                <span
+                                  key={`beer-${index}`}
+                                  data-bill-beer
+                                  className={`inline-block ${index >= billBeerCount ? "opacity-35" : ""}`}
+                                >
+                                  🍺
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {billStage === "chug" && (
+                          <div className="rounded-2xl border-2 border-[#f59e0b]/55 bg-[#2c1809]/85 px-4 py-3 text-center text-[0.68rem] leading-[1.9] text-[#fde68a] sm:text-[0.82rem]">
+                            {billBeerCount <= 1 ? "Bill is deliberately working on beer one..." : `Chug montage: ${billBeerCount}/6 beers down`}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.6rem] border-4 border-[#fbbf24] bg-[#1b2230]/96 px-4 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.45)] sm:px-6">
+                      <div className="mb-2 text-[0.62rem] uppercase tracking-[0.35em] text-[#fcd34d] sm:text-[0.72rem]">
+                        BILL MODE
+                      </div>
+                      <div className="text-[0.78rem] leading-[1.9] text-white sm:text-[0.95rem]">
+                        {billStage === "dialogue" ? BILL_DIALOGUES[billDialogueIndex] : "Thereeeee ya go."}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {billStage === "door" && (
+                  <div className="flex h-full flex-col items-center justify-center gap-6 py-4">
+                    <div className="w-full max-w-sm space-y-3 text-center">
+                      <p className="text-[0.8rem] uppercase tracking-[0.35em] text-[#cbd5e1]">
+                        BUST IT DOWN
+                      </p>
+                      <div className="h-4 overflow-hidden rounded-full border-2 border-white/20 bg-white/10">
+                        <div
+                          className="h-full bg-gradient-to-r from-[#f59e0b] via-[#fbbf24] to-[#fde68a] transition-[width] duration-75"
+                          style={{ width: `${(billDoorTimeLeft / BILL_DOOR_DURATION_MS) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleBillDoorTap}
+                      ref={billDoorRef}
+                      className="bill-door-shell relative flex h-[52vh] max-h-[31rem] w-full max-w-sm items-center justify-center rounded-[2rem] border-[10px] border-[#64748b] bg-gradient-to-b from-[#6b7280] via-[#525966] to-[#2c313b] px-6 active:scale-[0.995]"
+                      style={{ touchAction: "manipulation" }}
+                    >
+                      <div
+                        className="absolute inset-[8%] rounded-[1.5rem] border-4 border-[#94a3b8]/45"
+                        style={{
+                          background:
+                            "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(0,0,0,0.15))",
+                        }}
+                      />
+                      <div className="absolute left-[14%] top-[18%] h-10 w-3 rounded-full bg-black/35" />
+                      <div className="absolute left-[14%] top-[34%] h-10 w-3 rounded-full bg-black/28" />
+                      <div className="absolute left-[14%] top-[50%] h-10 w-3 rounded-full bg-black/22" />
+                      <div className="absolute right-[18%] top-[46%] h-6 w-6 rounded-full border-4 border-[#e2e8f0]/60 bg-[#475569]" />
+                      <div
+                        className="absolute inset-0 rounded-[2rem]"
+                        style={{
+                          background: `
+                            repeating-linear-gradient(135deg, transparent, transparent 36px, rgba(255,255,255,${Math.min(0.34, billDoorTaps * 0.008)}) 37px, transparent 40px),
+                            linear-gradient(${110 + billDoorTaps * 2}deg, transparent 46%, rgba(248,250,252,${Math.min(0.42, billDoorTaps * 0.012)}) 48%, transparent 50%)
+                          `,
+                        }}
+                      />
+                      <div className="relative z-10 space-y-4 text-center text-white">
+                        <p className="text-[0.92rem] leading-[1.9] text-[#f8fafc]">
+                          TAP THE DOOR
+                        </p>
+                        <p className="text-[0.7rem] leading-[1.8] text-[#cbd5e1]">
+                          You have 4 seconds to figure it out.
+                        </p>
+                      </div>
+                    </button>
+
+                    <div className="flex w-full max-w-sm items-center justify-between gap-4 text-[#f8fafc]">
+                      <div className="rounded-2xl border-2 border-white/15 bg-black/25 px-4 py-3 text-left">
+                        <p className="text-[0.58rem] uppercase tracking-[0.32em] text-[#94a3b8]">Time</p>
+                        <p className="mt-2 text-[1.1rem]">{(billDoorTimeLeft / 1000).toFixed(1)}s</p>
+                      </div>
+                      <div className="rounded-2xl border-2 border-white/15 bg-black/25 px-4 py-3 text-right">
+                        <p className="text-[0.58rem] uppercase tracking-[0.32em] text-[#94a3b8]">Taps Left</p>
+                        <p className="mt-2 text-[1.4rem] text-[#fde68a]">{Math.max(0, BILL_DOOR_TARGET_TAPS - billDoorTaps)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {billStage === "result" && billResult && (
+                  <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
+                    <div className={`text-7xl ${billResult.success ? "scale-125" : ""}`}>
+                      {billResult.success ? "💥" : "🚪"}
+                    </div>
+                    <div className={`space-y-3 rounded-[2rem] border-4 px-6 py-6 text-white ${
+                      billResult.success
+                        ? "border-[#fde68a]/55 bg-[#33180a]/82 shadow-[0_0_45px_rgba(251,191,36,0.25)]"
+                        : "border-white/10 bg-black/35"
+                    }`}>
+                      <p className="text-[0.95rem] uppercase tracking-[0.25em] text-[#fde68a]">
+                        {billResult.success ? "DOOR BUSTED!" : "DOOR HELD."}
+                      </p>
+                      <p className="text-[0.75rem] leading-[1.8] text-[#e2e8f0]">
+                        {billResult.success
+                          ? `+300 + ${Math.max(0, billResult.bonus - 300)} BONUS`
+                          : "You lost a life and got bounced back outside."}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div
+                className={`absolute inset-0 bg-black transition-opacity duration-75 ${
+                  billBlackout ? "opacity-100" : "opacity-0"
+                }`}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {screen === "playing" && (
+        <div className="pointer-events-none absolute inset-0 z-10">
+          {catchBursts.map((burst) => (
+            <div key={burst.id} className="absolute" style={{ left: `${burst.x}px`, top: `${burst.y}px` }}>
+              {[
+                ["-42px", "-30px"],
+                ["-12px", "-46px"],
+                ["24px", "-38px"],
+                ["42px", "-10px"],
+                ["36px", "22px"],
+                ["0px", "40px"],
+                ["-34px", "26px"],
+                ["-46px", "-4px"],
+              ].map(([dx, dy], index) => (
+                <span
+                  key={`${burst.id}-${index}`}
+                  className="catch-burst"
+                  style={{ ["--burst-x" as string]: dx, ["--burst-y" as string]: dy }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── SPLASH ──────────────────────────────────────────────────────────── */}
       {screen === "splash" && (
@@ -671,10 +1679,12 @@ export function BachelorPartyGame() {
               return credit.type === "image" ? (
                 // Full-screen image credit
                 <div className="relative flex h-full w-full flex-col items-center justify-center">
-                  <img
+                  <Image
                     src={credit.src}
                     alt={credit.alt}
-                    className="max-h-full max-w-full object-contain"
+                    fill
+                    sizes="100vw"
+                    className="object-contain"
                   />
                   <p className="absolute bottom-10 text-sm uppercase tracking-widest text-slate-600">
                     tap anywhere to skip
@@ -761,10 +1771,10 @@ export function BachelorPartyGame() {
               <p className="text-xs uppercase tracking-widest text-slate-500">Your Name</p>
               <input
                 type="text"
-                maxLength={3}
+                maxLength={11}
                 value={playerName}
-                onChange={e => setPlayerName(e.target.value.toUpperCase().slice(0, 3))}
-                className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 py-4 text-center text-3xl font-black uppercase tracking-[0.5em] text-white outline-none focus:border-yellow-400"
+                onChange={e => setPlayerName(e.target.value.toUpperCase().slice(0, 11))}
+                className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-4 text-center text-lg font-black uppercase tracking-[0.18em] text-white outline-none focus:border-yellow-400 sm:text-2xl"
                 style={{ touchAction: "auto" }}
               />
             </div>

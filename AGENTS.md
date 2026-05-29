@@ -410,6 +410,19 @@ Future Codex sessions should update this file when they make meaningful feature,
 
 Prefer adding dated bullets under `Current Progress Log` rather than rewriting the whole file.
 
+### 2026-05-28
+
+- Began the `Jimmy's Bachelor Party Blitz` redesign in smaller implementation slices to avoid timeout risk.
+- Loaded route-scoped CDN assets for GSAP, Particles.js, Splitting.js, Howler.js, and the Press Start 2P font on the bachelor-party page.
+- Extended sponsor splash-card timing, added a named BR Studios image placeholder constant, and widened the end-screen name input to 11 characters with default `I LUV JIMMY`.
+- Removed Cass from the active bachelor-party roster, made Katie the only warning-trigger dodge object with faster drops and `KP INBOUND - HIDE!` copy, and made Bill much rarer before the upcoming full Bill Mode redesign.
+- Added a new presentation-only bachelor-party slice: Katie warning and `BACHELOR MODE` now render as DOM overlays ready for Splitting.js shatter text, Bachelor Mode applies subtle GSAP-driven screen breathing/hue cycling, and Particles.js runs behind the playfield during Bachelor Mode.
+- Added the first audio/haptics slice for Bachelor Party Blitz: background music now has a route-local Howler placeholder hookup with automatic pause during Bill Mode, and navigator haptics now fire for normal catches, life loss, game over, and Bachelor Mode activation while staying quiet during ongoing Bachelor/Bill gameplay.
+- Replaced the old Bill food/toilet timer mode with a standalone Bill mini-game overlay: catching Bill now pauses the normal board, runs the dialogue/chug sequence, transitions into the 4-second `BUST IT DOWN` door tap challenge, and resolves success/fail with score bonus or life loss before hard-cutting back to gameplay.
+- Polished the new Bill mini-game presentation with GSAP-driven wine toss and chug staging, reactive door shake/crack buildup during the tap challenge, and stronger success/fail payoff visuals while preserving the rough-but-polished look.
+- Added the remaining general-feel feedback pass to the live board: GSAP screen shake on life loss, catcher wobble feedback on successful catches, subtle object entry pop-in on spawn, and catch-burst particles around Jimmy when the player secures a good object.
+- Added the real Bachelor Party Blitz background music asset at `public/music/background.mp3` and pointed the Howler music path at that public file instead of the earlier placeholder string.
+
 Before final responses after code changes, usually run:
 
 ```bash
