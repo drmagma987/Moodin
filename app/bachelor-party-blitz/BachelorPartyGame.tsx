@@ -143,8 +143,11 @@ const CATCH_POOL: ObjDef[] = [
 ];
 
 // ── NORMAL MODE: dodge these ─────────────────────────────────────────────────
+const KATIE_DEF: ObjDef = {
+  type: "katie", emoji: "💃", label: "KATIE", color: "#ea580c", behavior: "erratic", catchType: "dodge", speedMultiplier: 1.85,
+};
+
 const DODGE_POOL: ObjDef[] = [
-  { type: "katie",    emoji: "💃", label: "KATIE",    color: "#ea580c", behavior: "erratic", catchType: "dodge", speedMultiplier: 1.85 },
   { type: "dumbbell", emoji: "🏋️", label: "DUMBBELL", color: "#475569", behavior: "straight", catchType: "dodge" },
   { type: "payment",  emoji: "💳", label: "PAYMENT",  color: "#dc2626", behavior: "straight", catchType: "dodge" },
 ];
@@ -205,7 +208,7 @@ function reportBlitzRuntimeError(scope: string, error: unknown) {
 
 function makeGS(W: number, H: number): GS {
   return {
-    score: 0, lives: 6, bagMeter: 1, speed: 1, elapsed: 0,
+    score: 0, lives: 8, bagMeter: 1, speed: 1, elapsed: 0,
     objs: [], nextId: 0, spawnTimer: 1,
     cx: W / 2, cy: H - CATCHER_BOTTOM,
     bachelor: false, bachelorTimer: 0,
@@ -250,7 +253,7 @@ function triggerKatieWarning(gs: GS) {
   for (let i = 1; i <= 3; i++) {
     const speed = (BASE_FALL_SPEED + gs.elapsed * 3) * gs.speed * 1.85;
     gs.objs.push({
-      ...DODGE_POOL[0],
+      ...KATIE_DEF,
       id: gs.nextId++,
       x: OBJ_SIZE + Math.random() * (gs.W - OBJ_SIZE * 2),
       y: -OBJ_SIZE / 2 - i * 130,
@@ -476,10 +479,10 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.textBaseline = "middle";
   ctx.fillText(String(gs.score), 14, 26);
 
-  // Bag meter
+  // BR multiplier
   ctx.font = "bold 11px sans-serif";
   ctx.fillStyle = "#64748b";
-  ctx.fillText("BAG METER", 14, 54);
+  ctx.fillText("BR MULT", 14, 54);
   ctx.font = "bold 20px sans-serif";
   ctx.fillStyle = gs.bagMeter >= 3 ? "#22c55e" : "#94a3b8";
   const bmDisplay = Number.isInteger(gs.bagMeter) ? `${gs.bagMeter}x` : `${gs.bagMeter.toFixed(1)}x`;
@@ -574,9 +577,18 @@ interface CatchBurst {
   y: number;
 }
 
+interface MusicController {
+  play: () => number | undefined;
+  pause: () => void;
+  stop: () => void;
+  unload: () => void;
+  playing: () => boolean;
+}
+
 export function BachelorPartyGame() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const playfieldRef = useRef<HTMLDivElement>(null);
   const particlesRef = useRef<HTMLDivElement>(null);
   const bachelorAuraRef = useRef<HTMLDivElement>(null);
   const katieWarningRef = useRef<HTMLDivElement>(null);
@@ -587,13 +599,7 @@ export function BachelorPartyGame() {
   const catcherFxRef = useRef<HTMLDivElement>(null);
   const gsRef = useRef<GS | null>(null);
   const rafRef = useRef<number>(0);
-  const musicRef = useRef<{
-    play: () => number | undefined;
-    pause: () => void;
-    stop: () => void;
-    unload: () => void;
-    playing: () => boolean;
-  } | null>(null);
+  const musicRef = useRef<MusicController | null>(null);
   const bachelorUiRef = useRef(false);
   const billUiRef = useRef(false);
   const warningUiRef = useRef(false);
@@ -603,6 +609,7 @@ export function BachelorPartyGame() {
   const billDoorIntervalRef = useRef<number | null>(null);
   const billBlackoutTimeoutRef = useRef<number | null>(null);
   const billBlackoutResetRef = useRef<number | null>(null);
+  const shakeResetTimeoutRef = useRef<number | null>(null);
   const billDoorTapsRef = useRef(0);
   const catchBurstIdRef = useRef(0);
   const spawnPopIdsRef = useRef<Set<number>>(new Set());
@@ -634,22 +641,24 @@ export function BachelorPartyGame() {
   }, []);
 
   useEffect(() => {
-    if (typeof window.Howl !== "function" || musicRef.current) return;
+    if (musicRef.current) return;
 
     try {
-      musicRef.current = new window.Howl({
-        src: [BACKGROUND_MUSIC_PLACEHOLDER],
-        loop: true,
-        volume: 0.38,
-        html5: true,
-        preload: true,
-        onloaderror: (_id, error) => {
-          console.warn("[BachelorPartyBlitz] Background music failed to load.", error);
-        },
-        onplayerror: (_id, error) => {
-          console.warn("[BachelorPartyBlitz] Background music failed to play.", error);
-        },
-      });
+      if (typeof window.Howl === "function") {
+        musicRef.current = new window.Howl({
+          src: [BACKGROUND_MUSIC_PLACEHOLDER],
+          loop: true,
+          volume: 0.38,
+          html5: true,
+          preload: true,
+          onloaderror: (_id, error) => {
+            console.warn("[BachelorPartyBlitz] Background music failed to load.", error);
+          },
+          onplayerror: (_id, error) => {
+            console.warn("[BachelorPartyBlitz] Background music failed to play.", error);
+          },
+        });
+      }
     } catch (error) {
       reportBlitzRuntimeError("Howler setup", error);
     }
@@ -661,6 +670,7 @@ export function BachelorPartyGame() {
     if (billDoorIntervalRef.current) window.clearInterval(billDoorIntervalRef.current);
     if (billBlackoutTimeoutRef.current) window.clearTimeout(billBlackoutTimeoutRef.current);
     if (billBlackoutResetRef.current) window.clearTimeout(billBlackoutResetRef.current);
+    if (shakeResetTimeoutRef.current) window.clearTimeout(shakeResetTimeoutRef.current);
     musicRef.current?.stop();
     musicRef.current?.unload();
   }, []);
@@ -733,6 +743,54 @@ export function BachelorPartyGame() {
     }
   }, []);
 
+  const ensureMusicReady = useCallback(() => {
+    if (musicRef.current) return musicRef.current;
+
+    try {
+      if (typeof window.Howl === "function") {
+        musicRef.current = new window.Howl({
+          src: [BACKGROUND_MUSIC_PLACEHOLDER],
+          loop: true,
+          volume: 0.38,
+          html5: true,
+          preload: true,
+          onloaderror: (_id, error) => {
+            console.warn("[BachelorPartyBlitz] Background music failed to load.", error);
+          },
+          onplayerror: (_id, error) => {
+            console.warn("[BachelorPartyBlitz] Background music failed to play.", error);
+          },
+        });
+        return musicRef.current;
+      }
+
+      const audio = new window.Audio(BACKGROUND_MUSIC_PLACEHOLDER);
+      audio.loop = true;
+      audio.volume = 0.38;
+      audio.preload = "auto";
+      musicRef.current = {
+        play: () => {
+          void audio.play();
+          return 0;
+        },
+        pause: () => audio.pause(),
+        stop: () => {
+          audio.pause();
+          audio.currentTime = 0;
+        },
+        unload: () => {
+          audio.pause();
+          audio.src = "";
+        },
+        playing: () => !audio.paused,
+      };
+      return musicRef.current;
+    } catch (error) {
+      reportBlitzRuntimeError("Music controller setup", error);
+      return null;
+    }
+  }, []);
+
   const runVibrate = useCallback((pattern: number | number[]) => {
     if (typeof navigator === "undefined" || !navigator.vibrate) return;
     navigator.vibrate(pattern);
@@ -752,15 +810,20 @@ export function BachelorPartyGame() {
 
   const shakeScreen = useCallback(() => {
     const gsap = window.gsap;
-    const el = wrapperRef.current;
+    const el = playfieldRef.current;
     if (!gsap || !el) return;
 
+    if (shakeResetTimeoutRef.current) window.clearTimeout(shakeResetTimeoutRef.current);
+    gsap.set(el, { x: 0, y: 0, rotation: 0 });
     const tween = gsap.fromTo(
       el,
       { x: -10, y: 0, rotate: -0.4 },
       { x: 10, y: 0, rotate: 0.4, duration: 0.08, repeat: 3, yoyo: true, ease: "sine.inOut" },
     );
-    window.setTimeout(() => tween?.kill?.(), 420);
+    shakeResetTimeoutRef.current = window.setTimeout(() => {
+      tween?.kill?.();
+      gsap.set(el, { x: 0, y: 0, rotation: 0, clearProps: "transform" });
+    }, 430);
   }, []);
 
   const wobbleCatcherFx = useCallback(() => {
@@ -1054,9 +1117,12 @@ export function BachelorPartyGame() {
     if (!c) return;
     gsRef.current = makeGS(c.width, c.height);
     musicEnabledRef.current = audioEnabled;
-    if (audioEnabled) runMusic(true);
+    if (audioEnabled) {
+      ensureMusicReady();
+      runMusic(true);
+    }
     setScreen("playing");
-  }, [audioEnabled, runMusic]);
+  }, [audioEnabled, ensureMusicReady, runMusic]);
 
   const playAgain = useCallback(() => {
     const c = canvasRef.current;
@@ -1072,9 +1138,17 @@ export function BachelorPartyGame() {
     setShowBachelorBanner(false);
     exitBillMode();
     musicEnabledRef.current = audioEnabled;
-    if (audioEnabled) runMusic(true);
+    if (audioEnabled) {
+      ensureMusicReady();
+      runMusic(true);
+    }
     setScreen("playing");
-  }, [audioEnabled, exitBillMode, runMusic]);
+  }, [audioEnabled, ensureMusicReady, exitBillMode, runMusic]);
+
+  const advanceSplash = useCallback(() => {
+    if (screen !== "splash") return;
+    setSplashIdx(index => Math.min(index + 1, SPLASH_CREDITS.length));
+  }, [screen]);
 
   const isNewBest = finalScore > 0 && finalScore >= personalBest;
 
@@ -1138,13 +1212,13 @@ export function BachelorPartyGame() {
 
     const hueTween = gsap.to(el, {
       duration: 8,
-      filter: "blur(0.35px)",
+      filter: "blur(0.6px) saturate(1.08)",
       ease: "none",
       repeat: -1,
     });
     const breatheTween = gsap.to(el, {
-      duration: 2.8,
-      scale: 1.018,
+      duration: 2.1,
+      scale: 1.028,
       yoyo: true,
       repeat: -1,
       ease: "sine.inOut",
@@ -1164,15 +1238,25 @@ export function BachelorPartyGame() {
     if (!el || !gsap || !isBachelorMode || isBillMode || screen !== "playing") return;
 
     const hueTween = gsap.to(el, {
-      duration: 7,
-      filter: "hue-rotate(360deg) saturate(1.25)",
+      duration: 5.2,
+      filter: "hue-rotate(360deg) saturate(1.5) contrast(1.08)",
       ease: "none",
       repeat: -1,
+    });
+    const pulseTween = gsap.to(el, {
+      duration: 1.6,
+      scale: 1.08,
+      opacity: 0.92,
+      yoyo: true,
+      repeat: -1,
+      ease: "sine.inOut",
+      transformOrigin: "center center",
     });
 
     return () => {
       hueTween?.kill?.();
-      gsap.set(el, { clearProps: "filter" });
+      pulseTween?.kill?.();
+      gsap.set(el, { clearProps: "filter,transform,opacity" });
     };
   }, [isBachelorMode, isBillMode, screen]);
 
@@ -1186,15 +1270,15 @@ export function BachelorPartyGame() {
     try {
       window.particlesJS(PARTICLES_CONTAINER_ID, {
         particles: {
-          number: { value: 44, density: { enable: true, value_area: 900 } },
+          number: { value: 70, density: { enable: true, value_area: 900 } },
           color: { value: ["#22d3ee", "#f472b6", "#fde047", "#a78bfa"] },
           shape: { type: "circle" },
-          opacity: { value: 0.42, random: true },
-          size: { value: 3.1, random: true },
+          opacity: { value: 0.55, random: true },
+          size: { value: 3.8, random: true },
           line_linked: { enable: false },
           move: {
             enable: true,
-            speed: 1.2,
+            speed: 1.8,
             direction: "top",
             random: true,
             straight: false,
@@ -1462,30 +1546,31 @@ export function BachelorPartyGame() {
         }
       `}</style>
 
-      <canvas ref={canvasRef} className="absolute inset-0 block" />
-      {screen === "playing" && (
+      <div ref={playfieldRef} className="absolute inset-0">
+        <canvas ref={canvasRef} className="absolute inset-0 block" />
+        {screen === "playing" && (
+          <div
+            ref={catcherFxRef}
+            className="pointer-events-none absolute rounded-full border-2 border-[#86efac]/70 bg-[#22c55e]/12 shadow-[0_0_22px_rgba(34,197,94,0.35)]"
+            style={{
+              width: `${CATCHER_W}px`,
+              height: `${CATCHER_H}px`,
+              left: "0px",
+              top: "0px",
+              opacity: 0.12,
+            }}
+          />
+        )}
         <div
-          ref={catcherFxRef}
-          className="pointer-events-none absolute rounded-full border-2 border-[#86efac]/70 bg-[#22c55e]/12 shadow-[0_0_22px_rgba(34,197,94,0.35)]"
-          style={{
-            width: `${CATCHER_W}px`,
-            height: `${CATCHER_H}px`,
-            left: "0px",
-            top: "0px",
-            opacity: 0.12,
-          }}
+          ref={particlesRef}
+          id={PARTICLES_CONTAINER_ID}
+          className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ${
+            isBachelorMode && !isBillMode ? "opacity-100" : "opacity-0"
+          }`}
         />
-      )}
-      <div
-        ref={particlesRef}
-        id={PARTICLES_CONTAINER_ID}
-        className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ${
-          isBachelorMode && !isBillMode ? "opacity-100" : "opacity-0"
-        }`}
-      />
 
-      {screen === "playing" && (
-        <div className="pointer-events-none absolute inset-0">
+        {screen === "playing" && (
+          <div className="pointer-events-none absolute inset-0">
           <div
             ref={bachelorAuraRef}
             className={`absolute inset-0 transition-opacity duration-300 ${
@@ -1493,7 +1578,8 @@ export function BachelorPartyGame() {
             }`}
             style={{
               background:
-                "radial-gradient(circle at top, rgba(244,114,182,0.16), transparent 42%), radial-gradient(circle at bottom, rgba(34,211,238,0.14), transparent 46%)",
+                "radial-gradient(circle at 20% 10%, rgba(244,114,182,0.26), transparent 32%), radial-gradient(circle at 80% 18%, rgba(34,211,238,0.24), transparent 34%), radial-gradient(circle at 50% 88%, rgba(253,224,71,0.18), transparent 38%)",
+              mixBlendMode: "screen",
             }}
           />
 
@@ -1702,11 +1788,11 @@ export function BachelorPartyGame() {
               />
             </div>
           )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {screen === "playing" && (
-        <div className="pointer-events-none absolute inset-0 z-10">
+        {screen === "playing" && (
+          <div className="pointer-events-none absolute inset-0 z-10">
           {catchBursts.map((burst) => (
             <div key={burst.id} className="absolute" style={{ left: `${burst.x}px`, top: `${burst.y}px` }}>
               {[
@@ -1727,14 +1813,15 @@ export function BachelorPartyGame() {
               ))}
             </div>
           ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* ── SPLASH ──────────────────────────────────────────────────────────── */}
       {screen === "splash" && (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center bg-black/96"
-          onClick={startGame}
+          onClick={splashIdx < SPLASH_CREDITS.length ? advanceSplash : undefined}
         >
           {splashIdx < SPLASH_CREDITS.length ? (
             (() => {
@@ -1750,7 +1837,7 @@ export function BachelorPartyGame() {
                     className="object-contain"
                   />
                   <p className="absolute bottom-10 text-sm uppercase tracking-widest text-slate-600">
-                    tap anywhere to skip
+                    tap to continue
                   </p>
                 </div>
               ) : (
@@ -1763,15 +1850,15 @@ export function BachelorPartyGame() {
                     {credit.text}
                   </p>
                   <p className="mt-12 text-sm uppercase tracking-widest text-slate-700">
-                    tap anywhere to skip
+                    tap to continue
                   </p>
                 </div>
               );
             })()
           ) : (
             // Title card
-            <div className="w-full max-w-sm px-5 text-center">
-              <div className="space-y-5 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-4 py-6 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:px-6">
+            <div className="w-full max-w-lg px-4 text-center sm:px-5">
+              <div className="space-y-5 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-5 py-6 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:px-6">
                 <p className="text-[1.9rem] leading-[1.35] text-white sm:text-[2.25rem]">
                   JIMMY&apos;S
                   <br />
@@ -1784,10 +1871,11 @@ export function BachelorPartyGame() {
                   <p className="mb-3 text-center text-[0.68rem] uppercase tracking-[0.28em] text-slate-400 sm:text-[0.78rem]">
                     How To Play
                   </p>
+                  <p className="text-sky-300">👆 Drag anywhere to move Jimmy under the falling objects.</p>
                   <p className="text-green-400">🟢 Catch the good stuff: money, dreidel, goth, and the mushroom.</p>
                   <p className="mt-2 text-red-400">🔴 Dodge Katie, payments, and dumbbells or you lose a life.</p>
-                  <p className="mt-2 text-sky-300">👆 Drag anywhere to move Jimmy under the falling objects.</p>
-                  <p className="mt-2 text-fuchsia-300">🍄 Mushroom triggers Bachelor Mode. Bill is rare and starts the door mini-game.</p>
+                  <p className="mt-2 text-fuchsia-300">🍄 Mushroom triggers Bachelor Mode.</p>
+                  <p className="mt-2 text-amber-300">🧾 Bill Mode is rare and starts the door mini-game.</p>
                   <p className="mt-2 text-amber-300">🍺 You have 6 lives. Last as long as possible and run up your score.</p>
                 </div>
 
