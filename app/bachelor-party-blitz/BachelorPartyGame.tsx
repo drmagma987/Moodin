@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 
 declare global {
@@ -79,10 +81,10 @@ const DODGE_SPAWN_CHANCE = 0.35;
 const KATIE_WARNING_DURATION = 1.8;
 const BACHELOR_BANNER_DURATION_MS = 1600;
 const PARTICLES_CONTAINER_ID = "bachelor-mode-particles";
-const BILL_DIALOGUE_DURATION_MS = 3600;
+const BILL_DIALOGUE_DURATION_MS = 4600;
 const BILL_FIRST_BEER_DURATION_MS = 1800;
 const BILL_RAPID_BEER_DURATION_MS = 420;
-const BILL_POST_CHUG_DIALOGUE_DURATION_MS = 3400;
+const BILL_POST_CHUG_DIALOGUE_DURATION_MS = 4600;
 const BILL_BEER_TOTAL = 12;
 const BILL_DOOR_DURATION_MS = 8000;
 const BILL_DOOR_INTRO_DURATION_MS = 2200;
@@ -581,8 +583,7 @@ const SPLASH_CREDITS: SplashCredit[] = [
   { type: "image", src: BR_STUDIOS_CARD_SRC, alt: "BR Studios" },
 ];
 
-// Edit this line to change the game-over roast
-const ROAST_LINE = "Jimmy, even your bachelor party couldn't save your jump shot. 💀";
+const END_QUOTE_LINE = "If you can dodge a wrench, you can dodge a ball. Try again qu33rbag";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
@@ -635,6 +636,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const billBlackoutResetRef = useRef<number | null>(null);
   const shakeResetTimeoutRef = useRef<number | null>(null);
   const billDoorTapsRef = useRef(0);
+  const billDoorLastTapAtRef = useRef(0);
   const catchBurstIdRef = useRef(0);
   const spawnPopIdsRef = useRef<Set<number>>(new Set());
 
@@ -919,6 +921,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     setBillResult(null);
     setBillBlackout(false);
     billDoorTapsRef.current = 0;
+    billDoorLastTapAtRef.current = 0;
   }, [clearBillTimers]);
 
   const initializeBillMode = useCallback(() => {
@@ -932,6 +935,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     setBillResult(null);
     setBillBlackout(false);
     billDoorTapsRef.current = 0;
+    billDoorLastTapAtRef.current = 0;
   }, [clearBillTimers]);
 
   const resolveBillDoor = useCallback((taps: number) => {
@@ -1049,8 +1053,8 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   useEffect(() => {
     if (!isBillMode || billStage !== "chug") return;
 
-    if (billBeerCount <= 1) {
-      billStageTimeoutRef.current = window.setTimeout(() => setBillBeerCount(2), BILL_FIRST_BEER_DURATION_MS);
+    if (billBeerCount === 0) {
+      billStageTimeoutRef.current = window.setTimeout(() => setBillBeerCount(1), BILL_FIRST_BEER_DURATION_MS);
       return () => {
         if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
       };
@@ -1246,11 +1250,16 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     }
 
     setBillStage("chug");
-    setBillBeerCount(1);
+    setBillBeerCount(0);
   }, [billDialogueIndex, billPostChugIndex, billStage, isBillMode]);
 
   const handleBillDoorTap = useCallback(() => {
     if (!isBillMode || billStage !== "door") return;
+
+    const now = performance.now();
+    if (now - billDoorLastTapAtRef.current < 35) return;
+    billDoorLastTapAtRef.current = now;
+
     setBillDoorTaps(current => {
       const next = current + 1;
       billDoorTapsRef.current = next;
@@ -1258,24 +1267,16 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     });
   }, [billStage, isBillMode]);
 
-  useEffect(() => {
-    if (!isBillMode || billStage !== "door") return;
-
-    const el = billDoorRef.current;
-    if (!el) return;
-
-    const onPress = (event: Event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      handleBillDoorTap();
-    };
-
-    el.addEventListener("pointerdown", onPress, { passive: false });
-
-    return () => {
-      el.removeEventListener("pointerdown", onPress);
-    };
-  }, [billStage, handleBillDoorTap, isBillMode]);
+  const handleBillDoorPress = useCallback((
+    event:
+      | ReactMouseEvent<HTMLButtonElement>
+      | ReactTouchEvent<HTMLButtonElement>
+      | ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handleBillDoorTap();
+  }, [handleBillDoorTap]);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -1550,17 +1551,27 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     const beers = el.querySelectorAll("[data-bill-beer]");
     if (!beers.length) return;
 
-    gsap.set(beers, { y: 0, opacity: 0.45, scale: 0.84 });
+    const beersLeft = Math.max(0, BILL_BEER_TOTAL - billBeerCount);
+    gsap.set(beers, { y: 0, opacity: 0, scale: 0.45 });
     beers.forEach((beer, index) => {
-      if (index < billBeerCount) {
+      if (index < beersLeft) {
         gsap.to(beer, {
           opacity: 1,
-          scale: index === billBeerCount - 1 ? 1.18 : 1,
-          y: index === billBeerCount - 1 ? -8 : 0,
-          duration: index === 0 ? 0.45 : 0.2,
+          scale: 1,
+          y: 0,
+          duration: 0.14,
+          ease: "power2.out",
+        });
+        return;
+      }
+
+      gsap.to(beer, {
+          opacity: 0,
+          scale: index === beersLeft ? 0.2 : 0.32,
+          y: index === beersLeft ? -12 : -6,
+          duration: index === beersLeft ? 0.18 : 0.12,
           ease: "back.out(1.6)",
         });
-      }
     });
   }, [billBeerCount, billStage, isBillMode]);
 
@@ -1770,12 +1781,14 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                             <span className="sr-only">Wine tossed away</span>
                           )}
                           {(billStage === "dialogue" && billDialogueIndex === 2) || billStage === "chug" ? (
-                            <div ref={billBeerRackRef} className="flex items-center justify-center gap-2 sm:gap-3">
+                            <div ref={billBeerRackRef} className="grid grid-cols-6 gap-x-2 gap-y-3 sm:gap-x-3">
                               {Array.from({ length: BILL_BEER_TOTAL }).map((_, index) => (
                                 <span
                                   key={`beer-${index}`}
                                   data-bill-beer
-                                  className={`inline-block ${index >= billBeerCount ? "opacity-35" : ""}`}
+                                  className={`inline-block text-[2.2rem] leading-none transition-opacity duration-150 sm:text-[2.8rem] ${
+                                    index < BILL_BEER_TOTAL - billBeerCount ? "opacity-100" : "opacity-0"
+                                  }`}
                                 >
                                   🍺
                                 </span>
@@ -1842,6 +1855,10 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                     <button
                       type="button"
                       ref={billDoorRef}
+                      onPointerDown={handleBillDoorPress}
+                      onMouseDown={handleBillDoorPress}
+                      onTouchStart={handleBillDoorPress}
+                      onClick={handleBillDoorPress}
                       className="bill-door-shell relative flex h-[52vh] max-h-[31rem] w-full max-w-sm select-none items-center justify-center rounded-[2rem] border-[10px] border-[#64748b] bg-gradient-to-b from-[#6b7280] via-[#525966] to-[#2c313b] px-6 active:scale-[0.995]"
                       style={{ touchAction: "none" }}
                     >
@@ -2064,10 +2081,20 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
             <p className="text-6xl">💀</p>
             <p className="text-3xl font-black uppercase text-white">GAME OVER</p>
 
-            {/* Roast — edit ROAST_LINE above */}
-            <p className="px-4 text-base italic font-semibold text-[#f97316]">
-              &ldquo;{ROAST_LINE}&rdquo;
-            </p>
+            <div className="space-y-3">
+              <div className="mx-auto w-full max-w-[16rem] overflow-hidden rounded-3xl border-4 border-slate-700 bg-slate-900 shadow-[0_18px_50px_rgba(0,0,0,0.45)]">
+                <Image
+                  src="/bachelor-party-blitz/end-quote-photo.jpg"
+                  alt="End screen quote"
+                  width={678}
+                  height={1207}
+                  className="h-auto w-full object-cover"
+                />
+              </div>
+              <p className="px-4 text-base font-semibold italic text-[#f97316]">
+                &ldquo;{END_QUOTE_LINE}&rdquo;
+              </p>
+            </div>
 
             {/* Score vs personal best */}
             <div className="space-y-3 rounded-2xl border-2 border-slate-700 bg-slate-900 p-5">
