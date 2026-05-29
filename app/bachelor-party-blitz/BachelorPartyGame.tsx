@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 declare global {
   interface Window {
@@ -1124,6 +1124,33 @@ export function BachelorPartyGame() {
     setScreen("playing");
   }, [audioEnabled, ensureMusicReady, runMusic]);
 
+  const skipIntro = useCallback((event?: ReactMouseEvent) => {
+    event?.stopPropagation();
+    setSplashIdx(SPLASH_CREDITS.length);
+  }, []);
+
+  const handleAudioToggle = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+
+    setAudioEnabled(current => {
+      const next = !current;
+      musicEnabledRef.current = next;
+
+      if (next) {
+        const music = ensureMusicReady();
+        try {
+          music?.play();
+        } catch (error) {
+          reportBlitzRuntimeError("Immediate audio toggle play", error);
+        }
+      } else {
+        runMusic(false);
+      }
+
+      return next;
+    });
+  }, [ensureMusicReady, runMusic]);
+
   const playAgain = useCallback(() => {
     const c = canvasRef.current;
     if (!c) return;
@@ -1829,6 +1856,14 @@ export function BachelorPartyGame() {
               return credit.type === "image" ? (
                 // Full-screen image credit
                 <div className="relative flex h-full w-full flex-col items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={skipIntro}
+                    className="absolute right-4 top-4 z-10 rounded-full border border-white/15 bg-black/40 px-4 py-2 text-[0.62rem] uppercase tracking-[0.22em] text-slate-200"
+                    style={{ touchAction: "auto" }}
+                  >
+                    Skip Intro
+                  </button>
                   <Image
                     src={credit.src}
                     alt={credit.alt}
@@ -1843,6 +1878,14 @@ export function BachelorPartyGame() {
               ) : (
                 // Text credit
                 <div className="w-full max-w-xs px-8 text-center">
+                  <button
+                    type="button"
+                    onClick={skipIntro}
+                    className="mb-6 rounded-full border border-white/15 bg-black/40 px-4 py-2 text-[0.62rem] uppercase tracking-[0.22em] text-slate-200"
+                    style={{ touchAction: "auto" }}
+                  >
+                    Skip Intro
+                  </button>
                   <p className="mb-8 text-xs uppercase tracking-[0.3em] text-slate-600">
                     A PRODUCTION
                   </p>
@@ -1885,10 +1928,7 @@ export function BachelorPartyGame() {
 
                 <button
                   type="button"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setAudioEnabled(current => !current);
-                  }}
+                  onClick={handleAudioToggle}
                   className={`w-full rounded-2xl border px-4 py-3 text-[0.68rem] uppercase tracking-[0.24em] sm:text-[0.78rem] ${
                     audioEnabled
                       ? "border-emerald-400 bg-emerald-500/15 text-emerald-300"
