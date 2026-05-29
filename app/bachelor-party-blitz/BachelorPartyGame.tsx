@@ -88,7 +88,7 @@ const BILL_POST_CHUG_DIALOGUE_DURATION_MS = 4600;
 const BILL_BEER_TOTAL = 12;
 const BILL_DOOR_DURATION_MS = 8000;
 const BILL_DOOR_INTRO_DURATION_MS = 2200;
-const BILL_DOOR_TARGET_TAPS = 35;
+const BILL_DOOR_TARGET_TAPS = 40;
 const BILL_RESULT_HOLD_MS = 1200;
 const BILL_BLACKOUT_FLASH_MS = 110;
 const ANGBEEN_FLYBY_SRC = "/bachelor-party-blitz/angbeen-flyby.jpg";
@@ -1019,6 +1019,19 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     billDoorTapsRef.current = 0;
   }, [clearBillTimers]);
 
+  const skipBillIntro = useCallback(() => {
+    clearBillTimers();
+    setBillStage("doorIntro");
+    setBillDialogueIndex(0);
+    setBillPostChugIndex(0);
+    setBillBeerCount(0);
+    setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
+    setBillDoorTaps(0);
+    setBillResult(null);
+    setBillBlackout(false);
+    billDoorTapsRef.current = 0;
+  }, [clearBillTimers]);
+
   const resolveBillDoor = useCallback((taps: number) => {
     clearBillTimers();
     const success = taps >= BILL_DOOR_TARGET_TAPS;
@@ -1776,6 +1789,34 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
           will-change: transform, opacity;
           filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.28));
         }
+        .bill-double-vision {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          overflow: hidden;
+        }
+        .bill-double-vision::before,
+        .bill-double-vision::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          background:
+            radial-gradient(circle at 28% 35%, rgba(248, 113, 113, 0.16), transparent 34%),
+            radial-gradient(circle at 72% 64%, rgba(96, 165, 250, 0.14), transparent 32%),
+            linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.08));
+          mix-blend-mode: screen;
+          opacity: 0.75;
+        }
+        .bill-double-vision::before {
+          transform: translate(-10px, 3px) scale(1.01);
+          filter: blur(3px);
+        }
+        .bill-double-vision::after {
+          transform: translate(12px, -4px) scale(1.015);
+          filter: blur(5px);
+          opacity: 0.48;
+        }
       `}</style>
 
       <div ref={playfieldRef} className="absolute inset-0">
@@ -1875,6 +1916,18 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   opacity: 0.9,
                 }}
               />
+              {billStage === "door" && <div className="bill-double-vision" aria-hidden="true" />}
+
+              {(billStage === "dialogue" || billStage === "chug" || billStage === "postChug") && (
+                <button
+                  type="button"
+                  onClick={skipBillIntro}
+                  className="absolute right-4 top-4 z-30 rounded-full border border-white/15 bg-black/40 px-4 py-2 text-[0.62rem] uppercase tracking-[0.22em] text-slate-200"
+                  style={{ touchAction: "auto" }}
+                >
+                  Skip Intro
+                </button>
+              )}
 
               {(billStage === "dialogue" || billStage === "postChug") && (
                 <button
