@@ -429,6 +429,11 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
   - the door CTA explicitly tells players to tap fast to break it down
   - the door now uses direct pointer-down handling with calmer pre-countdown presentation
   - Verified with `npm run lint` and `npx tsc --noEmit` (`lint` still has the existing single-page font warning on the bachelor-party route).
+- Expanded Bill Mode again:
+  - added two post-chug story slides before the door sequence
+  - increased the door timer from 4 seconds to 8 seconds
+  - changed the door tap path to use a native `pointerdown` listener plus functional tap-state updates to address the tap counter stalling after the first press
+  - Verified with `npm run lint` and `npx tsc --noEmit` (`lint` still has the existing single-page font warning on the bachelor-party route).
 
 Before final responses after code changes, usually run:
 

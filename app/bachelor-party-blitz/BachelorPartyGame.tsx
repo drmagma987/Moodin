@@ -7,7 +7,6 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 
 declare global {
@@ -82,9 +81,11 @@ const BACHELOR_BANNER_DURATION_MS = 1600;
 const PARTICLES_CONTAINER_ID = "bachelor-mode-particles";
 const BILL_DIALOGUE_DURATION_MS = 3600;
 const BILL_FIRST_BEER_DURATION_MS = 1800;
-const BILL_RAPID_BEER_DURATION_MS = 320;
-const BILL_DOOR_DURATION_MS = 4000;
-const BILL_DOOR_INTRO_DURATION_MS = 1800;
+const BILL_RAPID_BEER_DURATION_MS = 420;
+const BILL_POST_CHUG_DIALOGUE_DURATION_MS = 3400;
+const BILL_BEER_TOTAL = 12;
+const BILL_DOOR_DURATION_MS = 8000;
+const BILL_DOOR_INTRO_DURATION_MS = 2200;
 const BILL_DOOR_TARGET_TAPS = 25;
 const BILL_RESULT_HOLD_MS = 1200;
 const BILL_BLACKOUT_FLASH_MS = 110;
@@ -93,6 +94,11 @@ const BILL_DIALOGUES = [
   "...",
   "Uhhh no. That's for chicks.",
   "Thereeeee ya go.",
+] as const;
+
+const BILL_POST_CHUG_DIALOGUES = [
+  "I better take off all my clothes and leave the apartment.",
+  "oh no, I'm locked out! And jimmy can't hear me! There's only one thing left to do",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -470,52 +476,60 @@ function drawCatcher(ctx: CanvasRenderingContext2D, gs: GS) {
 
 function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
   const { W, bill, bachelor } = gs;
+  const hudH = 88;
+  const compact = W < 390;
 
   ctx.fillStyle = "rgba(7,18,41,0.94)";
-  ctx.fillRect(0, 0, W, 72);
+  ctx.fillRect(0, 0, W, hudH);
 
   // bottom accent line on HUD
   ctx.fillStyle = bachelor ? "#facc15" : bill ? "#fbbf24" : "#064789";
-  ctx.fillRect(0, 72, W, 3);
+  ctx.fillRect(0, hudH, W, 3);
 
   // Score
-  ctx.font = "bold 26px sans-serif";
-  ctx.fillStyle = bachelor ? "#facc15" : "#fff";
+  ctx.font = "bold 10px sans-serif";
+  ctx.fillStyle = "#94a3b8";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(String(gs.score), 14, 26);
+  ctx.fillText("SCORE", 14, 16);
+  ctx.font = `bold ${compact ? 22 : 26}px sans-serif`;
+  ctx.fillStyle = bachelor ? "#facc15" : "#fff";
+  ctx.fillText(String(gs.score), 14, 38);
 
   // BR multiplier
   ctx.font = "bold 11px sans-serif";
   ctx.fillStyle = "#64748b";
-  ctx.fillText("BR MULT", 14, 54);
-  ctx.font = "bold 20px sans-serif";
+  ctx.fillText("BR MULT", 14, 66);
+  ctx.font = `bold ${compact ? 18 : 20}px sans-serif`;
   ctx.fillStyle = gs.bagMeter >= 3 ? "#22c55e" : "#94a3b8";
   const bmDisplay = Number.isInteger(gs.bagMeter) ? `${gs.bagMeter}x` : `${gs.bagMeter.toFixed(1)}x`;
-  ctx.fillText(bmDisplay, 110, 54);
+  ctx.fillText(bmDisplay, compact ? 88 : 110, 66);
 
-  // Lives as beer mugs — smaller to fit 6
-  ctx.font = "17px serif";
+  // Lives on a dedicated right lane to avoid crowding the center mode label.
+  ctx.font = "bold 10px sans-serif";
+  ctx.fillStyle = "#94a3b8";
   ctx.textAlign = "right";
-  for (let i = 0; i < gs.lives; i++) ctx.fillText("🍺", W - 10 - i * 26, 26);
+  ctx.fillText("LIVES", W - 12, 16);
+  ctx.font = `${compact ? 14 : 16}px serif`;
+  for (let i = 0; i < gs.lives; i++) ctx.fillText("🍺", W - 12 - i * (compact ? 20 : 22), 42);
 
-  // Mode labels (center of HUD)
+  // Center mode labels get their own lower lane so they don't collide with score/lives.
   if (bill) {
-    ctx.font = "bold 14px sans-serif";
+    ctx.font = `bold ${compact ? 12 : 14}px sans-serif`;
     ctx.fillStyle = "#fbbf24";
     ctx.textAlign = "center";
-    ctx.fillText("BILL MODE", W / 2, 26);
-    ctx.font = "11px sans-serif";
+    ctx.fillText("BILL MODE", W / 2, 20);
+    ctx.font = `${compact ? 10 : 11}px sans-serif`;
     ctx.fillStyle = "#fde68a";
-    ctx.fillText("BUST IT DOWN", W / 2, 52);
+    ctx.fillText("BUST IT DOWN", W / 2, 66);
   } else if (bachelor) {
-    ctx.font = "bold 14px sans-serif";
+    ctx.font = `bold ${compact ? 12 : 14}px sans-serif`;
     ctx.fillStyle = "#facc15";
     ctx.textAlign = "center";
-    ctx.fillText(`✨ BACHELOR MODE  ${Math.ceil(gs.bachelorTimer)}s ✨`, W / 2, 26);
-    ctx.font = "11px sans-serif";
+    ctx.fillText(`BACHELOR ${Math.ceil(gs.bachelorTimer)}s`, W / 2, 20);
+    ctx.font = `${compact ? 10 : 11}px sans-serif`;
     ctx.fillStyle = "#e879f9";
-    ctx.fillText("2× POINTS · EVERYTHING IS CHAOS", W / 2, 52);
+    ctx.fillText("2X POINTS", W / 2, 66);
   }
 }
 
@@ -575,7 +589,7 @@ const ROAST_LINE = "Jimmy, even your bachelor party couldn't save your jump shot
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Screen = "splash" | "playing" | "end";
-type BillStage = "idle" | "dialogue" | "chug" | "doorIntro" | "door" | "result";
+type BillStage = "idle" | "dialogue" | "chug" | "postChug" | "doorIntro" | "door" | "result";
 
 interface CatchBurst {
   id: number;
@@ -638,6 +652,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const [showBachelorBanner, setShowBachelorBanner] = useState(false);
   const [billStage, setBillStage] = useState<BillStage>("idle");
   const [billDialogueIndex, setBillDialogueIndex] = useState(0);
+  const [billPostChugIndex, setBillPostChugIndex] = useState(0);
   const [billBeerCount, setBillBeerCount] = useState(0);
   const [billDoorTimeLeft, setBillDoorTimeLeft] = useState(BILL_DOOR_DURATION_MS);
   const [billDoorTaps, setBillDoorTaps] = useState(0);
@@ -897,6 +912,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     setIsBillMode(false);
     setBillStage("idle");
     setBillDialogueIndex(0);
+    setBillPostChugIndex(0);
     setBillBeerCount(0);
     setBillDoorTaps(0);
     setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
@@ -909,6 +925,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     clearBillTimers();
     setBillStage("dialogue");
     setBillDialogueIndex(0);
+    setBillPostChugIndex(0);
     setBillBeerCount(0);
     setBillDoorTaps(0);
     setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
@@ -1039,9 +1056,9 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       };
     }
 
-    if (billBeerCount < 6) {
+    if (billBeerCount < BILL_BEER_TOTAL) {
       billStageTimeoutRef.current = window.setTimeout(
-        () => setBillBeerCount(count => Math.min(6, count + 1)),
+        () => setBillBeerCount(count => Math.min(BILL_BEER_TOTAL, count + 1)),
         BILL_RAPID_BEER_DURATION_MS,
       );
       return () => {
@@ -1050,16 +1067,34 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     }
 
     billStageTimeoutRef.current = window.setTimeout(() => {
-      setBillStage("doorIntro");
-      setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
-      setBillDoorTaps(0);
-      billDoorTapsRef.current = 0;
-    }, 520);
+      setBillStage("postChug");
+      setBillPostChugIndex(0);
+    }, 850);
 
     return () => {
       if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
     };
   }, [billBeerCount, billStage, isBillMode]);
+
+  useEffect(() => {
+    if (!isBillMode || billStage !== "postChug") return;
+
+    billStageTimeoutRef.current = window.setTimeout(() => {
+      if (billPostChugIndex < BILL_POST_CHUG_DIALOGUES.length - 1) {
+        setBillPostChugIndex(index => index + 1);
+        return;
+      }
+
+      setBillStage("doorIntro");
+      setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
+      setBillDoorTaps(0);
+      billDoorTapsRef.current = 0;
+    }, BILL_POST_CHUG_DIALOGUE_DURATION_MS);
+
+    return () => {
+      if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
+    };
+  }, [billPostChugIndex, billStage, isBillMode]);
 
   useEffect(() => {
     if (!isBillMode || billStage !== "doorIntro") return;
@@ -1188,7 +1223,22 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const isNewBest = finalScore > 0 && finalScore >= personalBest;
 
   const advanceBillDialogue = useCallback(() => {
-    if (!isBillMode || billStage !== "dialogue") return;
+    if (!isBillMode) return;
+
+    if (billStage === "postChug") {
+      if (billPostChugIndex < BILL_POST_CHUG_DIALOGUES.length - 1) {
+        setBillPostChugIndex(index => index + 1);
+        return;
+      }
+
+      setBillStage("doorIntro");
+      setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
+      setBillDoorTaps(0);
+      billDoorTapsRef.current = 0;
+      return;
+    }
+
+    if (billStage !== "dialogue") return;
 
     if (billDialogueIndex < BILL_DIALOGUES.length - 1) {
       setBillDialogueIndex(index => index + 1);
@@ -1197,19 +1247,35 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
 
     setBillStage("chug");
     setBillBeerCount(1);
-  }, [billDialogueIndex, billStage, isBillMode]);
+  }, [billDialogueIndex, billPostChugIndex, billStage, isBillMode]);
 
   const handleBillDoorTap = useCallback(() => {
     if (!isBillMode || billStage !== "door") return;
-    billDoorTapsRef.current += 1;
-    setBillDoorTaps(billDoorTapsRef.current);
+    setBillDoorTaps(current => {
+      const next = current + 1;
+      billDoorTapsRef.current = next;
+      return next;
+    });
   }, [billStage, isBillMode]);
 
-  const handleBillDoorPress = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    handleBillDoorTap();
-  }, [handleBillDoorTap]);
+  useEffect(() => {
+    if (!isBillMode || billStage !== "door") return;
+
+    const el = billDoorRef.current;
+    if (!el) return;
+
+    const onPress = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleBillDoorTap();
+    };
+
+    el.addEventListener("pointerdown", onPress, { passive: false });
+
+    return () => {
+      el.removeEventListener("pointerdown", onPress);
+    };
+  }, [billStage, handleBillDoorTap, isBillMode]);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -1664,7 +1730,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                 }}
               />
 
-              {billStage === "dialogue" && (
+              {(billStage === "dialogue" || billStage === "postChug") && (
                 <button
                   type="button"
                   onClick={advanceBillDialogue}
@@ -1675,7 +1741,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
               )}
 
               <div className="relative flex h-full flex-col justify-between px-4 py-6 sm:px-8">
-                {(billStage === "dialogue" || billStage === "chug") && (
+                {(billStage === "dialogue" || billStage === "chug" || billStage === "postChug") && (
                   <>
                     <div className="flex items-start justify-between gap-4">
                       <div className="rounded-2xl border-4 border-[#f59e0b] bg-[#23160b]/90 p-3 shadow-[0_0_20px_rgba(245,158,11,0.22)]">
@@ -1695,17 +1761,17 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                     <div className="flex flex-1 items-center justify-center">
                       <div className="flex flex-col items-center gap-6">
                         <div className="min-h-[5rem] text-center text-6xl sm:text-8xl">
-                          {billDialogueIndex <= 1 && (
+                          {billStage === "dialogue" && billDialogueIndex <= 1 && (
                             <span ref={billWineRef} className="inline-block">
                               🍷
                             </span>
                           )}
-                          {billDialogueIndex === 1 && (
+                          {billStage === "dialogue" && billDialogueIndex === 1 && (
                             <span className="sr-only">Wine tossed away</span>
                           )}
-                          {(billDialogueIndex === 2 || billStage === "chug") && (
+                          {(billStage === "dialogue" && billDialogueIndex === 2) || billStage === "chug" ? (
                             <div ref={billBeerRackRef} className="flex items-center justify-center gap-2 sm:gap-3">
-                              {Array.from({ length: 6 }).map((_, index) => (
+                              {Array.from({ length: BILL_BEER_TOTAL }).map((_, index) => (
                                 <span
                                   key={`beer-${index}`}
                                   data-bill-beer
@@ -1715,12 +1781,24 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                                 </span>
                               ))}
                             </div>
+                          ) : null}
+                          {billStage === "postChug" && (
+                            <div className="flex items-center justify-center gap-4 text-[3.1rem] drop-shadow-[0_6px_18px_rgba(0,0,0,0.3)] sm:text-[3.6rem]">
+                              <span className="text-[4.1rem]">🧔</span>
+                              <span>{billPostChugIndex === 0 ? "👕🩳➡️🚪" : "😳🔒🚪"}</span>
+                            </div>
                           )}
                         </div>
 
                         {billStage === "chug" && (
                           <div className="rounded-2xl border-2 border-[#f59e0b]/55 bg-[#2c1809]/85 px-4 py-3 text-center text-[0.68rem] leading-[1.9] text-[#fde68a] sm:text-[0.82rem]">
-                            {billBeerCount <= 1 ? "Bill is deliberately working on beer one..." : `Chug montage: ${billBeerCount}/6 beers down`}
+                            {billBeerCount <= 1 ? "Bill is deliberately working on beer one..." : `${billBeerCount}/${BILL_BEER_TOTAL} beers down`}
+                          </div>
+                        )}
+
+                        {billStage === "postChug" && (
+                          <div className="rounded-2xl border-2 border-[#f59e0b]/55 bg-[#2c1809]/85 px-4 py-3 text-center text-[0.68rem] leading-[1.9] text-[#fde68a] sm:text-[0.82rem]">
+                            {billPostChugIndex === 0 ? "Beer twelve is gone. Bad ideas are arriving." : "Bill has created a problem and Jimmy cannot help him."}
                           </div>
                         )}
                       </div>
@@ -1731,7 +1809,11 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                         BILL MODE
                       </div>
                       <div className="text-[0.78rem] leading-[1.9] text-white sm:text-[0.95rem]">
-                        {billStage === "dialogue" ? BILL_DIALOGUES[billDialogueIndex] : "Thereeeee ya go."}
+                        {billStage === "dialogue"
+                          ? BILL_DIALOGUES[billDialogueIndex]
+                          : billStage === "postChug"
+                            ? BILL_POST_CHUG_DIALOGUES[billPostChugIndex]
+                            : "Thereeeee ya go."}
                       </div>
                     </div>
                   </>
@@ -1759,7 +1841,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
 
                     <button
                       type="button"
-                      onPointerDown={billStage === "door" ? handleBillDoorPress : undefined}
                       ref={billDoorRef}
                       className="bill-door-shell relative flex h-[52vh] max-h-[31rem] w-full max-w-sm select-none items-center justify-center rounded-[2rem] border-[10px] border-[#64748b] bg-gradient-to-b from-[#6b7280] via-[#525966] to-[#2c313b] px-6 active:scale-[0.995]"
                       style={{ touchAction: "none" }}
