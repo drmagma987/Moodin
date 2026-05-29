@@ -79,7 +79,7 @@ const DODGE_SPAWN_CHANCE = 0.35;
 const KATIE_WARNING_DURATION = 1.8;
 const BACHELOR_BANNER_DURATION_MS = 1600;
 const PARTICLES_CONTAINER_ID = "bachelor-mode-particles";
-const BILL_DIALOGUE_DURATION_MS = 4600;
+const BILL_DIALOGUE_DURATIONS_MS = [3200, 4200, 3000] as const;
 const BILL_FIRST_BEER_DURATION_MS = 1800;
 const BILL_RAPID_BEER_DURATION_MS = 420;
 const BILL_POST_CHUG_DIALOGUE_DURATION_MS = 4600;
@@ -89,6 +89,7 @@ const BILL_DOOR_INTRO_DURATION_MS = 2200;
 const BILL_DOOR_TARGET_TAPS = 25;
 const BILL_RESULT_HOLD_MS = 1200;
 const BILL_BLACKOUT_FLASH_MS = 110;
+const ANGBEEN_FLYBY_SRC = "/bachelor-party-blitz/angbeen-flyby.jpg";
 
 const BILL_DIALOGUES = [
   "...",
@@ -398,18 +399,22 @@ function borderColor(catchType: CatchType): string | null {
   return null;
 }
 
+function prefersEmojiRender(type: string): boolean {
+  return type === "money";
+}
+
 function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean, poppingIn: boolean) {
   const border = borderColor(o.catchType);
   const img = imgCache.get(o.type);
   const scale = poppingIn ? 0.88 + Math.min(0.18, Math.max(0, (o.y + OBJ_SIZE / 2) / 120) * 0.18) : 1;
-  const drawW = OBJ_SIZE * scale;
-  const drawH = OBJ_SIZE * scale;
-  const drawX = o.x - drawW / 2;
-  const drawY = o.y - drawH / 2;
+  const drawW = Math.round(OBJ_SIZE * scale);
+  const drawH = Math.round(OBJ_SIZE * scale);
+  const drawX = Math.round(o.x - drawW / 2);
+  const drawY = Math.round(o.y - drawH / 2);
 
   ctx.save();
 
-  if (img) {
+  if (img && !prefersEmojiRender(o.type)) {
     if (bachelor) { ctx.shadowColor = o.color; ctx.shadowBlur = 20; }
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
     ctx.shadowBlur = 0;
@@ -448,7 +453,13 @@ function drawCatcher(ctx: CanvasRenderingContext2D, gs: GS) {
   const img = imgCache.get("jimmy");
   if (img) {
     if (gs.bachelor) { ctx.shadowColor = "#ff00ff"; ctx.shadowBlur = 30; }
-    ctx.drawImage(img, gs.cx - CATCHER_W / 2, gs.cy - CATCHER_H / 2, CATCHER_W, CATCHER_H);
+    ctx.drawImage(
+      img,
+      Math.round(gs.cx - CATCHER_W / 2),
+      Math.round(gs.cy - CATCHER_H / 2),
+      CATCHER_W,
+      CATCHER_H,
+    );
     ctx.shadowBlur = 0;
     return;
   }
@@ -596,6 +607,16 @@ interface CatchBurst {
   y: number;
 }
 
+interface FlybyState {
+  id: number;
+  active: boolean;
+  top: number;
+  size: number;
+  durationMs: number;
+  fromLeft: boolean;
+  rotate: number;
+}
+
 interface MusicController {
   play: () => number | undefined;
   pause: () => void;
@@ -635,6 +656,8 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const shakeResetTimeoutRef = useRef<number | null>(null);
   const billDoorTapsRef = useRef(0);
   const catchBurstIdRef = useRef(0);
+  const flybyTimeoutRef = useRef<number | null>(null);
+  const flybyIdRef = useRef(0);
   const spawnPopIdsRef = useRef<Set<number>>(new Set());
 
   const [screen, setScreen] = useState<Screen>("splash");
@@ -658,6 +681,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const [billResult, setBillResult] = useState<{ success: boolean; bonus: number } | null>(null);
   const [billBlackout, setBillBlackout] = useState(false);
   const [catchBursts, setCatchBursts] = useState<CatchBurst[]>([]);
+  const [flyby, setFlyby] = useState<FlybyState | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
 
   useEffect(() => {
@@ -695,6 +719,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     if (billBlackoutTimeoutRef.current) window.clearTimeout(billBlackoutTimeoutRef.current);
     if (billBlackoutResetRef.current) window.clearTimeout(billBlackoutResetRef.current);
     if (shakeResetTimeoutRef.current) window.clearTimeout(shakeResetTimeoutRef.current);
+    if (flybyTimeoutRef.current) window.clearTimeout(flybyTimeoutRef.current);
     musicRef.current?.stop();
     musicRef.current?.unload();
   }, []);
@@ -834,6 +859,43 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       setCatchBursts(current => current.filter(entry => entry.id !== id));
     }, 520);
   }, []);
+
+  useEffect(() => {
+    if (screen !== "playing" || isBillMode) {
+      if (flybyTimeoutRef.current) window.clearTimeout(flybyTimeoutRef.current);
+      return;
+    }
+
+    const scheduleFlyby = () => {
+      const nextDelay = 14000 + Math.random() * 18000;
+      flybyTimeoutRef.current = window.setTimeout(() => {
+        const durationMs = 6500 + Math.random() * 2500;
+        const nextFlyby: FlybyState = {
+          id: flybyIdRef.current++,
+          active: false,
+          top: 12 + Math.random() * 56,
+          size: 120 + Math.random() * 70,
+          durationMs,
+          fromLeft: Math.random() > 0.5,
+          rotate: -12 + Math.random() * 24,
+        };
+        setFlyby(nextFlyby);
+        window.setTimeout(() => {
+          setFlyby(current => (current && current.id === nextFlyby.id ? { ...current, active: true } : current));
+        }, 40);
+        flybyTimeoutRef.current = window.setTimeout(() => {
+          setFlyby(current => (current && current.id === nextFlyby.id ? null : current));
+          scheduleFlyby();
+        }, durationMs + 180);
+      }, nextDelay);
+    };
+
+    scheduleFlyby();
+
+    return () => {
+      if (flybyTimeoutRef.current) window.clearTimeout(flybyTimeoutRef.current);
+    };
+  }, [isBillMode, screen]);
 
   const shakeScreen = useCallback(() => {
     const gsap = window.gsap;
@@ -1038,7 +1100,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       }
       setBillStage("chug");
       setBillBeerCount(1);
-    }, BILL_DIALOGUE_DURATION_MS);
+    }, BILL_DIALOGUE_DURATIONS_MS[billDialogueIndex] ?? BILL_DIALOGUE_DURATIONS_MS[BILL_DIALOGUE_DURATIONS_MS.length - 1]);
 
     return () => {
       if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
@@ -1676,10 +1738,37 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
           0% { transform: translate(0, 0) scale(0.55); opacity: 1; }
           100% { transform: translate(var(--burst-x), var(--burst-y)) scale(1.5); opacity: 0; }
         }
+        .angbeen-flyby {
+          will-change: transform, opacity;
+          filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.28));
+        }
       `}</style>
 
       <div ref={playfieldRef} className="absolute inset-0">
-        <canvas ref={canvasRef} className="absolute inset-0 block" />
+        {screen === "playing" && flyby && (
+          <div
+            className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+            aria-hidden="true"
+          >
+            <Image
+              src={ANGBEEN_FLYBY_SRC}
+              alt=""
+              width={1076}
+              height={1536}
+              className="angbeen-flyby absolute rounded-[1.6rem] border-4 border-white/75 object-cover opacity-70"
+              style={{
+                top: `${flyby.top}%`,
+                width: `${flyby.size}px`,
+                transform: flyby.active
+                  ? `translateX(${flyby.fromLeft ? "120vw" : "-120vw"}) rotate(${flyby.rotate}deg)`
+                  : `translateX(${flyby.fromLeft ? "-28vw" : "108vw"}) rotate(${flyby.rotate}deg)`,
+                [flyby.fromLeft ? "left" : "right"]: "-12vw",
+                transition: `transform ${flyby.durationMs}ms linear, opacity 380ms ease-out`,
+              }}
+            />
+          </div>
+        )}
+        <canvas ref={canvasRef} className="absolute inset-0 z-10 block" />
         {screen === "playing" && (
           <div
             ref={catcherFxRef}
