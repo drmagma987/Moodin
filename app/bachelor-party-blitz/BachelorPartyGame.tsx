@@ -654,7 +654,14 @@ const SPLASH_CREDITS: SplashCredit[] = [
   { type: "image", src: BR_STUDIOS_CARD_SRC, alt: "BR Studios" },
 ];
 
-const END_QUOTE_LINE = "If you can dodge a wrench, you can dodge a ball. Try again qu33rbag";
+const END_QUOTE_LINES = [
+  "If you can dodge a wrench, you can dodge a ball. Try again qu33rbag",
+  "Mrs. Bodenstein is a Neanderthal with a p3nis",
+] as const;
+
+function pickRandomEndQuote() {
+  return END_QUOTE_LINES[Math.floor(Math.random() * END_QUOTE_LINES.length)];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
@@ -751,6 +758,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const [leaderboardEntries, setLeaderboardEntries] = useState<BachelorPartyLeaderboardEntry[]>([]);
   const [leaderboardStatus, setLeaderboardStatus] = useState<LeaderboardStatus>("idle");
   const [leaderboardError, setLeaderboardError] = useState("");
+  const [selectedEndQuote, setSelectedEndQuote] = useState(() => pickRandomEndQuote());
 
   useEffect(() => {
     console.debug("[BachelorPartyBlitz] Background music placeholder:", BACKGROUND_MUSIC_PLACEHOLDER);
@@ -843,6 +851,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     }
     if (navigator.vibrate) navigator.vibrate(200);
     setFinalScore(score);
+    setSelectedEndQuote(pickRandomEndQuote());
     setScreen("end");
   }, []);
 
@@ -2413,7 +2422,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                     />
                   </div>
                   <p className="px-2 text-sm font-semibold italic leading-snug text-[#f97316] sm:px-4 sm:text-base">
-                    &ldquo;{END_QUOTE_LINE}&rdquo;
+                    &ldquo;{selectedEndQuote}&rdquo;
                   </p>
                 </div>
 

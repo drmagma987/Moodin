@@ -455,6 +455,8 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
 - Added a lightweight Bachelor Party leaderboard:
   - game-over screen now lets players post their name and score to Firestore with one tap
   - posting reveals a scrollable leaderboard panel while keeping the `Play Again` button pinned at the bottom of the screen on mobile
+- Expanded the Bachelor Party end-screen quotes:
+  - the existing wrench quote now rotates randomly with `Mrs. Bodenstein is a Neanderthal with a 🍆`
 
 Before final responses after code changes, usually run:
 
