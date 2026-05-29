@@ -82,6 +82,9 @@ const MENORAH_SPAWN_CHANCE = 0.015;
 const MUSHROOM_SPAWN_CHANCE = 0.05;
 const DODGE_SPAWN_CHANCE = 0.35;
 const KATIE_WARNING_DURATION = 1.8;
+const KATIE_WARNING_COUNT = 2;
+const KATIE_WARNING_VERTICAL_GAP = 180;
+const KATIE_WARNING_SPEED_MULTIPLIER = 1.55;
 const BACHELOR_BANNER_DURATION_MS = 1600;
 const PARTICLES_CONTAINER_ID = "bachelor-mode-particles";
 const BILL_DIALOGUE_DURATIONS_MS = [3200, 4200, 3000] as const;
@@ -293,13 +296,13 @@ function spawnObj(gs: GS): FallingObj {
 function triggerKatieWarning(gs: GS) {
   gs.jimmyNoTimer = KATIE_WARNING_DURATION;
   // Stagger Katie objects above the screen so they arrive a beat apart.
-  for (let i = 1; i <= 3; i++) {
-    const speed = (BASE_FALL_SPEED + gs.elapsed * 3) * gs.speed * 1.85;
+  for (let i = 1; i <= KATIE_WARNING_COUNT; i++) {
+    const speed = (BASE_FALL_SPEED + gs.elapsed * 3) * gs.speed * KATIE_WARNING_SPEED_MULTIPLIER;
     gs.objs.push({
       ...KATIE_DEF,
       id: gs.nextId++,
       x: OBJ_SIZE + Math.random() * (gs.W - OBJ_SIZE * 2),
-      y: -OBJ_SIZE / 2 - i * 130,
+      y: -OBJ_SIZE / 2 - i * KATIE_WARNING_VERTICAL_GAP,
       vx: (Math.random() - 0.5) * 120,
       vy: speed,
     });
@@ -1178,9 +1181,9 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   }, [screen, handleGameOver, handleCatchSuccessFx, handleLifeLostFx, handleBachelorModeTriggeredFx, handleSpawnFx, initializeBillMode]);
 
   useEffect(() => {
-    const shouldPlay = screen === "playing" && !isBillMode;
+    const shouldPlay = screen === "playing";
     runMusic(shouldPlay);
-  }, [isBillMode, runMusic, screen]);
+  }, [runMusic, screen]);
 
   useEffect(() => {
     if (!isBillMode || billStage !== "dialogue") return;
@@ -2054,7 +2057,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                       <div className="flex flex-col items-center gap-6">
                         <div className="min-h-[5rem] text-center text-6xl sm:text-8xl">
                           {billStage === "dialogue" && billDialogueIndex <= 1 && (
-                            <span ref={billWineRef} className="inline-block">
+                            <span ref={billWineRef} className="inline-block text-[5.5rem] sm:text-[7.5rem]">
                               🍷
                             </span>
                           )}
@@ -2357,70 +2360,70 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
 
       {/* ── END SCREEN (game over + personal best) ──────────────────────────── */}
       {screen === "end" && (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-y-auto bg-black/96 px-6 py-8">
-          <div className="w-full max-w-sm space-y-5 text-center">
-            <p className="text-6xl">💀</p>
-            <p className="text-3xl font-black uppercase text-white">GAME OVER</p>
+        <div className="absolute inset-0 z-30 overflow-y-auto bg-black/96 px-4 py-4 sm:px-6 sm:py-6">
+          <div className="mx-auto flex w-full max-w-sm flex-col items-center space-y-3 text-center sm:space-y-4">
+            <p className="text-5xl sm:text-6xl">💀</p>
+            <p className="text-[1.7rem] font-black uppercase text-white sm:text-3xl">GAME OVER</p>
 
-            <div className="space-y-3">
-              <div className="mx-auto w-full max-w-[16rem] overflow-hidden rounded-3xl border-4 border-slate-700 bg-slate-900 shadow-[0_18px_50px_rgba(0,0,0,0.45)]">
+            <div className="space-y-2">
+              <div className="mx-auto h-[13.5rem] w-full max-w-[13.5rem] overflow-hidden rounded-3xl border-4 border-slate-700 bg-slate-900 shadow-[0_18px_50px_rgba(0,0,0,0.45)] sm:h-[15rem] sm:max-w-[15rem]">
                 <Image
                   src="/bachelor-party-blitz/end-quote-photo.jpg"
                   alt="End screen quote"
                   width={678}
                   height={1207}
-                  className="h-auto w-full object-cover"
+                  className="h-full w-full object-cover object-top"
                 />
               </div>
-              <p className="px-4 text-base font-semibold italic text-[#f97316]">
+              <p className="px-2 text-sm font-semibold italic leading-snug text-[#f97316] sm:px-4 sm:text-base">
                 &ldquo;{END_QUOTE_LINE}&rdquo;
               </p>
             </div>
 
             {/* Score vs personal best */}
-            <div className="space-y-3 rounded-2xl border-2 border-slate-700 bg-slate-900 p-5">
+            <div className="w-full space-y-2 rounded-2xl border-2 border-slate-700 bg-slate-900 p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold uppercase tracking-widest text-slate-400">
+                <span className="text-[0.72rem] font-bold uppercase tracking-[0.2em] text-slate-400 sm:text-sm">
                   Your Score
                 </span>
-                <span className="text-4xl font-black text-white">{finalScore}</span>
+                <span className="text-3xl font-black text-white sm:text-4xl">{finalScore}</span>
               </div>
               <div className="h-px bg-slate-700" />
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold uppercase tracking-widest text-slate-400">
+                <span className="text-[0.72rem] font-bold uppercase tracking-[0.2em] text-slate-400 sm:text-sm">
                   Personal Best
                 </span>
-                <span className={`text-2xl font-black ${isNewBest ? "text-yellow-400" : "text-slate-300"}`}>
+                <span className={`text-xl font-black sm:text-2xl ${isNewBest ? "text-yellow-400" : "text-slate-300"}`}>
                   {personalBest}
                 </span>
               </div>
               {isNewBest && (
-                <p className="text-sm font-black uppercase tracking-widest text-yellow-400">
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-yellow-400 sm:text-sm">
                   🏆 NEW BEST!
                 </p>
               )}
             </div>
 
-            <p className="text-sm text-slate-400">
+            <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
               Compare with your friends to see who scored highest! 👑
             </p>
 
             {/* Name entry */}
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-widest text-slate-500">Your Name</p>
+            <div className="w-full space-y-1.5">
+              <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500 sm:text-xs">Your Name</p>
               <input
                 type="text"
                 maxLength={11}
                 value={playerName}
                 onChange={e => setPlayerName(e.target.value.toUpperCase().slice(0, 11))}
-                className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-4 text-center text-lg font-black uppercase tracking-[0.18em] text-white outline-none focus:border-yellow-400 sm:text-2xl"
+                className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-3 text-center text-base font-black uppercase tracking-[0.14em] text-white outline-none focus:border-yellow-400 sm:py-4 sm:text-2xl"
                 style={{ touchAction: "auto" }}
               />
             </div>
 
             <button
               onClick={playAgain}
-              className="w-full rounded-2xl border-4 border-white bg-[#064789] py-5 text-2xl font-black uppercase tracking-widest text-white active:bg-[#073a70]"
+              className="w-full rounded-2xl border-4 border-white bg-[#064789] py-3.5 text-lg font-black uppercase tracking-[0.2em] text-white active:bg-[#073a70] sm:py-5 sm:text-2xl"
               style={{ touchAction: "auto" }}
             >
               PLAY AGAIN

@@ -443,6 +443,12 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
 - Fixed the Bachelor Mode background-art layering bug:
   - the Angbeen artwork and Bachelor particles had been mounted under the opaque gameplay canvas
   - the Bachelor backdrop/flyby/particle layers now render above the canvas so they can actually appear during live play
+- Tuned the latest Bachelor Party Blitz polish pass:
+  - Bill Mode no longer pauses the background music
+  - Katie warning drops now spawn fewer, more spread-out hazards with slightly calmer fall speed
+  - the Bill Mode wine-glass intro visual is larger
+  - the game-over screen now crops the end photo from the bottom and tightens spacing so the name input appears sooner on mobile
+  - Verified with `npm run lint` and `npx tsc --noEmit` (`lint` still has the existing single-page font warning on the bachelor-party route).
 
 Before final responses after code changes, usually run:
 
