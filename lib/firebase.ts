@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, signInAnonymously } from "firebase/auth";
+import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 
 function requireEnv(name: string, value: string | undefined) {
 
@@ -48,4 +48,31 @@ export async function ensureAnonymousAuth() {
   if (!auth.currentUser) {
     await signInAnonymously(auth);
   }
+
+  if (!auth.currentUser) {
+    await new Promise<void>((resolve, reject) => {
+      const unsubscribe = onAuthStateChanged(
+        auth,
+        async (user) => {
+          if (!user) return;
+
+          unsubscribe();
+
+          try {
+            await user.getIdToken();
+            resolve();
+          } catch (error) {
+            reject(error);
+          }
+        },
+        (error) => {
+          unsubscribe();
+          reject(error);
+        },
+      );
+    });
+    return;
+  }
+
+  await auth.currentUser.getIdToken();
 }

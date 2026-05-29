@@ -41,6 +41,8 @@ function shouldRetryWithAuth(error: unknown) {
 }
 
 export async function submitBachelorPartyLeaderboardScore(name: string, score: number) {
+  await ensureAnonymousAuth();
+
   const payload = {
     name: sanitizeLeaderboardName(name),
     score: Math.max(0, Math.round(score)),
@@ -57,6 +59,8 @@ export async function submitBachelorPartyLeaderboardScore(name: string, score: n
 }
 
 export async function fetchBachelorPartyLeaderboard() {
+  await ensureAnonymousAuth();
+
   const leaderboardQuery = query(
     collection(db, BACHELOR_PARTY_LEADERBOARD_COLLECTION),
     orderBy("score", "desc"),

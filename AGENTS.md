@@ -461,6 +461,18 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
   - moved the leaderboard name field and post button into the main visible game-over stack while keeping the leaderboard box and `Play Again` anchored lower
 - Updated the Bill Mode intro icon:
   - replaced the bearded-man emoji with a bald-man emoji
+- Swapped the Bachelor Party leaderboard storage path:
+  - leaderboard entries now persist inside a dedicated Firestore document under the existing `rooms` collection instead of a separate collection path
+- Tightened the Bachelor Party end-screen spacing:
+  - reduced the score-card number sizing and compacted the image, text, input, and buttons so the post flow fits more reliably on mobile without scrolling
+- Retuned the Bachelor Party HUD and multiplier logic:
+  - `BR Mult` now reads `BR Multiplier`
+  - Bachelor Mode now temporarily adds `+1.0x` to the visible multiplier for standard catch/heal/mushroom scoring
+  - Bill Mode door bonuses remain fixed and do not use the temporary Bachelor multiplier bonus
+- Hardened Bachelor Party leaderboard auth:
+  - leaderboard reads and writes now explicitly await anonymous Firebase auth before hitting Firestore
+  - auth waits for a settled user token so mobile Safari/slow auth propagation is less likely to fail the post flow
+  - Verified with `npm run lint` and `npx tsc --noEmit` (`lint` still has the existing single-page font warning on the bachelor-party route).
 
 Before final responses after code changes, usually run:
 
