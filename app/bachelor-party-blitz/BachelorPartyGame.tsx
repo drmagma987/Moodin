@@ -76,6 +76,7 @@ const BACHELOR_BLITZ_FONT = '"Press Start 2P", "SF Pro Display", "Segoe UI", san
 const BACKGROUND_MUSIC_PLACEHOLDER = "/music/background.mp3";
 const BILL_SPAWN_CHANCE = 0.02;
 const BILL_FORCE_SPAWN_AFTER = 35;
+const BILL_RESPAWN_COOLDOWN_AFTER_EXIT = 12;
 const MUSHROOM_SPAWN_CHANCE = 0.05;
 const DODGE_SPAWN_CHANCE = 0.35;
 const KATIE_WARNING_DURATION = 1.8;
@@ -207,6 +208,7 @@ interface GS {
   jimmyNoTimer: number;
   hitCooldown: number;
   billSpawnTimer: number;
+  billRespawnCooldown: number;
   targetX: number;            // drag-to-follow: finger X position
   W: number;
   H: number;
@@ -234,6 +236,7 @@ function makeGS(W: number, H: number): GS {
     jimmyNoTimer: 0,
     hitCooldown: 0,
     billSpawnTimer: 0,
+    billRespawnCooldown: 0,
     targetX: W / 2,
     W, H, lastTs: 0,
   };
@@ -261,14 +264,15 @@ function makeObj(def: ObjDef, gs: GS): FallingObj {
 
 function spawnObj(gs: GS): FallingObj {
   const hasBillOnBoard = gs.objs.some(obj => obj.catchType === "bill_trigger");
-  if (gs.billSpawnTimer >= BILL_FORCE_SPAWN_AFTER && !hasBillOnBoard) {
+  const billAvailable = gs.billRespawnCooldown <= 0;
+  if (billAvailable && gs.billSpawnTimer >= BILL_FORCE_SPAWN_AFTER && !hasBillOnBoard) {
     gs.billSpawnTimer = 0;
     return makeObj(BILL_DEF, gs);
   }
 
   const r = Math.random();
   if (r < MUSHROOM_SPAWN_CHANCE) return makeObj(MUSHROOM_DEF, gs);
-  if (r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE) {
+  if (billAvailable && r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE) {
     gs.billSpawnTimer = 0;
     return makeObj(BILL_DEF, gs);
   }
@@ -331,9 +335,6 @@ function onCatch(gs: GS, o: FallingObj, onGameOver: (score: number) => void, fx:
 }
 
 function stepGS(gs: GS, dt: number, onGameOver: (score: number) => void, fx: GameFx) {
-  gs.elapsed += dt;
-  gs.speed = 1 + gs.elapsed * SPEED_RAMP;
-
   // Catcher movement — drag-to-follow; bachelor mode adds lag and jitter
   if (gs.bachelor) {
     gs.cx += (gs.targetX - gs.cx) * Math.min(1, 5 * dt) + (Math.random() - 0.5) * CATCHER_SPEED * 0.5 * dt;
@@ -342,17 +343,22 @@ function stepGS(gs: GS, dt: number, onGameOver: (score: number) => void, fx: Gam
   }
   gs.cx = Math.max(CATCHER_W / 2, Math.min(gs.W - CATCHER_W / 2, gs.cx));
 
+  if (gs.jimmyNoTimer > 0) gs.jimmyNoTimer -= dt;
+  if (gs.hitCooldown > 0) gs.hitCooldown = Math.max(0, gs.hitCooldown - dt);
+  if (gs.billRespawnCooldown > 0) gs.billRespawnCooldown = Math.max(0, gs.billRespawnCooldown - dt);
+
+  if (gs.bill) return;
+
+  gs.elapsed += dt;
+  gs.speed = 1 + gs.elapsed * SPEED_RAMP;
+
   // Mode timers
   if (gs.bachelor) {
     gs.bachelorTimer -= dt;
     if (gs.bachelorTimer <= 0) { gs.bachelor = false; gs.bachelorTimer = 0; }
   }
 
-  if (gs.jimmyNoTimer > 0) gs.jimmyNoTimer -= dt;
-  if (gs.hitCooldown > 0) gs.hitCooldown = Math.max(0, gs.hitCooldown - dt);
   gs.billSpawnTimer += dt;
-
-  if (gs.bill) return;
 
   // Spawn
   gs.spawnTimer -= dt;
@@ -569,16 +575,22 @@ function drawBg(ctx: CanvasRenderingContext2D, gs: GS) {
 
   if (bachelor) {
     const t = performance.now() / 1000;
-    const r = Math.round(12 + 8 * Math.sin(t * 1.3));
-    const g = Math.round(4 + 4 * Math.sin(t * 1.7 + 2));
-    const b = Math.round(18 + 12 * Math.sin(t * 2.1 + 4));
-    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    const gradient = ctx.createLinearGradient(0, 0, W, H);
+    gradient.addColorStop(0, `hsl(${(t * 95) % 360}deg 88% 13%)`);
+    gradient.addColorStop(0.45, `hsl(${(210 + t * 140) % 360}deg 92% 16%)`);
+    gradient.addColorStop(1, `hsl(${(320 + t * 110) % 360}deg 85% 14%)`);
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, W, H);
-    const nr = Math.round(200 + 55 * Math.sin(t * 1.3));
-    const ng = Math.round(50 + 50 * Math.sin(t * 1.7 + 2));
-    const nb = Math.round(200 + 55 * Math.sin(t * 2.1 + 4));
-    ctx.strokeStyle = `rgba(${nr},${ng},${nb},0.18)`;
-    ctx.lineWidth = 1;
+    ctx.fillStyle = `hsla(${(35 + t * 160) % 360}deg 95% 62% / 0.14)`;
+    ctx.beginPath();
+    ctx.arc(W * 0.24, H * 0.28, Math.min(W, H) * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `hsla(${(250 + t * 120) % 360}deg 95% 68% / 0.12)`;
+    ctx.beginPath();
+    ctx.arc(W * 0.74, H * 0.62, Math.min(W, H) * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `hsla(${(t * 220) % 360}deg 95% 72% / 0.24)`;
+    ctx.lineWidth = 1.2;
     for (let x = 0; x < W; x += 38) { ctx.beginPath(); ctx.moveTo(x, 75); ctx.lineTo(x, H); ctx.stroke(); }
     for (let y = 75; y < H; y += 38) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   } else {
@@ -992,7 +1004,11 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const exitBillMode = useCallback(() => {
     clearBillTimers();
     const gs = gsRef.current;
-    if (gs) gs.bill = false;
+    if (gs) {
+      gs.bill = false;
+      gs.billSpawnTimer = 0;
+      gs.billRespawnCooldown = BILL_RESPAWN_COOLDOWN_AFTER_EXIT;
+    }
     billUiRef.current = false;
     setIsBillMode(false);
     setBillStage("idle");
@@ -1404,7 +1420,8 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     const gsap = window.gsap;
     if (!el || !gsap || screen !== "playing") return;
 
-    const billAfterDrinks = isBillMode && (billStage === "door" || billStage === "result");
+    const billAfterDrinks = isBillMode
+      && (billStage === "chug" || billStage === "postChug" || billStage === "doorIntro" || billStage === "door" || billStage === "result");
 
     if (billAfterDrinks) {
       const swayTween = gsap.to(el, {
@@ -1442,14 +1459,14 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     }
 
     const hueTween = gsap.to(el, {
-      duration: 8,
-      filter: "blur(0.6px) saturate(1.08)",
+      duration: 3.8,
+      filter: "hue-rotate(360deg) saturate(1.45) contrast(1.14) blur(1.2px)",
       ease: "none",
       repeat: -1,
     });
     const breatheTween = gsap.to(el, {
-      duration: 2.1,
-      scale: 1.028,
+      duration: 1.45,
+      scale: 1.04,
       yoyo: true,
       repeat: -1,
       ease: "sine.inOut",
@@ -1469,15 +1486,15 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     if (!el || !gsap || !isBachelorMode || isBillMode || screen !== "playing") return;
 
     const hueTween = gsap.to(el, {
-      duration: 5.2,
-      filter: "hue-rotate(360deg) saturate(1.5) contrast(1.08)",
+      duration: 2.8,
+      filter: "hue-rotate(360deg) saturate(1.95) contrast(1.16) brightness(1.08)",
       ease: "none",
       repeat: -1,
     });
     const pulseTween = gsap.to(el, {
-      duration: 1.6,
-      scale: 1.08,
-      opacity: 0.92,
+      duration: 1.05,
+      scale: 1.12,
+      opacity: 0.97,
       yoyo: true,
       repeat: -1,
       ease: "sine.inOut",
@@ -1874,7 +1891,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
             }`}
             style={{
               background:
-                "radial-gradient(circle at 20% 10%, rgba(244,114,182,0.26), transparent 32%), radial-gradient(circle at 80% 18%, rgba(34,211,238,0.24), transparent 34%), radial-gradient(circle at 50% 88%, rgba(253,224,71,0.18), transparent 38%)",
+                "radial-gradient(circle at 16% 12%, rgba(244,114,182,0.34), transparent 30%), radial-gradient(circle at 82% 14%, rgba(34,211,238,0.3), transparent 32%), radial-gradient(circle at 54% 86%, rgba(253,224,71,0.24), transparent 36%), radial-gradient(circle at 34% 68%, rgba(167,139,250,0.22), transparent 28%)",
               mixBlendMode: "screen",
             }}
           />
@@ -1993,7 +2010,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
 
                         {billStage === "chug" && (
                           <div className="rounded-2xl border-2 border-[#f59e0b]/55 bg-[#2c1809]/85 px-4 py-3 text-center text-[0.68rem] leading-[1.9] text-[#fde68a] sm:text-[0.82rem]">
-                            {billBeerCount <= 1 ? "Bill is deliberately working on beer one..." : `${billBeerCount}/${BILL_BEER_TOTAL} beers down`}
+                            {`${Math.max(1, billBeerCount)}/${BILL_BEER_TOTAL} beers down`}
                           </div>
                         )}
 
