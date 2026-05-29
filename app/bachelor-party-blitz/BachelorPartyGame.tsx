@@ -757,13 +757,15 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     return () => clearTimeout(t);
   }, [screen, splashIdx]);
 
-  // Prevent scroll during gameplay — touchAction:none on the wrapper handles zoom/tap-delay,
-  // but touchmove still needs explicit preventDefault to block overscroll on iOS.
+  // Prevent scroll only during live gameplay. Locking touchmove during splash/end
+  // breaks Safari/Chrome interactions when the browser chrome changes viewport height.
   useEffect(() => {
+    if (screen !== "playing") return;
+
     const prevent = (e: TouchEvent) => e.preventDefault();
     document.addEventListener("touchmove", prevent, { passive: false });
     return () => document.removeEventListener("touchmove", prevent);
-  }, []);
+  }, [screen]);
 
   const handleGameOver = useCallback((score: number) => {
     const prev = parseInt(localStorage.getItem("blitz_best") || "0", 10);
@@ -1702,7 +1704,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       ref={wrapperRef}
       className="fixed inset-0 overflow-hidden bg-[#0f172a]"
       style={{
-        touchAction: "none",
+        touchAction: screen === "playing" ? "none" : "manipulation",
         userSelect: "none",
         WebkitUserSelect: "none",
         fontFamily: BACHELOR_BLITZ_FONT,
@@ -2070,15 +2072,10 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       {/* ── SPLASH ──────────────────────────────────────────────────────────── */}
       {screen === "splash" && (
         <div
-          className={`absolute inset-0 flex flex-col items-center overflow-y-auto bg-black/96 ${
-            splashIdx < SPLASH_CREDITS.length ? "justify-center" : "justify-start"
-          }`}
+          className="absolute inset-0 flex flex-col items-center justify-center bg-black/96"
           style={{
-            paddingTop:
-              splashIdx < SPLASH_CREDITS.length
-                ? "0px"
-                : "max(env(safe-area-inset-top), 1rem)",
-            paddingBottom: "max(env(safe-area-inset-bottom), 1.5rem)",
+            paddingTop: "max(env(safe-area-inset-top), 0.75rem)",
+            paddingBottom: "max(env(safe-area-inset-bottom), 1rem)",
           }}
           onClick={splashIdx < SPLASH_CREDITS.length ? advanceSplash : undefined}
         >
@@ -2132,8 +2129,8 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
             })()
           ) : (
             // Title card
-            <div className="pointer-events-auto w-full max-w-lg px-4 pt-4 text-center sm:px-5">
-              <div className="space-y-5 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-5 py-6 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:px-6">
+            <div className="pointer-events-auto w-full max-w-lg px-4 text-center sm:px-5">
+              <div className="max-h-[calc(100dvh-2.5rem)] space-y-4 overflow-y-auto rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-5 py-5 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:max-h-[calc(100dvh-3rem)] sm:px-6 sm:py-6">
                 <p className="text-[1.9rem] leading-[1.35] text-white sm:text-[2.25rem]">
                   JIMMY&apos;S
                   <br />
@@ -2141,6 +2138,15 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   <br />
                   PARTY BLITZ
                 </p>
+
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); startGame(); }}
+                  className="w-full rounded-2xl border-4 border-white bg-[#c8102e] py-4 text-xl uppercase tracking-[0.22em] text-white sm:text-2xl"
+                  style={{ touchAction: "auto" }}
+                >
+                  START GAME
+                </button>
 
                 <div className="rounded-2xl border border-slate-700 bg-slate-900/90 px-4 py-4 text-left text-[0.62rem] leading-[1.85] text-slate-200 sm:text-[0.72rem]">
                   <p className="mb-3 text-center text-[0.68rem] uppercase tracking-[0.28em] text-slate-400 sm:text-[0.78rem]">
@@ -2164,15 +2170,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   }`}
                 >
                   Slipknot: {audioEnabled ? "Yes" : "No"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={e => { e.stopPropagation(); startGame(); }}
-                  className="w-full rounded-2xl border-4 border-white bg-[#c8102e] py-4 text-xl uppercase tracking-[0.22em] text-white sm:text-2xl"
-                  style={{ touchAction: "auto" }}
-                >
-                  START GAME
                 </button>
               </div>
             </div>
