@@ -457,6 +457,10 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
   - posting reveals a scrollable leaderboard panel while keeping the `Play Again` button pinned at the bottom of the screen on mobile
 - Expanded the Bachelor Party end-screen quotes:
   - the existing wrench quote now rotates randomly with `Mrs. Bodenstein is a Neanderthal with a 🍆`
+- Adjusted the Bachelor Party end-screen layout again:
+  - moved the leaderboard name field and post button into the main visible game-over stack while keeping the leaderboard box and `Play Again` anchored lower
+- Updated the Bill Mode intro icon:
+  - replaced the bearded-man emoji with a bald-man emoji
 
 Before final responses after code changes, usually run:
 

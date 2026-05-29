@@ -659,8 +659,8 @@ const END_QUOTE_LINES = [
   "Mrs. Bodenstein is a Neanderthal with a p3nis",
 ] as const;
 
-function pickRandomEndQuote() {
-  return END_QUOTE_LINES[Math.floor(Math.random() * END_QUOTE_LINES.length)];
+function buildEndQuoteOrder() {
+  return [...END_QUOTE_LINES].sort(() => Math.random() - 0.5);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -758,7 +758,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const [leaderboardEntries, setLeaderboardEntries] = useState<BachelorPartyLeaderboardEntry[]>([]);
   const [leaderboardStatus, setLeaderboardStatus] = useState<LeaderboardStatus>("idle");
   const [leaderboardError, setLeaderboardError] = useState("");
-  const [selectedEndQuote, setSelectedEndQuote] = useState(() => pickRandomEndQuote());
+  const [endQuoteOrder, setEndQuoteOrder] = useState(() => buildEndQuoteOrder());
 
   useEffect(() => {
     console.debug("[BachelorPartyBlitz] Background music placeholder:", BACKGROUND_MUSIC_PLACEHOLDER);
@@ -851,7 +851,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     }
     if (navigator.vibrate) navigator.vibrate(200);
     setFinalScore(score);
-    setSelectedEndQuote(pickRandomEndQuote());
+    setEndQuoteOrder(buildEndQuoteOrder());
     setScreen("end");
   }, []);
 
@@ -2125,7 +2125,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                           ) : null}
                           {billStage === "postChug" && (
                             <div className="flex items-center justify-center gap-4 text-[3.1rem] drop-shadow-[0_6px_18px_rgba(0,0,0,0.3)] sm:text-[3.6rem]">
-                              <span className="text-[4.1rem]">🧔</span>
+                              <span className="text-[4.1rem]">👨‍🦲</span>
                               <span>{billPostChugIndex === 0 ? "👕🩳➡️🚪" : "😳🔒🚪"}</span>
                             </div>
                           )}
@@ -2422,7 +2422,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                     />
                   </div>
                   <p className="px-2 text-sm font-semibold italic leading-snug text-[#f97316] sm:px-4 sm:text-base">
-                    &ldquo;{selectedEndQuote}&rdquo;
+                    &ldquo;{endQuoteOrder[0]}&rdquo;
                   </p>
                 </div>
 
@@ -2449,6 +2449,38 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   )}
                 </div>
 
+                <div className="w-full space-y-1.5">
+                  <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500 sm:text-xs">Your Name</p>
+                  <input
+                    type="text"
+                    maxLength={11}
+                    value={playerName}
+                    onChange={e => setPlayerName(e.target.value.toUpperCase().slice(0, 11))}
+                    className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-3 text-center text-base font-black uppercase tracking-[0.14em] text-white outline-none focus:border-yellow-400 sm:py-4 sm:text-2xl"
+                    style={{ touchAction: "auto" }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLeaderboardPost}
+                  disabled={leaderboardStatus === "submitting" || leaderboardStatus === "posted"}
+                  className={`w-full rounded-2xl border-4 py-3.5 text-sm font-black uppercase tracking-[0.16em] text-white sm:py-4 sm:text-lg ${
+                    leaderboardStatus === "posted"
+                      ? "border-emerald-300 bg-emerald-700/70 text-emerald-100"
+                      : leaderboardStatus === "submitting"
+                        ? "border-slate-500 bg-slate-700 text-slate-200"
+                        : "border-yellow-300 bg-[#c8102e] active:bg-[#a50d25]"
+                  }`}
+                  style={{ touchAction: "auto" }}
+                >
+                  {leaderboardStatus === "submitting"
+                    ? "POSTING..."
+                    : leaderboardStatus === "posted"
+                      ? "SCORE POSTED"
+                      : "POST AND CHECK LEADERBOARD"}
+                </button>
+
                 <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
                   Compare with your friends to see who scored highest! 👑
                 </p>
@@ -2456,38 +2488,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
             </div>
 
             <div className="shrink-0 space-y-3 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/96 p-3 shadow-[0_16px_50px_rgba(0,0,0,0.38)] sm:p-4">
-              <div className="w-full space-y-1.5">
-                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500 sm:text-xs">Your Name</p>
-                <input
-                  type="text"
-                  maxLength={11}
-                  value={playerName}
-                  onChange={e => setPlayerName(e.target.value.toUpperCase().slice(0, 11))}
-                  className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-3 text-center text-base font-black uppercase tracking-[0.14em] text-white outline-none focus:border-yellow-400 sm:py-4 sm:text-2xl"
-                  style={{ touchAction: "auto" }}
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleLeaderboardPost}
-                disabled={leaderboardStatus === "submitting" || leaderboardStatus === "posted"}
-                className={`w-full rounded-2xl border-4 py-3.5 text-sm font-black uppercase tracking-[0.16em] text-white sm:py-4 sm:text-lg ${
-                  leaderboardStatus === "posted"
-                    ? "border-emerald-300 bg-emerald-700/70 text-emerald-100"
-                    : leaderboardStatus === "submitting"
-                      ? "border-slate-500 bg-slate-700 text-slate-200"
-                      : "border-yellow-300 bg-[#c8102e] active:bg-[#a50d25]"
-                }`}
-                style={{ touchAction: "auto" }}
-              >
-                {leaderboardStatus === "submitting"
-                  ? "POSTING..."
-                  : leaderboardStatus === "posted"
-                    ? "SCORE POSTED"
-                    : "POST AND CHECK LEADERBOARD"}
-              </button>
-
               {leaderboardError && (
                 <p className="w-full rounded-2xl border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-red-200">
                   {leaderboardError}
