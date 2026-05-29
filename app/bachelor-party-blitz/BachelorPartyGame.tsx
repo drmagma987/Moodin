@@ -2070,7 +2070,16 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       {/* ── SPLASH ──────────────────────────────────────────────────────────── */}
       {screen === "splash" && (
         <div
-          className="absolute inset-0 flex flex-col items-center justify-center bg-black/96"
+          className={`absolute inset-0 flex flex-col items-center overflow-y-auto bg-black/96 ${
+            splashIdx < SPLASH_CREDITS.length ? "justify-center" : "justify-start"
+          }`}
+          style={{
+            paddingTop:
+              splashIdx < SPLASH_CREDITS.length
+                ? "0px"
+                : "max(env(safe-area-inset-top), 1rem)",
+            paddingBottom: "max(env(safe-area-inset-bottom), 1.5rem)",
+          }}
           onClick={splashIdx < SPLASH_CREDITS.length ? advanceSplash : undefined}
         >
           {splashIdx < SPLASH_CREDITS.length ? (
@@ -2123,7 +2132,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
             })()
           ) : (
             // Title card
-            <div className="pointer-events-auto w-full max-w-lg px-4 text-center sm:px-5">
+            <div className="pointer-events-auto w-full max-w-lg px-4 pt-4 text-center sm:px-5">
               <div className="space-y-5 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-5 py-6 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:px-6">
                 <p className="text-[1.9rem] leading-[1.35] text-white sm:text-[2.25rem]">
                   JIMMY&apos;S
