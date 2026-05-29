@@ -68,6 +68,7 @@ const SPEED_RAMP = 0.013;      // speed multiplier growth per second
 const BASE_SPAWN_INTERVAL = 1.3;
 const MIN_SPAWN_INTERVAL = 0.38;
 const SPAWN_RAMP = 0.009;
+const MAX_LIVES = 8;
 
 const BACHELOR_DURATION = 10;  // seconds
 const SPLASH_CARD_DURATION_MS = 2800;
@@ -77,6 +78,7 @@ const BACKGROUND_MUSIC_PLACEHOLDER = "/music/background.mp3";
 const BILL_SPAWN_CHANCE = 0.02;
 const BILL_FORCE_SPAWN_AFTER = 35;
 const BILL_RESPAWN_COOLDOWN_AFTER_EXIT = 12;
+const MENORAH_SPAWN_CHANCE = 0.015;
 const MUSHROOM_SPAWN_CHANCE = 0.05;
 const DODGE_SPAWN_CHANCE = 0.35;
 const KATIE_WARNING_DURATION = 1.8;
@@ -134,6 +136,7 @@ const imgCache = new Map<string, HTMLImageElement>();
 
 type CatchType =
   | "catch"
+  | "heal"
   | "dodge"
   | "mushroom"
   | "bill_trigger"
@@ -172,6 +175,10 @@ const DODGE_POOL: ObjDef[] = [
 // ── SPECIALS: neutral objects that trigger a game mode when caught ────────────
 const MUSHROOM_DEF: ObjDef = {
   type: "mushroom", emoji: "🍄", label: "SHROOM", color: "#db2777", behavior: "straight", catchType: "mushroom",
+};
+
+const MENORAH_DEF: ObjDef = {
+  type: "menorah", emoji: "🕎", label: "MENORAH", color: "#facc15", behavior: "straight", catchType: "heal",
 };
 
 // Catching Bill activates Bill Mode — no score change, no life lost
@@ -229,7 +236,7 @@ function reportBlitzRuntimeError(scope: string, error: unknown) {
 
 function makeGS(W: number, H: number): GS {
   return {
-    score: 0, lives: 8, bagMeter: 1, speed: 1, elapsed: 0,
+    score: 0, lives: MAX_LIVES, bagMeter: 1, speed: 1, elapsed: 0,
     objs: [], nextId: 0, spawnTimer: 1,
     cx: W / 2, cy: H - CATCHER_BOTTOM,
     bachelor: false, bachelorTimer: 0,
@@ -274,11 +281,12 @@ function spawnObj(gs: GS): FallingObj {
 
   const r = Math.random();
   if (r < MUSHROOM_SPAWN_CHANCE) return makeObj(MUSHROOM_DEF, gs);
-  if (billAvailable && r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE) {
+  if (r < MUSHROOM_SPAWN_CHANCE + MENORAH_SPAWN_CHANCE) return makeObj(MENORAH_DEF, gs);
+  if (billAvailable && r < MUSHROOM_SPAWN_CHANCE + MENORAH_SPAWN_CHANCE + BILL_SPAWN_CHANCE) {
     gs.billSpawnTimer = 0;
     return makeObj(BILL_DEF, gs);
   }
-  if (r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE + DODGE_SPAWN_CHANCE) return makeObj(pick(DODGE_POOL), gs);
+  if (r < MUSHROOM_SPAWN_CHANCE + MENORAH_SPAWN_CHANCE + BILL_SPAWN_CHANCE + DODGE_SPAWN_CHANCE) return makeObj(pick(DODGE_POOL), gs);
   return makeObj(pick(CATCH_POOL), gs);
 }
 
@@ -313,6 +321,14 @@ function onCatch(gs: GS, o: FallingObj, onGameOver: (score: number) => void, fx:
     case "catch":
       gs.score += Math.round(10 * mult * gs.bagMeter);
       gs.bagMeter = Math.min(4, gs.bagMeter + 0.2);
+      fx.onCatchSuccess(modeAlreadyActive);
+      break;
+    case "heal":
+      gs.score += Math.round(20 * mult * gs.bagMeter);
+      gs.bagMeter = Math.min(4, gs.bagMeter + 0.25);
+      if (gs.lives < MAX_LIVES) {
+        gs.lives += 1;
+      }
       fx.onCatchSuccess(modeAlreadyActive);
       break;
     case "dodge":
@@ -424,6 +440,7 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 
 function borderColor(catchType: CatchType): string | null {
   if (catchType === "catch" || catchType === "bill_catch") return "#22c55e";
+  if (catchType === "heal") return "#facc15";
   if (catchType === "dodge" || catchType === "bill_dodge") return "#ef4444";
   return null;
 }
@@ -435,6 +452,7 @@ function prefersEmojiRender(type: string): boolean {
 function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean, poppingIn: boolean) {
   const border = borderColor(o.catchType);
   const img = imgCache.get(o.type);
+  const objectGlow = o.catchType === "heal" ? "#fde047" : o.color;
   const scale = poppingIn ? 0.88 + Math.min(0.18, Math.max(0, (o.y + OBJ_SIZE / 2) / 120) * 0.18) : 1;
   const drawW = Math.round(OBJ_SIZE * scale);
   const drawH = Math.round(OBJ_SIZE * scale);
@@ -444,7 +462,7 @@ function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean
   ctx.save();
 
   if (img && !prefersEmojiRender(o.type)) {
-    if (bachelor) { ctx.shadowColor = o.color; ctx.shadowBlur = 20; }
+    if (bachelor || o.catchType === "heal") { ctx.shadowColor = objectGlow; ctx.shadowBlur = o.catchType === "heal" ? 26 : 20; }
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
     ctx.shadowBlur = 0;
     if (border) {
@@ -458,9 +476,9 @@ function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean
   }
 
   // Colored placeholder — used until a real PNG is loaded
-  if (bachelor) { ctx.shadowColor = o.color; ctx.shadowBlur = 20; }
+  if (bachelor || o.catchType === "heal") { ctx.shadowColor = objectGlow; ctx.shadowBlur = o.catchType === "heal" ? 26 : 20; }
   rr(ctx, drawX, drawY, drawW, drawH, 12);
-  ctx.fillStyle = o.type === "money" ? "#ffffff" : o.color;
+  ctx.fillStyle = o.catchType === "heal" ? "#1e293b" : o.type === "money" ? "#ffffff" : o.color;
   ctx.fill();
   ctx.strokeStyle = border ?? "rgba(255,255,255,0.45)";
   ctx.lineWidth = border ? 4 : 2.5;
@@ -473,7 +491,7 @@ function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean
   ctx.fillText(o.emoji, o.x, o.y - 8);
 
   ctx.font = "bold 11px sans-serif";
-  ctx.fillStyle = o.type === "money" ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.92)";
+  ctx.fillStyle = o.catchType === "heal" || o.type === "money" ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.92)";
   ctx.fillText(o.label, o.x, o.y + OBJ_SIZE * 0.32);
   ctx.restore();
 }
@@ -1858,9 +1876,38 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       `}</style>
 
       <div ref={playfieldRef} className="absolute inset-0">
+        {screen === "playing" && (
+          <div
+            className={`pointer-events-none absolute inset-0 z-[11] overflow-hidden transition-opacity duration-500 ${
+              isBachelorMode && !isBillMode ? "opacity-100" : "opacity-0"
+            }`}
+            aria-hidden="true"
+          >
+            <Image
+              src={ANGBEEN_FLYBY_SRC}
+              alt=""
+              fill
+              sizes="100vw"
+              className="object-cover"
+              style={{
+                opacity: 0.2,
+                transform: isBachelorMode ? "scale(1.08)" : "scale(1.02)",
+                filter: "saturate(1.1) contrast(1.08) brightness(0.72)",
+              }}
+            />
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(15,23,42,0.28), rgba(15,23,42,0.08) 28%, rgba(15,23,42,0.36) 100%), radial-gradient(circle at 18% 16%, rgba(244,114,182,0.28), transparent 30%), radial-gradient(circle at 80% 20%, rgba(34,211,238,0.22), transparent 28%)",
+                mixBlendMode: "screen",
+              }}
+            />
+          </div>
+        )}
         {screen === "playing" && flyby && (
           <div
-            className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+            className="pointer-events-none absolute inset-0 z-[12] overflow-hidden"
             aria-hidden="true"
           >
             <Image
@@ -1906,7 +1953,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
         <div
           ref={particlesRef}
           id={PARTICLES_CONTAINER_ID}
-          className={`pointer-events-none absolute inset-0 transition-opacity duration-300 ${
+          className={`pointer-events-none absolute inset-0 z-[13] transition-opacity duration-300 ${
             isBachelorMode && !isBillMode ? "opacity-100" : "opacity-0"
           }`}
         />
@@ -2274,11 +2321,12 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                     How To Play
                   </p>
                   <p className="text-sky-300">👆 Drag anywhere to move Jimmy under the falling objects.</p>
-                  <p className="text-green-400">🟢 Catch the good stuff: money, dreidel, goth, and the mushroom.</p>
+                  <p className="text-green-400">🟢 Catch the good stuff: money, dreidel, goth, mushroom, and the glowing menorah boost.</p>
                   <p className="mt-1.5 text-red-400">🔴 Dodge Katie, payments, and dumbbells or you lose a life.</p>
                   <p className="mt-1.5 text-fuchsia-300">🍄 Mushroom triggers Bachelor Mode.</p>
+                  <p className="mt-1.5 text-yellow-300">🕎 Menorah boost is rare, gives a score bump, and restores 1 life if you are below the 8-life cap.</p>
                   <p className="mt-1.5 text-amber-300">🧾 Bill Mode is rare and starts the door mini-game.</p>
-                  <p className="mt-1.5 text-amber-300">🍺 You have 8 lives. Last as long as possible and run up your score.</p>
+                  <p className="mt-1.5 text-amber-300">🍺 You have 8 lives max. Last as long as possible and run up your score.</p>
                 </div>
 
                 <button

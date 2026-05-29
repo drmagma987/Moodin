@@ -435,6 +435,15 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
   - changed the door tap path to use a native `pointerdown` listener plus functional tap-state updates to address the tap counter stalling after the first press
   - Verified with `npm run lint` and `npx tsc --noEmit` (`lint` still has the existing single-page font warning on the bachelor-party route).
 
+### 2026-05-29
+
+- Added a rare glowing menorah bonus drop to `Jimmy's Bachelor Party Blitz`.
+- Catching the menorah now restores 1 life only when the player is below the 8-life cap, while still awarding a small score bonus.
+- Updated the bachelor-party splash instructions and kept the life cap explicit in the HUD-facing copy.
+- Fixed the Bachelor Mode background-art layering bug:
+  - the Angbeen artwork and Bachelor particles had been mounted under the opaque gameplay canvas
+  - the Bachelor backdrop/flyby/particle layers now render above the canvas so they can actually appear during live play
+
 Before final responses after code changes, usually run:
 
 ```bash
