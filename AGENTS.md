@@ -452,6 +452,9 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
 - Updated the Bachelor Party route share preview:
   - copied the supplied portrait to `public/bachelor-party-blitz/share-preview.jpg`
   - wired the route Open Graph and Twitter metadata to use that image for iMessage/social link previews
+- Added a lightweight Bachelor Party leaderboard:
+  - game-over screen now lets players post their name and score to Firestore with one tap
+  - posting reveals a scrollable leaderboard panel while keeping the `Play Again` button pinned at the bottom of the screen on mobile
 
 Before final responses after code changes, usually run:
 
