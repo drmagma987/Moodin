@@ -2,10 +2,14 @@
 
 import { useEffect } from "react";
 import Script from "next/script";
+import { useSearchParams } from "next/navigation";
 
 import { BachelorPartyGame } from "./BachelorPartyGame";
 
 export default function BachelorPartyBlitzPage() {
+  const searchParams = useSearchParams();
+  const debugBill = searchParams.get("debug") === "bill";
+
   useEffect(() => {
     const googleapis = document.createElement("link");
     googleapis.rel = "preconnect";
@@ -48,7 +52,7 @@ export default function BachelorPartyBlitzPage() {
         strategy="afterInteractive"
       />
 
-      <BachelorPartyGame />
+      <BachelorPartyGame debugBill={debugBill} />
     </>
   );
 }

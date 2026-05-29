@@ -147,12 +147,20 @@ export default function Home() {
         </div>
 
         <div className="mx-auto w-full max-w-xl">
-          <Link
-            href="/bachelor-party-blitz"
-            className="flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#071229] bg-[#071229] px-4 py-4 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#0f2040]"
-          >
-            🎉 Jimmy&apos;s Bachelor Party Blitz
-          </Link>
+          <div className="space-y-3">
+            <Link
+              href="/bachelor-party-blitz"
+              className="flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#071229] bg-[#071229] px-4 py-4 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#0f2040]"
+            >
+              🎉 Jimmy&apos;s Bachelor Party Blitz
+            </Link>
+            <Link
+              href="/bachelor-party-blitz?debug=bill"
+              className="flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#071229] bg-[#f0f4fa] px-4 py-3 text-sm font-black uppercase tracking-wide text-[#071229] transition hover:bg-[#e1e8f3]"
+            >
+              TEST BILL MODE
+            </Link>
+          </div>
         </div>
       </div>
     </main>

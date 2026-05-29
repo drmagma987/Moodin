@@ -1,7 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
 
 declare global {
   interface Window {
@@ -73,9 +80,9 @@ const DODGE_SPAWN_CHANCE = 0.35;
 const KATIE_WARNING_DURATION = 1.8;
 const BACHELOR_BANNER_DURATION_MS = 1600;
 const PARTICLES_CONTAINER_ID = "bachelor-mode-particles";
-const BILL_DIALOGUE_DURATION_MS = 2000;
-const BILL_FIRST_BEER_DURATION_MS = 1100;
-const BILL_RAPID_BEER_DURATION_MS = 180;
+const BILL_DIALOGUE_DURATION_MS = 2800;
+const BILL_FIRST_BEER_DURATION_MS = 1500;
+const BILL_RAPID_BEER_DURATION_MS = 240;
 const BILL_DOOR_DURATION_MS = 4000;
 const BILL_DOOR_TARGET_TAPS = 25;
 const BILL_RESULT_HOLD_MS = 1200;
@@ -585,7 +592,11 @@ interface MusicController {
   playing: () => boolean;
 }
 
-export function BachelorPartyGame() {
+interface BachelorPartyGameProps {
+  debugBill?: boolean;
+}
+
+export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const playfieldRef = useRef<HTMLDivElement>(null);
@@ -1068,7 +1079,8 @@ export function BachelorPartyGame() {
   }, [billStage, isBillMode, resolveBillDoor]);
 
   useEffect(() => {
-    if (!isBillMode) return;
+    const billAfterDrinks = isBillMode && (billStage === "door" || billStage === "result");
+    if (!billAfterDrinks) return;
 
     const scheduleBlackout = () => {
       const nextDelay = BILL_BLACKOUT_MIN_MS + Math.random() * (BILL_BLACKOUT_MAX_MS - BILL_BLACKOUT_MIN_MS);
@@ -1088,7 +1100,7 @@ export function BachelorPartyGame() {
       if (billBlackoutResetRef.current) window.clearTimeout(billBlackoutResetRef.current);
       setBillBlackout(false);
     };
-  }, [isBillMode]);
+  }, [billStage, isBillMode]);
 
   // Touch input (only during gameplay)
   useEffect(() => {
@@ -1119,13 +1131,14 @@ export function BachelorPartyGame() {
     const c = canvasRef.current;
     if (!c) return;
     gsRef.current = makeGS(c.width, c.height);
+    if (debugBill && gsRef.current) gsRef.current.bill = true;
     musicEnabledRef.current = audioEnabled;
     if (audioEnabled) {
       ensureMusicReady();
       runMusic(true);
     }
     setScreen("playing");
-  }, [audioEnabled, ensureMusicReady, runMusic]);
+  }, [audioEnabled, debugBill, ensureMusicReady, runMusic]);
 
   const skipIntro = useCallback((event?: ReactMouseEvent) => {
     event?.stopPropagation();
@@ -1161,6 +1174,7 @@ export function BachelorPartyGame() {
     const c = canvasRef.current;
     if (!c) return;
     gsRef.current = makeGS(c.width, c.height);
+    if (debugBill && gsRef.current) gsRef.current.bill = true;
     setFinalScore(0);
     bachelorUiRef.current = false;
     billUiRef.current = false;
@@ -1176,7 +1190,7 @@ export function BachelorPartyGame() {
       runMusic(true);
     }
     setScreen("playing");
-  }, [audioEnabled, ensureMusicReady, exitBillMode, runMusic]);
+  }, [audioEnabled, debugBill, ensureMusicReady, exitBillMode, runMusic]);
 
   const advanceSplash = useCallback(() => {
     if (screen !== "splash") return;
@@ -1203,12 +1217,20 @@ export function BachelorPartyGame() {
     setBillDoorTaps(billDoorTapsRef.current);
   }, [billStage, isBillMode]);
 
+  const handleBillDoorPress = useCallback((event: ReactMouseEvent<HTMLButtonElement> | ReactTouchEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    handleBillDoorTap();
+  }, [handleBillDoorTap]);
+
   useEffect(() => {
     const el = wrapperRef.current;
     const gsap = window.gsap;
     if (!el || !gsap || screen !== "playing") return;
 
-    if (isBillMode) {
+    const billAfterDrinks = isBillMode && (billStage === "door" || billStage === "result");
+
+    if (billAfterDrinks) {
       const swayTween = gsap.to(el, {
         duration: 2.4,
         x: 10,
@@ -1263,7 +1285,7 @@ export function BachelorPartyGame() {
       breatheTween?.kill?.();
       gsap.set(el, { clearProps: "filter,transform" });
     };
-  }, [isBachelorMode, isBillMode, screen]);
+  }, [billStage, isBachelorMode, isBillMode, screen]);
 
   useEffect(() => {
     const el = bachelorAuraRef.current;
@@ -1743,7 +1765,8 @@ export function BachelorPartyGame() {
 
                     <button
                       type="button"
-                      onClick={handleBillDoorTap}
+                      onMouseDown={handleBillDoorPress}
+                      onTouchStart={handleBillDoorPress}
                       ref={billDoorRef}
                       className="bill-door-shell relative flex h-[52vh] max-h-[31rem] w-full max-w-sm items-center justify-center rounded-[2rem] border-[10px] border-[#64748b] bg-gradient-to-b from-[#6b7280] via-[#525966] to-[#2c313b] px-6 active:scale-[0.995]"
                       style={{ touchAction: "manipulation" }}
@@ -1773,7 +1796,7 @@ export function BachelorPartyGame() {
                           TAP THE DOOR
                         </p>
                         <p className="text-[0.7rem] leading-[1.8] text-[#cbd5e1]">
-                          You have 4 seconds to figure it out.
+                          Tap the door as fast as you can to break it down.
                         </p>
                       </div>
                     </button>
