@@ -556,8 +556,8 @@ type SplashCredit =
   | { type: "image"; src: string; alt: string };
 
 const SPLASH_CREDITS: SplashCredit[] = [
-  { type: "image", src: "/bachelor-party-blitz/zimmy.png",    alt: "Sponsored by Zimmy's Head" },
   { type: "image", src: "/bachelor-party-blitz/vjspice.png",  alt: "VJ Spice Productions" },
+  { type: "image", src: "/bachelor-party-blitz/zimmy.png",    alt: "Sponsored by Zimmy's Head" },
   { type: "image", src: BR_STUDIOS_CARD_SRC, alt: "BR Studios" },
 ];
 
@@ -1906,7 +1906,7 @@ export function BachelorPartyGame() {
             })()
           ) : (
             // Title card
-            <div className="w-full max-w-lg px-4 text-center sm:px-5">
+            <div className="pointer-events-auto w-full max-w-lg px-4 text-center sm:px-5">
               <div className="space-y-5 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-5 py-6 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:px-6">
                 <p className="text-[1.9rem] leading-[1.35] text-white sm:text-[2.25rem]">
                   JIMMY&apos;S
@@ -1928,10 +1928,6 @@ export function BachelorPartyGame() {
                   <p className="mt-2 text-amber-300">🍺 You have 8 lives. Last as long as possible and run up your score.</p>
                 </div>
 
-                <div className="rounded-2xl border border-slate-700 bg-black/25 px-4 py-3 text-[0.6rem] leading-[1.8] text-slate-400 sm:text-[0.7rem]">
-                  Sponsor cards can be skipped. During play, keep dragging and react fast when special modes hit.
-                </div>
-
                 <button
                   type="button"
                   onClick={handleAudioToggle}
@@ -1945,8 +1941,10 @@ export function BachelorPartyGame() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={e => { e.stopPropagation(); startGame(); }}
                   className="w-full rounded-2xl border-4 border-white bg-[#c8102e] py-4 text-xl uppercase tracking-[0.22em] text-white sm:text-2xl"
+                  style={{ touchAction: "auto" }}
                 >
                   START GAME
                 </button>
