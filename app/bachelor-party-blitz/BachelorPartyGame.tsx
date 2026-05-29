@@ -757,15 +757,13 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     return () => clearTimeout(t);
   }, [screen, splashIdx]);
 
-  // Prevent scroll only during live gameplay. Locking touchmove during splash/end
-  // breaks Safari/Chrome interactions when the browser chrome changes viewport height.
+  // Prevent scroll during gameplay — touchAction:none on the wrapper handles zoom/tap-delay,
+  // but touchmove still needs explicit preventDefault to block overscroll on iOS.
   useEffect(() => {
-    if (screen !== "playing") return;
-
     const prevent = (e: TouchEvent) => e.preventDefault();
     document.addEventListener("touchmove", prevent, { passive: false });
     return () => document.removeEventListener("touchmove", prevent);
-  }, [screen]);
+  }, []);
 
   const handleGameOver = useCallback((score: number) => {
     const prev = parseInt(localStorage.getItem("blitz_best") || "0", 10);
@@ -1704,7 +1702,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       ref={wrapperRef}
       className="fixed inset-0 overflow-hidden bg-[#0f172a]"
       style={{
-        touchAction: screen === "playing" ? "none" : "manipulation",
+        touchAction: "none",
         userSelect: "none",
         WebkitUserSelect: "none",
         fontFamily: BACHELOR_BLITZ_FONT,
@@ -2073,10 +2071,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       {screen === "splash" && (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center bg-black/96"
-          style={{
-            paddingTop: "max(env(safe-area-inset-top), 0.75rem)",
-            paddingBottom: "max(env(safe-area-inset-bottom), 1rem)",
-          }}
           onClick={splashIdx < SPLASH_CREDITS.length ? advanceSplash : undefined}
         >
           {splashIdx < SPLASH_CREDITS.length ? (
@@ -2129,9 +2123,9 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
             })()
           ) : (
             // Title card
-            <div className="pointer-events-auto w-full max-w-lg px-4 text-center sm:px-5">
-              <div className="max-h-[calc(100dvh-2.5rem)] space-y-4 overflow-y-auto rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-5 py-5 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:max-h-[calc(100dvh-3rem)] sm:px-6 sm:py-6">
-                <p className="text-[1.9rem] leading-[1.35] text-white sm:text-[2.25rem]">
+            <div className="pointer-events-auto w-full max-w-lg -translate-y-4 px-4 text-center sm:translate-y-0 sm:px-5">
+              <div className="space-y-3 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/88 px-5 py-5 shadow-[0_18px_60px_rgba(0,0,0,0.42)] sm:space-y-5 sm:px-6 sm:py-6">
+                <p className="text-[1.7rem] leading-[1.28] text-white sm:text-[2.25rem]">
                   JIMMY&apos;S
                   <br />
                   BACHELOR
@@ -2139,31 +2133,31 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   PARTY BLITZ
                 </p>
 
+                <div className="rounded-2xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-left text-[0.58rem] leading-[1.72] text-slate-200 sm:px-4 sm:py-4 sm:text-[0.72rem]">
+                  <p className="mb-2 text-center text-[0.64rem] uppercase tracking-[0.24em] text-slate-400 sm:mb-3 sm:text-[0.78rem]">
+                    How To Play
+                  </p>
+                  <p className="text-sky-300">👆 Drag anywhere to move Jimmy under the falling objects.</p>
+                  <p className="text-green-400">🟢 Catch the good stuff: money, dreidel, goth, and the mushroom.</p>
+                  <p className="mt-1.5 text-red-400">🔴 Dodge Katie, payments, and dumbbells or you lose a life.</p>
+                  <p className="mt-1.5 text-fuchsia-300">🍄 Mushroom triggers Bachelor Mode.</p>
+                  <p className="mt-1.5 text-amber-300">🧾 Bill Mode is rare and starts the door mini-game.</p>
+                  <p className="mt-1.5 text-amber-300">🍺 You have 8 lives. Last as long as possible and run up your score.</p>
+                </div>
+
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); startGame(); }}
-                  className="w-full rounded-2xl border-4 border-white bg-[#c8102e] py-4 text-xl uppercase tracking-[0.22em] text-white sm:text-2xl"
+                  className="w-full rounded-2xl border-[3px] border-white bg-[#c8102e] py-2.5 text-[0.95rem] uppercase tracking-[0.2em] text-white sm:border-4 sm:py-4 sm:text-2xl"
                   style={{ touchAction: "auto" }}
                 >
                   START GAME
                 </button>
 
-                <div className="rounded-2xl border border-slate-700 bg-slate-900/90 px-4 py-4 text-left text-[0.62rem] leading-[1.85] text-slate-200 sm:text-[0.72rem]">
-                  <p className="mb-3 text-center text-[0.68rem] uppercase tracking-[0.28em] text-slate-400 sm:text-[0.78rem]">
-                    How To Play
-                  </p>
-                  <p className="text-sky-300">👆 Drag anywhere to move Jimmy under the falling objects.</p>
-                  <p className="text-green-400">🟢 Catch the good stuff: money, dreidel, goth, and the mushroom.</p>
-                  <p className="mt-2 text-red-400">🔴 Dodge Katie, payments, and dumbbells or you lose a life.</p>
-                  <p className="mt-2 text-fuchsia-300">🍄 Mushroom triggers Bachelor Mode.</p>
-                  <p className="mt-2 text-amber-300">🧾 Bill Mode is rare and starts the door mini-game.</p>
-                  <p className="mt-2 text-amber-300">🍺 You have 8 lives. Last as long as possible and run up your score.</p>
-                </div>
-
                 <button
                   type="button"
                   onClick={handleAudioToggle}
-                  className={`w-full rounded-2xl border px-4 py-3 text-[0.68rem] uppercase tracking-[0.24em] sm:text-[0.78rem] ${
+                  className={`w-full rounded-2xl border px-4 py-2.5 text-[0.62rem] uppercase tracking-[0.22em] sm:py-3 sm:text-[0.78rem] ${
                     audioEnabled
                       ? "border-emerald-400 bg-emerald-500/15 text-emerald-300"
                       : "border-slate-600 bg-slate-900/85 text-slate-300"
