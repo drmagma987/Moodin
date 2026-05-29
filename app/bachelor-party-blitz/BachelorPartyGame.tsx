@@ -7,8 +7,6 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-  type PointerEvent as ReactPointerEvent,
-  type TouchEvent as ReactTouchEvent,
 } from "react";
 
 declare global {
@@ -636,7 +634,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
   const billBlackoutResetRef = useRef<number | null>(null);
   const shakeResetTimeoutRef = useRef<number | null>(null);
   const billDoorTapsRef = useRef(0);
-  const billDoorLastTapAtRef = useRef(0);
   const catchBurstIdRef = useRef(0);
   const spawnPopIdsRef = useRef<Set<number>>(new Set());
 
@@ -921,7 +918,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     setBillResult(null);
     setBillBlackout(false);
     billDoorTapsRef.current = 0;
-    billDoorLastTapAtRef.current = 0;
   }, [clearBillTimers]);
 
   const initializeBillMode = useCallback(() => {
@@ -935,7 +931,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     setBillResult(null);
     setBillBlackout(false);
     billDoorTapsRef.current = 0;
-    billDoorLastTapAtRef.current = 0;
   }, [clearBillTimers]);
 
   const resolveBillDoor = useCallback((taps: number) => {
@@ -1255,11 +1250,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
 
   const handleBillDoorTap = useCallback(() => {
     if (!isBillMode || billStage !== "door") return;
-
-    const now = performance.now();
-    if (now - billDoorLastTapAtRef.current < 35) return;
-    billDoorLastTapAtRef.current = now;
-
     setBillDoorTaps(current => {
       const next = current + 1;
       billDoorTapsRef.current = next;
@@ -1267,16 +1257,38 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     });
   }, [billStage, isBillMode]);
 
-  const handleBillDoorPress = useCallback((
-    event:
-      | ReactMouseEvent<HTMLButtonElement>
-      | ReactTouchEvent<HTMLButtonElement>
-      | ReactPointerEvent<HTMLButtonElement>,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    handleBillDoorTap();
-  }, [handleBillDoorTap]);
+  useEffect(() => {
+    if (!isBillMode || billStage !== "door") return;
+
+    const isInsideDoor = (clientX: number, clientY: number) => {
+      const rect = billDoorRef.current?.getBoundingClientRect();
+      if (!rect) return false;
+      return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch || !isInsideDoor(touch.clientX, touch.clientY)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      handleBillDoorTap();
+    };
+
+    const onMouseDown = (event: MouseEvent) => {
+      if (!isInsideDoor(event.clientX, event.clientY)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      handleBillDoorTap();
+    };
+
+    document.addEventListener("touchstart", onTouchStart, { passive: false, capture: true });
+    document.addEventListener("mousedown", onMouseDown, { passive: false, capture: true });
+
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart, true);
+      document.removeEventListener("mousedown", onMouseDown, true);
+    };
+  }, [billStage, handleBillDoorTap, isBillMode]);
 
   useEffect(() => {
     const el = wrapperRef.current;
@@ -1855,10 +1867,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                     <button
                       type="button"
                       ref={billDoorRef}
-                      onPointerDown={handleBillDoorPress}
-                      onMouseDown={handleBillDoorPress}
-                      onTouchStart={handleBillDoorPress}
-                      onClick={handleBillDoorPress}
                       className="bill-door-shell relative flex h-[52vh] max-h-[31rem] w-full max-w-sm select-none items-center justify-center rounded-[2rem] border-[10px] border-[#64748b] bg-gradient-to-b from-[#6b7280] via-[#525966] to-[#2c313b] px-6 active:scale-[0.995]"
                       style={{ touchAction: "none" }}
                     >
