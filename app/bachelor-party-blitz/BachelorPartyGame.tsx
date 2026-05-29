@@ -74,7 +74,8 @@ const SPLASH_CARD_DURATION_MS = 2800;
 const BR_STUDIOS_CARD_SRC = "/bachelor-party-blitz/brstudios-intro.jpg";
 const BACHELOR_BLITZ_FONT = '"Press Start 2P", "SF Pro Display", "Segoe UI", sans-serif';
 const BACKGROUND_MUSIC_PLACEHOLDER = "/music/background.mp3";
-const BILL_SPAWN_CHANCE = 0.008; // Rare trigger target: roughly once every 2-3 minutes
+const BILL_SPAWN_CHANCE = 0.02;
+const BILL_FORCE_SPAWN_AFTER = 35;
 const MUSHROOM_SPAWN_CHANCE = 0.05;
 const DODGE_SPAWN_CHANCE = 0.35;
 const KATIE_WARNING_DURATION = 1.8;
@@ -91,6 +92,7 @@ const BILL_DOOR_TARGET_TAPS = 35;
 const BILL_RESULT_HOLD_MS = 1200;
 const BILL_BLACKOUT_FLASH_MS = 110;
 const ANGBEEN_FLYBY_SRC = "/bachelor-party-blitz/angbeen-flyby.jpg";
+const LIFE_LOSS_COOLDOWN = 0.6;
 
 const BILL_DIALOGUES = [
   "...",
@@ -203,6 +205,8 @@ interface GS {
   bachelorTimer: number;
   bill: boolean;
   jimmyNoTimer: number;
+  hitCooldown: number;
+  billSpawnTimer: number;
   targetX: number;            // drag-to-follow: finger X position
   W: number;
   H: number;
@@ -228,6 +232,8 @@ function makeGS(W: number, H: number): GS {
     bachelor: false, bachelorTimer: 0,
     bill: false,
     jimmyNoTimer: 0,
+    hitCooldown: 0,
+    billSpawnTimer: 0,
     targetX: W / 2,
     W, H, lastTs: 0,
   };
@@ -254,9 +260,18 @@ function makeObj(def: ObjDef, gs: GS): FallingObj {
 }
 
 function spawnObj(gs: GS): FallingObj {
+  const hasBillOnBoard = gs.objs.some(obj => obj.catchType === "bill_trigger");
+  if (gs.billSpawnTimer >= BILL_FORCE_SPAWN_AFTER && !hasBillOnBoard) {
+    gs.billSpawnTimer = 0;
+    return makeObj(BILL_DEF, gs);
+  }
+
   const r = Math.random();
   if (r < MUSHROOM_SPAWN_CHANCE) return makeObj(MUSHROOM_DEF, gs);
-  if (r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE) return makeObj(BILL_DEF, gs);
+  if (r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE) {
+    gs.billSpawnTimer = 0;
+    return makeObj(BILL_DEF, gs);
+  }
   if (r < MUSHROOM_SPAWN_CHANCE + BILL_SPAWN_CHANCE + DODGE_SPAWN_CHANCE) return makeObj(pick(DODGE_POOL), gs);
   return makeObj(pick(CATCH_POOL), gs);
 }
@@ -280,6 +295,7 @@ function triggerKatieWarning(gs: GS) {
 function loseLife(gs: GS, onGameOver: (score: number) => void) {
   gs.lives = Math.max(0, gs.lives - 1);
   gs.bagMeter = 1;
+  gs.hitCooldown = LIFE_LOSS_COOLDOWN;
   if (gs.lives === 0) onGameOver(gs.score);
 }
 
@@ -294,6 +310,7 @@ function onCatch(gs: GS, o: FallingObj, onGameOver: (score: number) => void, fx:
       fx.onCatchSuccess(modeAlreadyActive);
       break;
     case "dodge":
+      if (gs.hitCooldown > 0) break;
       loseLife(gs, onGameOver);
       fx.onLifeLost(modeAlreadyActive);
       break;
@@ -332,6 +349,8 @@ function stepGS(gs: GS, dt: number, onGameOver: (score: number) => void, fx: Gam
   }
 
   if (gs.jimmyNoTimer > 0) gs.jimmyNoTimer -= dt;
+  if (gs.hitCooldown > 0) gs.hitCooldown = Math.max(0, gs.hitCooldown - dt);
+  gs.billSpawnTimer += dt;
 
   if (gs.bill) return;
 
@@ -432,7 +451,7 @@ function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean
   // Colored placeholder — used until a real PNG is loaded
   if (bachelor) { ctx.shadowColor = o.color; ctx.shadowBlur = 20; }
   rr(ctx, drawX, drawY, drawW, drawH, 12);
-  ctx.fillStyle = o.color;
+  ctx.fillStyle = o.type === "money" ? "#ffffff" : o.color;
   ctx.fill();
   ctx.strokeStyle = border ?? "rgba(255,255,255,0.45)";
   ctx.lineWidth = border ? 4 : 2.5;
@@ -445,7 +464,7 @@ function drawObj(ctx: CanvasRenderingContext2D, o: FallingObj, bachelor: boolean
   ctx.fillText(o.emoji, o.x, o.y - 8);
 
   ctx.font = "bold 11px sans-serif";
-  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fillStyle = o.type === "money" ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.92)";
   ctx.fillText(o.label, o.x, o.y + OBJ_SIZE * 0.32);
   ctx.restore();
 }
@@ -870,7 +889,9 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     }
 
     const scheduleFlyby = () => {
-      const nextDelay = 14000 + Math.random() * 18000;
+      const nextDelay = isBachelorMode
+        ? 2000 + Math.random() * 2000
+        : 14000 + Math.random() * 18000;
       flybyTimeoutRef.current = window.setTimeout(() => {
         const durationMs = 6500 + Math.random() * 2500;
         const nextFlyby: FlybyState = {
@@ -898,7 +919,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     return () => {
       if (flybyTimeoutRef.current) window.clearTimeout(flybyTimeoutRef.current);
     };
-  }, [isBillMode, screen]);
+  }, [isBachelorMode, isBillMode, screen]);
 
   const shakeScreen = useCallback(() => {
     const gsap = window.gsap;
@@ -1804,7 +1825,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
         />
 
         {screen === "playing" && (
-          <div className="pointer-events-none absolute inset-0">
+          <div className="pointer-events-none absolute inset-0 z-20">
           <div
             ref={bachelorAuraRef}
             className={`absolute inset-0 transition-opacity duration-300 ${
@@ -2189,7 +2210,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
 
       {/* ── END SCREEN (game over + personal best) ──────────────────────────── */}
       {screen === "end" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center overflow-y-auto bg-black/96 px-6 py-8">
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center overflow-y-auto bg-black/96 px-6 py-8">
           <div className="w-full max-w-sm space-y-5 text-center">
             <p className="text-6xl">💀</p>
             <p className="text-3xl font-black uppercase text-white">GAME OVER</p>
