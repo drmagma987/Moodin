@@ -6,6 +6,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  type FirestoreError,
   type Timestamp,
 } from "firebase/firestore";
 
@@ -32,25 +33,44 @@ function toCreatedAtMs(value: Timestamp | null | undefined) {
   return value?.toMillis() ?? 0;
 }
 
-export async function submitBachelorPartyLeaderboardScore(name: string, score: number) {
-  await ensureAnonymousAuth();
+function shouldRetryWithAuth(error: unknown) {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as FirestoreError).code === "permission-denied";
+}
 
-  await addDoc(collection(db, BACHELOR_PARTY_LEADERBOARD_COLLECTION), {
+export async function submitBachelorPartyLeaderboardScore(name: string, score: number) {
+  const payload = {
     name: sanitizeLeaderboardName(name),
     score: Math.max(0, Math.round(score)),
     createdAt: serverTimestamp(),
-  });
+  };
+
+  try {
+    await addDoc(collection(db, BACHELOR_PARTY_LEADERBOARD_COLLECTION), payload);
+  } catch (error) {
+    if (!shouldRetryWithAuth(error)) throw error;
+    await ensureAnonymousAuth();
+    await addDoc(collection(db, BACHELOR_PARTY_LEADERBOARD_COLLECTION), payload);
+  }
 }
 
 export async function fetchBachelorPartyLeaderboard() {
-  await ensureAnonymousAuth();
-
   const leaderboardQuery = query(
     collection(db, BACHELOR_PARTY_LEADERBOARD_COLLECTION),
     orderBy("score", "desc"),
     limit(LEADERBOARD_FETCH_LIMIT),
   );
-  const snapshot = await getDocs(leaderboardQuery);
+  let snapshot;
+
+  try {
+    snapshot = await getDocs(leaderboardQuery);
+  } catch (error) {
+    if (!shouldRetryWithAuth(error)) throw error;
+    await ensureAnonymousAuth();
+    snapshot = await getDocs(leaderboardQuery);
+  }
 
   return snapshot.docs
     .map((doc) => {

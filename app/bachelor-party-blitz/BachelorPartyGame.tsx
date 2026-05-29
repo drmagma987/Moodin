@@ -2406,13 +2406,13 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       {screen === "end" && (
         <div className="absolute inset-0 z-30 overflow-hidden bg-black/96 px-4 py-4 sm:px-6 sm:py-6">
           <div className="mx-auto flex h-full w-full max-w-sm flex-col gap-3 sm:gap-4">
-            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1 pb-1">
               <div className="flex flex-col items-center space-y-3 text-center sm:space-y-4">
                 <p className="text-5xl sm:text-6xl">💀</p>
                 <p className="text-[1.7rem] font-black uppercase text-white sm:text-3xl">GAME OVER</p>
 
                 <div className="space-y-2">
-                  <div className="mx-auto h-[13.5rem] w-full max-w-[13.5rem] overflow-hidden rounded-3xl border-4 border-slate-700 bg-slate-900 shadow-[0_18px_50px_rgba(0,0,0,0.45)] sm:h-[15rem] sm:max-w-[15rem]">
+                  <div className="mx-auto h-[11.5rem] w-full max-w-[11.5rem] overflow-hidden rounded-3xl border-4 border-slate-700 bg-slate-900 shadow-[0_18px_50px_rgba(0,0,0,0.45)] sm:h-[13rem] sm:max-w-[13rem]">
                     <Image
                       src="/bachelor-party-blitz/end-quote-photo.jpg"
                       alt="End screen quote"
@@ -2452,94 +2452,96 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                 <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
                   Compare with your friends to see who scored highest! 👑
                 </p>
-
-                <div className="w-full space-y-1.5">
-                  <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500 sm:text-xs">Your Name</p>
-                  <input
-                    type="text"
-                    maxLength={11}
-                    value={playerName}
-                    onChange={e => setPlayerName(e.target.value.toUpperCase().slice(0, 11))}
-                    className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-3 text-center text-base font-black uppercase tracking-[0.14em] text-white outline-none focus:border-yellow-400 sm:py-4 sm:text-2xl"
-                    style={{ touchAction: "auto" }}
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleLeaderboardPost}
-                  disabled={leaderboardStatus === "submitting" || leaderboardStatus === "posted"}
-                  className={`w-full rounded-2xl border-4 py-3.5 text-sm font-black uppercase tracking-[0.16em] text-white sm:py-4 sm:text-lg ${
-                    leaderboardStatus === "posted"
-                      ? "border-emerald-300 bg-emerald-700/70 text-emerald-100"
-                      : leaderboardStatus === "submitting"
-                        ? "border-slate-500 bg-slate-700 text-slate-200"
-                        : "border-yellow-300 bg-[#c8102e] active:bg-[#a50d25]"
-                  }`}
-                  style={{ touchAction: "auto" }}
-                >
-                  {leaderboardStatus === "submitting"
-                    ? "POSTING..."
-                    : leaderboardStatus === "posted"
-                      ? "SCORE POSTED"
-                      : "POST AND CHECK LEADERBOARD"}
-                </button>
-
-                {leaderboardError && (
-                  <p className="w-full rounded-2xl border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-red-200">
-                    {leaderboardError}
-                  </p>
-                )}
-
-                {leaderboardEntries.length > 0 && (
-                  <div className="w-full rounded-3xl border-2 border-slate-700 bg-slate-900/95 p-3 text-left shadow-[0_18px_50px_rgba(0,0,0,0.35)] sm:p-4">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-[0.72rem] font-black uppercase tracking-[0.24em] text-slate-300 sm:text-sm">
-                        Leaderboard
-                      </p>
-                      <p className="text-[0.62rem] uppercase tracking-[0.18em] text-slate-500">
-                        Top {leaderboardEntries.length}
-                      </p>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950/80">
-                      <div className="divide-y divide-slate-800">
-                        {leaderboardEntries.map((entry, index) => {
-                          const isCurrentName = entry.name === playerName.trim().toUpperCase();
-                          return (
-                            <div
-                              key={entry.id}
-                              className={`flex items-center justify-between gap-3 px-3 py-2.5 ${
-                                isCurrentName ? "bg-yellow-400/10" : ""
-                              }`}
-                            >
-                              <div className="min-w-0">
-                                <p className="text-[0.7rem] font-black uppercase tracking-[0.18em] text-slate-500">
-                                  #{index + 1}
-                                </p>
-                                <p className={`truncate text-sm font-black uppercase sm:text-base ${isCurrentName ? "text-yellow-300" : "text-white"}`}>
-                                  {entry.name}
-                                </p>
-                              </div>
-                              <p className={`shrink-0 text-lg font-black sm:text-xl ${isCurrentName ? "text-yellow-300" : "text-sky-300"}`}>
-                                {entry.score}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
-            <button
-              onClick={playAgain}
-              className="w-full shrink-0 rounded-2xl border-4 border-white bg-[#064789] py-3.5 text-lg font-black uppercase tracking-[0.2em] text-white active:bg-[#073a70] sm:py-5 sm:text-2xl"
-              style={{ touchAction: "auto" }}
-            >
-              PLAY AGAIN
-            </button>
+            <div className="shrink-0 space-y-3 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/96 p-3 shadow-[0_16px_50px_rgba(0,0,0,0.38)] sm:p-4">
+              <div className="w-full space-y-1.5">
+                <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500 sm:text-xs">Your Name</p>
+                <input
+                  type="text"
+                  maxLength={11}
+                  value={playerName}
+                  onChange={e => setPlayerName(e.target.value.toUpperCase().slice(0, 11))}
+                  className="w-full rounded-xl border-2 border-slate-600 bg-slate-800 px-4 py-3 text-center text-base font-black uppercase tracking-[0.14em] text-white outline-none focus:border-yellow-400 sm:py-4 sm:text-2xl"
+                  style={{ touchAction: "auto" }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleLeaderboardPost}
+                disabled={leaderboardStatus === "submitting" || leaderboardStatus === "posted"}
+                className={`w-full rounded-2xl border-4 py-3.5 text-sm font-black uppercase tracking-[0.16em] text-white sm:py-4 sm:text-lg ${
+                  leaderboardStatus === "posted"
+                    ? "border-emerald-300 bg-emerald-700/70 text-emerald-100"
+                    : leaderboardStatus === "submitting"
+                      ? "border-slate-500 bg-slate-700 text-slate-200"
+                      : "border-yellow-300 bg-[#c8102e] active:bg-[#a50d25]"
+                }`}
+                style={{ touchAction: "auto" }}
+              >
+                {leaderboardStatus === "submitting"
+                  ? "POSTING..."
+                  : leaderboardStatus === "posted"
+                    ? "SCORE POSTED"
+                    : "POST AND CHECK LEADERBOARD"}
+              </button>
+
+              {leaderboardError && (
+                <p className="w-full rounded-2xl border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-red-200">
+                  {leaderboardError}
+                </p>
+              )}
+
+              {leaderboardEntries.length > 0 && (
+                <div className="w-full rounded-3xl border-2 border-slate-700 bg-slate-900/95 p-3 text-left shadow-[0_18px_50px_rgba(0,0,0,0.35)] sm:p-4">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-[0.72rem] font-black uppercase tracking-[0.24em] text-slate-300 sm:text-sm">
+                      Leaderboard
+                    </p>
+                    <p className="text-[0.62rem] uppercase tracking-[0.18em] text-slate-500">
+                      Top {leaderboardEntries.length}
+                    </p>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950/80">
+                    <div className="divide-y divide-slate-800">
+                      {leaderboardEntries.map((entry, index) => {
+                        const isCurrentName = entry.name === playerName.trim().toUpperCase();
+                        return (
+                          <div
+                            key={entry.id}
+                            className={`flex items-center justify-between gap-3 px-3 py-2.5 ${
+                              isCurrentName ? "bg-yellow-400/10" : ""
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-[0.7rem] font-black uppercase tracking-[0.18em] text-slate-500">
+                                #{index + 1}
+                              </p>
+                              <p className={`truncate text-sm font-black uppercase sm:text-base ${isCurrentName ? "text-yellow-300" : "text-white"}`}>
+                                {entry.name}
+                              </p>
+                            </div>
+                            <p className={`shrink-0 text-lg font-black sm:text-xl ${isCurrentName ? "text-yellow-300" : "text-sky-300"}`}>
+                              {entry.score}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={playAgain}
+                className="w-full rounded-2xl border-4 border-white bg-[#064789] py-3.5 text-lg font-black uppercase tracking-[0.2em] text-white active:bg-[#073a70] sm:py-5 sm:text-2xl"
+                style={{ touchAction: "auto" }}
+              >
+                PLAY AGAIN
+              </button>
+            </div>
           </div>
         </div>
       )}
