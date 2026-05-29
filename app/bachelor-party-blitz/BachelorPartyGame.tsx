@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-  type TouchEvent as ReactTouchEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 
 declare global {
@@ -80,14 +80,13 @@ const DODGE_SPAWN_CHANCE = 0.35;
 const KATIE_WARNING_DURATION = 1.8;
 const BACHELOR_BANNER_DURATION_MS = 1600;
 const PARTICLES_CONTAINER_ID = "bachelor-mode-particles";
-const BILL_DIALOGUE_DURATION_MS = 2800;
-const BILL_FIRST_BEER_DURATION_MS = 1500;
-const BILL_RAPID_BEER_DURATION_MS = 240;
+const BILL_DIALOGUE_DURATION_MS = 3600;
+const BILL_FIRST_BEER_DURATION_MS = 1800;
+const BILL_RAPID_BEER_DURATION_MS = 320;
 const BILL_DOOR_DURATION_MS = 4000;
+const BILL_DOOR_INTRO_DURATION_MS = 1800;
 const BILL_DOOR_TARGET_TAPS = 25;
 const BILL_RESULT_HOLD_MS = 1200;
-const BILL_BLACKOUT_MIN_MS = 650;
-const BILL_BLACKOUT_MAX_MS = 1800;
 const BILL_BLACKOUT_FLASH_MS = 110;
 
 const BILL_DIALOGUES = [
@@ -576,7 +575,7 @@ const ROAST_LINE = "Jimmy, even your bachelor party couldn't save your jump shot
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Screen = "splash" | "playing" | "end";
-type BillStage = "idle" | "dialogue" | "chug" | "door" | "result";
+type BillStage = "idle" | "dialogue" | "chug" | "doorIntro" | "door" | "result";
 
 interface CatchBurst {
   id: number;
@@ -1051,16 +1050,29 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     }
 
     billStageTimeoutRef.current = window.setTimeout(() => {
-      setBillStage("door");
+      setBillStage("doorIntro");
       setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
       setBillDoorTaps(0);
       billDoorTapsRef.current = 0;
-    }, 380);
+    }, 520);
 
     return () => {
       if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
     };
   }, [billBeerCount, billStage, isBillMode]);
+
+  useEffect(() => {
+    if (!isBillMode || billStage !== "doorIntro") return;
+
+    billStageTimeoutRef.current = window.setTimeout(() => {
+      setBillStage("door");
+      setBillDoorTimeLeft(BILL_DOOR_DURATION_MS);
+    }, BILL_DOOR_INTRO_DURATION_MS);
+
+    return () => {
+      if (billStageTimeoutRef.current) window.clearTimeout(billStageTimeoutRef.current);
+    };
+  }, [billStage, isBillMode]);
 
   useEffect(() => {
     if (!isBillMode || billStage !== "door") return;
@@ -1077,30 +1089,6 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       if (billDoorIntervalRef.current) window.clearInterval(billDoorIntervalRef.current);
     };
   }, [billStage, isBillMode, resolveBillDoor]);
-
-  useEffect(() => {
-    const billAfterDrinks = isBillMode && (billStage === "door" || billStage === "result");
-    if (!billAfterDrinks) return;
-
-    const scheduleBlackout = () => {
-      const nextDelay = BILL_BLACKOUT_MIN_MS + Math.random() * (BILL_BLACKOUT_MAX_MS - BILL_BLACKOUT_MIN_MS);
-      billBlackoutTimeoutRef.current = window.setTimeout(() => {
-        setBillBlackout(true);
-        billBlackoutResetRef.current = window.setTimeout(() => {
-          setBillBlackout(false);
-          scheduleBlackout();
-        }, BILL_BLACKOUT_FLASH_MS);
-      }, nextDelay);
-    };
-
-    scheduleBlackout();
-
-    return () => {
-      if (billBlackoutTimeoutRef.current) window.clearTimeout(billBlackoutTimeoutRef.current);
-      if (billBlackoutResetRef.current) window.clearTimeout(billBlackoutResetRef.current);
-      setBillBlackout(false);
-    };
-  }, [billStage, isBillMode]);
 
   // Touch input (only during gameplay)
   useEffect(() => {
@@ -1217,7 +1205,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     setBillDoorTaps(billDoorTapsRef.current);
   }, [billStage, isBillMode]);
 
-  const handleBillDoorPress = useCallback((event: ReactMouseEvent<HTMLButtonElement> | ReactTouchEvent<HTMLButtonElement>) => {
+  const handleBillDoorPress = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
     handleBillDoorTap();
@@ -1749,27 +1737,32 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   </>
                 )}
 
-                {billStage === "door" && (
+                {(billStage === "doorIntro" || billStage === "door") && (
                   <div className="flex h-full flex-col items-center justify-center gap-6 py-4">
                     <div className="w-full max-w-sm space-y-3 text-center">
                       <p className="text-[0.8rem] uppercase tracking-[0.35em] text-[#cbd5e1]">
                         BUST IT DOWN
                       </p>
-                      <div className="h-4 overflow-hidden rounded-full border-2 border-white/20 bg-white/10">
-                        <div
-                          className="h-full bg-gradient-to-r from-[#f59e0b] via-[#fbbf24] to-[#fde68a] transition-[width] duration-75"
-                          style={{ width: `${(billDoorTimeLeft / BILL_DOOR_DURATION_MS) * 100}%` }}
-                        />
-                      </div>
+                      {billStage === "door" ? (
+                        <div className="h-4 overflow-hidden rounded-full border-2 border-white/20 bg-white/10">
+                          <div
+                            className="h-full bg-gradient-to-r from-[#f59e0b] via-[#fbbf24] to-[#fde68a] transition-[width] duration-75"
+                            style={{ width: `${(billDoorTimeLeft / BILL_DOOR_DURATION_MS) * 100}%` }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-[0.7rem] leading-[1.8] text-[#e2e8f0]">
+                          Get ready. The countdown starts in a second.
+                        </div>
+                      )}
                     </div>
 
                     <button
                       type="button"
-                      onMouseDown={handleBillDoorPress}
-                      onTouchStart={handleBillDoorPress}
+                      onPointerDown={billStage === "door" ? handleBillDoorPress : undefined}
                       ref={billDoorRef}
-                      className="bill-door-shell relative flex h-[52vh] max-h-[31rem] w-full max-w-sm items-center justify-center rounded-[2rem] border-[10px] border-[#64748b] bg-gradient-to-b from-[#6b7280] via-[#525966] to-[#2c313b] px-6 active:scale-[0.995]"
-                      style={{ touchAction: "manipulation" }}
+                      className="bill-door-shell relative flex h-[52vh] max-h-[31rem] w-full max-w-sm select-none items-center justify-center rounded-[2rem] border-[10px] border-[#64748b] bg-gradient-to-b from-[#6b7280] via-[#525966] to-[#2c313b] px-6 active:scale-[0.995]"
+                      style={{ touchAction: "none" }}
                     >
                       <div
                         className="absolute inset-[8%] rounded-[1.5rem] border-4 border-[#94a3b8]/45"
@@ -1793,10 +1786,12 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                       />
                       <div className="relative z-10 space-y-4 text-center text-white">
                         <p className="text-[0.92rem] leading-[1.9] text-[#f8fafc]">
-                          TAP THE DOOR
+                          {billStage === "door" ? "TAP THE DOOR" : "GET READY"}
                         </p>
                         <p className="text-[0.7rem] leading-[1.8] text-[#cbd5e1]">
-                          Tap the door as fast as you can to break it down.
+                          {billStage === "door"
+                            ? "Tap the door as fast as you can to break it down."
+                            : "As soon as the bar starts moving, hammer the door."}
                         </p>
                       </div>
                     </button>
@@ -1804,11 +1799,15 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                     <div className="flex w-full max-w-sm items-center justify-between gap-4 text-[#f8fafc]">
                       <div className="rounded-2xl border-2 border-white/15 bg-black/25 px-4 py-3 text-left">
                         <p className="text-[0.58rem] uppercase tracking-[0.32em] text-[#94a3b8]">Time</p>
-                        <p className="mt-2 text-[1.1rem]">{(billDoorTimeLeft / 1000).toFixed(1)}s</p>
+                        <p className="mt-2 text-[1.1rem]">
+                          {billStage === "door" ? `${(billDoorTimeLeft / 1000).toFixed(1)}s` : "..."}
+                        </p>
                       </div>
                       <div className="rounded-2xl border-2 border-white/15 bg-black/25 px-4 py-3 text-right">
                         <p className="text-[0.58rem] uppercase tracking-[0.32em] text-[#94a3b8]">Taps Left</p>
-                        <p className="mt-2 text-[1.4rem] text-[#fde68a]">{Math.max(0, BILL_DOOR_TARGET_TAPS - billDoorTaps)}</p>
+                        <p className="mt-2 text-[1.4rem] text-[#fde68a]">
+                          {billStage === "door" ? Math.max(0, BILL_DOOR_TARGET_TAPS - billDoorTaps) : BILL_DOOR_TARGET_TAPS}
+                        </p>
                       </div>
                     </div>
                   </div>

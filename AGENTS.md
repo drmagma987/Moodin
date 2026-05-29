@@ -422,6 +422,13 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
 - Polished the new Bill mini-game presentation with GSAP-driven wine toss and chug staging, reactive door shake/crack buildup during the tap challenge, and stronger success/fail payoff visuals while preserving the rough-but-polished look.
 - Added the remaining general-feel feedback pass to the live board: GSAP screen shake on life loss, catcher wobble feedback on successful catches, subtle object entry pop-in on spawn, and catch-burst particles around Jimmy when the player secures a good object.
 - Added the real Bachelor Party Blitz background music asset at `public/music/background.mp3` and pointed the Howler music path at that public file instead of the earlier placeholder string.
+- Smoothed the Bill Mode door flow for testing and playability:
+  - dialogue and chug pacing are slower
+  - drunk/sway effects wait until the beers are finished
+  - a short `doorIntro` beat now separates the chug from the 4-second tap challenge
+  - the door CTA explicitly tells players to tap fast to break it down
+  - the door now uses direct pointer-down handling with calmer pre-countdown presentation
+  - Verified with `npm run lint` and `npx tsc --noEmit` (`lint` still has the existing single-page font warning on the bachelor-party route).
 
 Before final responses after code changes, usually run:
 
