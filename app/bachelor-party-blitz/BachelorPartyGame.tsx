@@ -205,6 +205,7 @@ interface GS {
   bachelor: boolean;
   bachelorTimer: number;
   bill: boolean;
+  billInheritedBachelor: boolean;
   jimmyNoTimer: number;
   hitCooldown: number;
   billSpawnTimer: number;
@@ -233,6 +234,7 @@ function makeGS(W: number, H: number): GS {
     cx: W / 2, cy: H - CATCHER_BOTTOM,
     bachelor: false, bachelorTimer: 0,
     bill: false,
+    billInheritedBachelor: false,
     jimmyNoTimer: 0,
     hitCooldown: 0,
     billSpawnTimer: 0,
@@ -328,6 +330,7 @@ function onCatch(gs: GS, o: FallingObj, onGameOver: (score: number) => void, fx:
       // Neutral catch — no score, no life lost, just activates Bill Mode
       if (!gs.bill) {
         gs.bill = true;
+        gs.billInheritedBachelor = gs.bachelor;
         gs.objs = [];
       }
       break;
@@ -647,6 +650,7 @@ interface FlybyState {
   durationMs: number;
   fromLeft: boolean;
   rotate: number;
+  mode: "sweep" | "burst";
 }
 
 interface MusicController {
@@ -900,33 +904,45 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       return;
     }
 
+    const launchFlyby = () => {
+      const durationMs = isBachelorMode
+        ? 3200 + Math.random() * 1400
+        : 6500 + Math.random() * 2500;
+      const mode = isBachelorMode && Math.random() < 0.45 ? "burst" : "sweep";
+      const nextFlyby: FlybyState = {
+        id: flybyIdRef.current++,
+        active: false,
+        top: mode === "burst" ? 50 : 12 + Math.random() * 56,
+        size: mode === "burst" ? 96 + Math.random() * 36 : 120 + Math.random() * 70,
+        durationMs,
+        fromLeft: mode === "sweep" ? Math.random() > 0.5 : Math.random() > 0.5,
+        rotate: mode === "burst" ? -8 + Math.random() * 16 : -12 + Math.random() * 24,
+        mode,
+      };
+      setFlyby(nextFlyby);
+      window.setTimeout(() => {
+        setFlyby(current => (current && current.id === nextFlyby.id ? { ...current, active: true } : current));
+      }, 40);
+      flybyTimeoutRef.current = window.setTimeout(() => {
+        setFlyby(current => (current && current.id === nextFlyby.id ? null : current));
+        scheduleFlyby();
+      }, durationMs + 180);
+    };
+
     const scheduleFlyby = () => {
       const nextDelay = isBachelorMode
         ? 2000 + Math.random() * 2000
         : 14000 + Math.random() * 18000;
       flybyTimeoutRef.current = window.setTimeout(() => {
-        const durationMs = 6500 + Math.random() * 2500;
-        const nextFlyby: FlybyState = {
-          id: flybyIdRef.current++,
-          active: false,
-          top: 12 + Math.random() * 56,
-          size: 120 + Math.random() * 70,
-          durationMs,
-          fromLeft: Math.random() > 0.5,
-          rotate: -12 + Math.random() * 24,
-        };
-        setFlyby(nextFlyby);
-        window.setTimeout(() => {
-          setFlyby(current => (current && current.id === nextFlyby.id ? { ...current, active: true } : current));
-        }, 40);
-        flybyTimeoutRef.current = window.setTimeout(() => {
-          setFlyby(current => (current && current.id === nextFlyby.id ? null : current));
-          scheduleFlyby();
-        }, durationMs + 180);
+        launchFlyby();
       }, nextDelay);
     };
 
-    scheduleFlyby();
+    if (isBachelorMode) {
+      launchFlyby();
+    } else {
+      scheduleFlyby();
+    }
 
     return () => {
       if (flybyTimeoutRef.current) window.clearTimeout(flybyTimeoutRef.current);
@@ -1006,6 +1022,11 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
     const gs = gsRef.current;
     if (gs) {
       gs.bill = false;
+      if (gs.billInheritedBachelor) {
+        gs.bachelor = false;
+        gs.bachelorTimer = 0;
+        gs.billInheritedBachelor = false;
+      }
       gs.billSpawnTimer = 0;
       gs.billRespawnCooldown = BILL_RESPAWN_COOLDOWN_AFTER_EXIT;
     }
@@ -1849,13 +1870,21 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
               height={1536}
               className="angbeen-flyby absolute rounded-[1.6rem] border-4 border-white/75 object-cover opacity-70"
               style={{
-                top: `${flyby.top}%`,
+                top: flyby.mode === "burst" ? "50%" : `${flyby.top}%`,
                 width: `${flyby.size}px`,
-                transform: flyby.active
-                  ? `translateX(${flyby.fromLeft ? "120vw" : "-120vw"}) rotate(${flyby.rotate}deg)`
-                  : `translateX(${flyby.fromLeft ? "-28vw" : "108vw"}) rotate(${flyby.rotate}deg)`,
-                [flyby.fromLeft ? "left" : "right"]: "-12vw",
-                transition: `transform ${flyby.durationMs}ms linear, opacity 380ms ease-out`,
+                left: flyby.mode === "burst" ? "50%" : flyby.fromLeft ? "-12vw" : undefined,
+                right: flyby.mode === "burst" ? undefined : flyby.fromLeft ? undefined : "-12vw",
+                transform: flyby.mode === "burst"
+                  ? (flyby.active
+                    ? `translate(-50%, -50%) scale(4.4) rotate(${flyby.rotate}deg)`
+                    : `translate(-50%, -50%) scale(0.18) rotate(${flyby.rotate}deg)`)
+                  : (flyby.active
+                    ? `translateX(${flyby.fromLeft ? "120vw" : "-120vw"}) rotate(${flyby.rotate}deg)`
+                    : `translateX(${flyby.fromLeft ? "-28vw" : "108vw"}) rotate(${flyby.rotate}deg)`),
+                opacity: flyby.mode === "burst" ? (flyby.active ? 0 : 0.82) : undefined,
+                transition: flyby.mode === "burst"
+                  ? `transform ${flyby.durationMs}ms ease-out, opacity ${flyby.durationMs}ms ease-out`
+                  : `transform ${flyby.durationMs}ms linear, opacity 380ms ease-out`,
               }}
             />
           </div>
