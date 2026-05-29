@@ -67,7 +67,7 @@ const CATCHER_W = 96;
 const CATCHER_H = 58;
 const CATCHER_BOTTOM = 90;     // px from canvas bottom to catcher center
 const CATCHER_SPEED = 310;     // px/s
-const HIT_SLOP = 1.22;         // hitbox is 22% larger than visual for forgiving mobile feel
+const HIT_SLOP = 1.07;         // keep minimal forgiveness while making near-miss red drops feel fairer
 
 const BASE_FALL_SPEED = 78;    // px/s at game start (~40% slower than original)
 const SPEED_RAMP = 0.013;      // speed multiplier growth per second
