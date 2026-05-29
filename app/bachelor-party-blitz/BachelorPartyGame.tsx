@@ -729,15 +729,18 @@ export function BachelorPartyGame() {
 
   const runMusic = useCallback((shouldPlay: boolean) => {
     const music = musicRef.current;
-    if (!music || !musicEnabledRef.current) return;
+    if (!music) return;
 
     try {
       if (shouldPlay) {
+        if (!musicEnabledRef.current) return;
         if (!music.playing()) music.play();
         return;
       }
 
-      if (music.playing()) music.pause();
+      if (music.playing()) {
+        music.pause();
+      }
     } catch (error) {
       reportBlitzRuntimeError("Music playback", error);
     }
@@ -1134,17 +1137,20 @@ export function BachelorPartyGame() {
 
     setAudioEnabled(current => {
       const next = !current;
-      musicEnabledRef.current = next;
+      const music = ensureMusicReady();
 
       if (next) {
-        const music = ensureMusicReady();
+        musicEnabledRef.current = true;
         try {
+          music?.stop();
           music?.play();
         } catch (error) {
           reportBlitzRuntimeError("Immediate audio toggle play", error);
         }
       } else {
+        musicEnabledRef.current = false;
         runMusic(false);
+        music?.stop();
       }
 
       return next;
@@ -1919,7 +1925,7 @@ export function BachelorPartyGame() {
                   <p className="mt-2 text-red-400">🔴 Dodge Katie, payments, and dumbbells or you lose a life.</p>
                   <p className="mt-2 text-fuchsia-300">🍄 Mushroom triggers Bachelor Mode.</p>
                   <p className="mt-2 text-amber-300">🧾 Bill Mode is rare and starts the door mini-game.</p>
-                  <p className="mt-2 text-amber-300">🍺 You have 6 lives. Last as long as possible and run up your score.</p>
+                  <p className="mt-2 text-amber-300">🍺 You have 8 lives. Last as long as possible and run up your score.</p>
                 </div>
 
                 <div className="rounded-2xl border border-slate-700 bg-black/25 px-4 py-3 text-[0.6rem] leading-[1.8] text-slate-400 sm:text-[0.7rem]">
@@ -1935,14 +1941,14 @@ export function BachelorPartyGame() {
                       : "border-slate-600 bg-slate-900/85 text-slate-300"
                   }`}
                 >
-                  Audio: {audioEnabled ? "On" : "Off"}
+                  Slipknot: {audioEnabled ? "Yes" : "No"}
                 </button>
 
                 <button
                   onClick={e => { e.stopPropagation(); startGame(); }}
                   className="w-full rounded-2xl border-4 border-white bg-[#c8102e] py-4 text-xl uppercase tracking-[0.22em] text-white sm:text-2xl"
                 >
-                  PLAY
+                  START GAME
                 </button>
               </div>
             </div>
