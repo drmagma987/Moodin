@@ -474,6 +474,13 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
   - auth waits for a settled user token so mobile Safari/slow auth propagation is less likely to fail the post flow
   - Verified with `npm run lint` and `npx tsc --noEmit` (`lint` still has the existing single-page font warning on the bachelor-party route).
 
+### 2026-05-30
+
+- Added a fully isolated `Make It Rain` standalone route at `/make-it-rain` so beta testing stays off the live bachelor-party board.
+- Built the new mini-game around 2D flick throwing, a left-right moving target with speed-up/fake-out behavior, capped 5x hit streak scoring, and a 3-miss game-over rule.
+- Added a dedicated Firestore leaderboard helper/collection for `Make It Rain`, reusing the hardened anonymous-auth posting pattern without changing the existing bachelor-party leaderboard flow.
+- Copied the supplied target image into `public/make-it-rain/target.jpg` as the placeholder target art.
+
 Before final responses after code changes, usually run:
 
 ```bash

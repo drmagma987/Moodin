@@ -149,6 +149,12 @@ export default function Home() {
         <div className="mx-auto w-full max-w-xl">
           <div className="space-y-3">
             <Link
+              href="/make-it-rain"
+              className="flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#071229] bg-[#14532d] px-4 py-4 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#0f4224]"
+            >
+              💸 Make It Rain
+            </Link>
+            <Link
               href="/bachelor-party-blitz"
               className="flex w-full items-center justify-center gap-3 rounded-lg border-2 border-[#071229] bg-[#071229] px-4 py-4 text-base font-black uppercase tracking-wide text-white transition hover:bg-[#0f2040]"
             >
