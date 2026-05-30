@@ -2370,10 +2370,10 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   <p className="text-sky-300">👆 Drag anywhere to move Jimmy under the falling objects.</p>
                   <p className="text-green-400">🟢 Catch the good stuff: money, dreidel, goth, mushroom, and the glowing menorah boost.</p>
                   <p className="mt-1.5 text-red-400">🔴 Dodge Katie, payments, and dumbbells or you lose a life.</p>
-                  <p className="mt-1.5 text-fuchsia-300">🍄 Mushroom triggers Bachelor Mode.</p>
+                  <p className="mt-1.5 text-fuchsia-300">🍄 Mushroom makes you trip balls and increases your points multiplier.</p>
                   <p className="mt-1.5 text-yellow-300">🕎 Menorah boost is rare, gives a score bump, and restores 1 life if you are below the 8-life cap.</p>
-                  <p className="mt-1.5 text-amber-300">🧾 Bill Mode is rare and starts the door mini-game.</p>
-                  <p className="mt-1.5 text-amber-300">🍺 You have 8 lives max. Last as long as possible and run up your score.</p>
+                  <p className="mt-1.5 text-cyan-300">🧾 Bill Mode is rare and starts the door mini-game.</p>
+                  <p className="mt-1.5 text-orange-300">🍺 You have 8 lives max. Last as long as possible and run up your score.</p>
                 </div>
 
                 <button
