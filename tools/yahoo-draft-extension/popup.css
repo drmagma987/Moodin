@@ -1,0 +1,82 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  width: 340px;
+  margin: 0;
+  background: #101828;
+  color: #f8fafc;
+}
+
+main {
+  padding: 18px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+p,
+dt,
+dd,
+label,
+input,
+button {
+  font-size: 13px;
+}
+
+button + button {
+  margin-top: 8px;
+  background: #0e7490;
+}
+
+label,
+input,
+button {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+input {
+  margin: 6px 0 8px;
+  border: 1px solid #475467;
+  border-radius: 6px;
+  padding: 8px;
+  background: #1d2939;
+  color: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 6px;
+  padding: 9px;
+  background: #7f56d9;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: 85px 1fr;
+  gap: 7px;
+  margin: 16px 0;
+}
+
+dt {
+  color: #98a2b3;
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin-bottom: 0;
+  color: #d0d5dd;
+}

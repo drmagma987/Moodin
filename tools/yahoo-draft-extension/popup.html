@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moodin Yahoo League Bridge</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Moodin Yahoo League Bridge</h1>
+      <p id="status">Checking local bridge…</p>
+      <label for="endpoint">Local endpoint</label>
+      <input id="endpoint" type="url" spellcheck="false" />
+      <button id="save" type="button">Save localhost endpoint</button>
+      <button id="scan" type="button">Scan league inventory</button>
+      <button id="check-news" type="button">Check breaking news</button>
+      <dl>
+        <dt>Last page</dt>
+        <dd id="last-page">—</dd>
+        <dt>Last sent</dt>
+        <dd id="last-sent">—</dd>
+        <dt>Inventory</dt>
+        <dd id="inventory">Not scanned</dd>
+        <dt>News watcher</dt>
+        <dd id="news-watcher">Not checked</dd>
+      </dl>
+      <p class="note">Read-only. No picks, adds, drops, or trades are submitted.</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Moodin Yahoo League Bridge",
+  "version": "0.4.0",
+  "description": "Read-only Yahoo Fantasy roster, availability, and draft-state extraction for Moodin.",
+  "permissions": ["storage", "activeTab", "alarms", "notifications"],
+  "host_permissions": [
+    "https://football.fantasysports.yahoo.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "Moodin Yahoo League Bridge",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "128": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://football.fantasysports.yahoo.com/*"],
+      "js": ["extractor.js", "content-script.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+      "js": ["moodin-content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

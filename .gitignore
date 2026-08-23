@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# One-time fantasy research cache; only normalized evidence snapshots are committed.
+tmp/fantasy-context/
+tmp/pdfs/

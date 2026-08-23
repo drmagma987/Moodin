@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Moodin + Fantasy Football Supertool Kickoff
+
+This repository currently holds two tracks of work:
+
+- Moodin and its side routes
+- the kickoff foundation for a fantasy-football decision platform
+
+The new fantasy-football effort starts with architecture, source ownership, scoring, player identity, and draft valuation primitives before live provider integrations.
+
+## New kickoff route
+
+Open [`/fantasy-football`](/Users/vaughnjackson/moodin/app/fantasy-football/page.tsx) to see the current kickoff slice.
+
+It includes:
+
+- provider ownership and fallback mapping
+- a fixture-backed draft recommendation demo
+- custom Yahoo-style scoring examples
+- project status and documentation entry points
+
+## Core fantasy files
+
+- [`lib/fantasy/types.ts`](/Users/vaughnjackson/moodin/lib/fantasy/types.ts)
+- [`lib/fantasy/scoring.ts`](/Users/vaughnjackson/moodin/lib/fantasy/scoring.ts)
+- [`lib/fantasy/identity.ts`](/Users/vaughnjackson/moodin/lib/fantasy/identity.ts)
+- [`lib/fantasy/draft.ts`](/Users/vaughnjackson/moodin/lib/fantasy/draft.ts)
+- [`lib/fantasy/providers.ts`](/Users/vaughnjackson/moodin/lib/fantasy/providers.ts)
+- [`lib/fantasy/fixtures.ts`](/Users/vaughnjackson/moodin/lib/fantasy/fixtures.ts)
+
+## Living docs
+
+- [`docs/PRODUCT_SPEC.md`](/Users/vaughnjackson/moodin/docs/PRODUCT_SPEC.md)
+- [`docs/ARCHITECTURE.md`](/Users/vaughnjackson/moodin/docs/ARCHITECTURE.md)
+- [`docs/REFERENCE_REPOS.md`](/Users/vaughnjackson/moodin/docs/REFERENCE_REPOS.md)
+- [`docs/DATA_SOURCES.md`](/Users/vaughnjackson/moodin/docs/DATA_SOURCES.md)
+- [`docs/DECISION_LOGIC.md`](/Users/vaughnjackson/moodin/docs/DECISION_LOGIC.md)
+- [`docs/YAHOO_CAPABILITIES.md`](/Users/vaughnjackson/moodin/docs/YAHOO_CAPABILITIES.md)
+- [`docs/LOCAL_HOSTING.md`](/Users/vaughnjackson/moodin/docs/LOCAL_HOSTING.md)
+- [`docs/DECISIONS.md`](/Users/vaughnjackson/moodin/docs/DECISIONS.md)
+- [`docs/STATUS.md`](/Users/vaughnjackson/moodin/docs/STATUS.md)
 
 ## Getting Started
 
-First, run the development server:
+Run the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Validation
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Before handing off code changes, run:
 
-## Learn More
+```bash
+npm run lint
+npx tsc --noEmit
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- External provider authentication is not wired in this kickoff pass.
+- Yahoo remains the target league authority even though the current implementation is fixture-backed.
+- Set `FANTASYPROS_API_KEY` to let the kickoff route attempt live FantasyPros draft data before falling back to fixtures.
