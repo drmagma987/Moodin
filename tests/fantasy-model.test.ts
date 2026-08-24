@@ -98,6 +98,17 @@ import {
   isYahooExtensionEnvelope,
 } from "@/lib/fantasy/yahooBridge";
 import { applyYahooLeagueInventory } from "@/lib/fantasy/yahooInventory";
+import {
+  appendDraftSessionPick,
+  createDraftSession,
+  replayDraftSession,
+  revertDraftSessionEvent,
+} from "@/lib/fantasy/draftSession";
+import { assertDraftRoomFreeze, freezeDraftRoom } from "@/lib/fantasy/draftOperations";
+import { parseScreenshotDraftText } from "@/lib/fantasy/screenshotDraftRecovery";
+import { buildPostDraftActionQueue } from "@/lib/fantasy/postDraftActions";
+import { recordDraftDecision } from "@/lib/fantasy/draftDecisionJournal";
+import { buildDraftRefreshCheckpoint, compareDraftRefreshCheckpoints } from "@/lib/fantasy/draftRefreshControl";
 
 const require = createRequire(import.meta.url);
 const yahooDomExtractor = require("../tools/yahoo-draft-extension/extractor.js") as {
@@ -3859,4 +3870,168 @@ test("historical report freezes a covered three-season window and emits tuning d
       (suggestion) => suggestion.priority === "tune" && suggestion.title.includes("static Smash"),
     ),
   );
+});
+
+test("draft sessions replay, reject duplicates, and preserve reverted events", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  const session = createDraftSession(initial, "2026-08-23T12:00:00.000Z");
+  const first = appendDraftSessionPick(session, fixtureCandidates, initial, {
+    playerId: fixtureCandidates[0].player.id,
+    overallPick: 1,
+  });
+  const second = appendDraftSessionPick(first.session, fixtureCandidates, first.state, {
+    playerId: fixtureCandidates[1].player.id,
+    overallPick: 2,
+  });
+
+  assert.equal(second.state.currentPick, 3);
+  assert.equal(second.state.drafted.length, 2);
+  assert.throws(
+    () => appendDraftSessionPick(second.session, fixtureCandidates, second.state, {
+      playerId: fixtureCandidates[0].player.id,
+      overallPick: 3,
+    }),
+    /already drafted/,
+  );
+
+  const reverted = revertDraftSessionEvent(second.session, fixtureCandidates, second.state);
+  assert.equal(reverted.state.currentPick, 2);
+  assert.equal(reverted.session.events.length, 2, "undo must retain an immutable audit record");
+  assert.equal(reverted.session.events.filter((event) => event.status === "reverted").length, 1);
+  assert.deepEqual(
+    replayDraftSession(reverted.session, fixtureCandidates, initial).drafted,
+    reverted.state.drafted,
+  );
+});
+
+test("draft session replay fails closed on identity or snake-order corruption", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  const session = createDraftSession(initial);
+  assert.throws(
+    () => replayDraftSession({ ...session, leagueConfigFingerprint: "stale" }, fixtureCandidates, initial),
+    /fingerprint/,
+  );
+  const first = appendDraftSessionPick(session, fixtureCandidates, initial, {
+    playerId: fixtureCandidates[0].player.id,
+    overallPick: 1,
+  });
+  const corrupted = {
+    ...first.session,
+    events: first.session.events.map((event) => ({ ...event, teamId: "team-2" })),
+  };
+  assert.throws(() => replayDraftSession(corrupted, fixtureCandidates, initial), /belongs to team-1/);
+});
+
+test("screenshot recovery stages exact rows and refuses ambiguous text", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  const firstName = fixtureCandidates[0].player.fullName;
+  const secondName = fixtureCandidates[1].player.fullName;
+  const result = parseScreenshotDraftText(
+    `Pick 1 - ${firstName}\n2. ${secondName}\nUnreadable Player`,
+    fixtureCandidates,
+    initial,
+  );
+  assert.deepEqual(result.proposals.map((proposal) => proposal.overallPick), [1, 2]);
+  assert.equal(result.proposals.every((proposal) => proposal.confidence === "exact"), true);
+  assert.deepEqual(result.unresolvedLines, ["Unreadable Player"]);
+});
+
+test("room freeze binds keeper identity and refuses post-freeze keeper changes", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  const freeze = freezeDraftRoom({
+    state: initial,
+    candidateCount: fixtureCandidates.length,
+    artifactCapturedAt: "2026-08-23T10:00:00.000Z",
+    setupReady: true,
+    dataReady: true,
+    boardFingerprint: "board-test",
+    now: "2026-08-23T12:00:00.000Z",
+  });
+  assert.doesNotThrow(() => assertDraftRoomFreeze(freeze, initial));
+  const keeperState = seedDraftStateWithKnownPicks(initial, fixtureCandidates, [{
+    overallPick: 1,
+    playerId: fixtureCandidates[0].player.id,
+    teamId: "team-1",
+    eventType: "keeper",
+  }]);
+  assert.throws(() => assertDraftRoomFreeze(freeze, keeperState), /Keeper configuration changed/);
+});
+
+test("decision journal and post-draft queue retain actionable context", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  const recommendations = rankDraftCandidates(initial, fixtureCandidates).slice(0, 3);
+  const journal = recordDraftDecision({
+    state: initial,
+    selectedPlayerId: recommendations[0].playerId,
+    recommendations,
+    candidates: fixtureCandidates,
+    now: "2026-08-23T12:00:00.000Z",
+  });
+  assert.equal(journal.recommendations.length, 3);
+  assert.ok(journal.recommendations.every((recommendation) => ["robust", "conditional", "knife-edge"].includes(recommendation.stability)));
+  const queue = buildPostDraftActionQueue(initial, fixtureCandidates);
+  assert.ok(queue.length > 0);
+  assert.ok(queue.every((action) => action.trigger && action.action && action.rationale));
+});
+
+test("refresh checkpoints expose movers and bind a frozen room to one board", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  const beforeBoard = buildRedraftBoard(fixtureCandidates, initial.league);
+  const before = buildDraftRefreshCheckpoint(fixtureCandidates, beforeBoard, "2026-08-22T12:00:00.000Z");
+  const changedCandidates = fixtureCandidates.map((candidate, index) => index === 0 ? {
+    ...candidate,
+    market: { ...candidate.market, adp: candidate.market.adp + 12 },
+    projection: { ...candidate.projection, range: { ...candidate.projection.range, p50: candidate.projection.range.p50 - 20 } },
+  } : candidate);
+  const after = buildDraftRefreshCheckpoint(changedCandidates, buildRedraftBoard(changedCandidates, initial.league), "2026-08-23T12:00:00.000Z");
+  const diff = compareDraftRefreshCheckpoints(before, after);
+  assert.equal(diff.changed, true);
+  assert.ok(diff.movers.some((mover) => mover.playerId === fixtureCandidates[0].player.id));
+
+  const freeze = freezeDraftRoom({
+    state: initial,
+    candidateCount: fixtureCandidates.length,
+    artifactCapturedAt: after.capturedAt,
+    setupReady: true,
+    dataReady: true,
+    boardFingerprint: after.boardFingerprint,
+  });
+  assert.doesNotThrow(() => assertDraftRoomFreeze(freeze, initial, after.boardFingerprint));
+  assert.throws(() => assertDraftRoomFreeze(freeze, initial, before.boardFingerprint), /player board changed/);
+});
+
+test("draft session survives 200 out-of-order replay and correction rehearsals", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  let seed = 20260823;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  for (let rehearsal = 0; rehearsal < 200; rehearsal += 1) {
+    let session = createDraftSession(initial, `2026-08-23T12:00:${String(rehearsal % 60).padStart(2, "0")}.000Z`);
+    let state = initial;
+    const rehearsalCandidates = fixtureCandidates.slice(0, 6);
+    const order = rehearsalCandidates.map((_, index) => index + 1)
+      .sort(() => random() - 0.5);
+    for (const overallPick of order) {
+      const result = appendDraftSessionPick(session, fixtureCandidates, state, {
+        overallPick,
+        playerId: fixtureCandidates[overallPick - 1].player.id,
+      });
+      session = result.session;
+      state = result.state;
+    }
+    assert.equal(state.currentPick, rehearsalCandidates.length + 1);
+    const target = session.events.find((event) => event.overallPick === 3);
+    assert.ok(target);
+    const reverted = revertDraftSessionEvent(session, fixtureCandidates, state, target.id);
+    assert.equal(reverted.state.currentPick, 3);
+    const corrected = appendDraftSessionPick(reverted.session, fixtureCandidates, reverted.state, {
+      overallPick: 3,
+      playerId: fixtureCandidates[2].player.id,
+      note: "chaos rehearsal correction",
+    });
+    assert.equal(corrected.state.currentPick, rehearsalCandidates.length + 1);
+    assert.equal(replayDraftSession(corrected.session, fixtureCandidates, initial).drafted.length, rehearsalCandidates.length);
+  }
 });

@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
   Check,
   ChevronDown,
   ClipboardList,
   Clock3,
+  FileImage,
   Search,
   Settings2,
+  ShieldCheck,
   Star,
   Target,
   Undo2,
@@ -17,10 +20,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { buildPositionRunSnapshots, buildRedraftBoard, buildWrapSimulationSnapshot, rankDraftCandidates } from "@/lib/fantasy/draft";
-import { applyDraftPick, getSnakePickInfo, reconcileSavedDraftState, undoLastDraftPick } from "@/lib/fantasy/draftState";
+import { getSnakePickInfo, reconcileSavedDraftState } from "@/lib/fantasy/draftState";
 import { buildDraftBoardSignal, buildDraftQuickScoreBoard, buildLiveDraftCall, preDraftActionLabel, type DraftActionLabel, type DraftBoardSignal, type LiveDraftActionLabel } from "@/lib/fantasy/draftSignals";
 import { buildMiddleRoundValuePocket } from "@/lib/fantasy/valuePocket";
 import { buildAdvancedResearchShadowBoard } from "@/lib/fantasy/advancedResearchShadow";
@@ -31,6 +33,25 @@ import type { DraftBoardMode, DraftCandidate, DraftState, FantasyNewsIngestionRe
 import { cn } from "@/lib/utils";
 import { resolveLeagueSetup } from "@/lib/fantasy/leagueSetup";
 import { parseYahooDraftEvents, reconcileYahooDraftSnapshot } from "@/lib/fantasy/yahooDraft";
+import {
+  appendDraftSessionPick,
+  createDraftSession,
+  getDraftSessionHealth,
+  replayDraftSession,
+  replaceDraftSessionSnapshot,
+  revertDraftSessionEvent,
+  type DraftSession,
+} from "@/lib/fantasy/draftSession";
+import {
+  classifyRecommendationStability,
+  recordDraftDecision,
+  type DraftDecisionJournalEntry,
+} from "@/lib/fantasy/draftDecisionJournal";
+import { assertDraftRoomFreeze, buildKeeperFingerprint, freezeDraftRoom, type DraftRoomFreeze } from "@/lib/fantasy/draftOperations";
+import { parseScreenshotDraftText, type ScreenshotDraftRecovery } from "@/lib/fantasy/screenshotDraftRecovery";
+import { buildPostDraftActionQueue } from "@/lib/fantasy/postDraftActions";
+import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
+import { buildDraftRefreshCheckpoint, compareDraftRefreshCheckpoints, type DraftRefreshCheckpoint } from "@/lib/fantasy/draftRefreshControl";
 
 type Workspace = "predraft" | "draft" | "setup";
 type BoardView = "all" | "favorites" | "targets" | "values" | "shadow";
@@ -71,12 +92,17 @@ type DraftCommandCenterProps = {
   sourceMode: string;
   sourceMessage: string;
   dataQuality: DraftDataQualitySnapshot;
+  artifactCapturedAt: string;
 };
 
 const FAVORITES_KEY = "fantasy-command-center-favorites-v2";
 // Bump this whenever persisted draft-event semantics change. Version 3 adds
 // keeper/live event types, so older rooms must not make keeper picks undoable.
 const DRAFT_KEY = "fantasy-command-center-live-draft-v3";
+const SESSION_KEY = "fantasy-command-center-draft-session-v1";
+const JOURNAL_KEY = "fantasy-command-center-decision-journal-v1";
+const FREEZE_KEY = "fantasy-command-center-room-freeze-v1";
+const REFRESH_CHECKPOINT_KEY = "fantasy-command-center-refresh-checkpoint-v1";
 const SETUP_KEY = "fantasy-command-center-league-setup-v2";
 const MANUAL_NEWS_KEY = "fantasy-command-center-manual-news-v1";
 const POSITIONS: Array<"ALL" | PlayerPosition> = ["ALL", "QB", "RB", "WR", "TE", "K", "DST"];
@@ -158,6 +184,7 @@ export function DraftCommandCenter({
   sourceMode,
   sourceMessage,
   dataQuality,
+  artifactCapturedAt,
 }: DraftCommandCenterProps) {
   const [newsSignals, setNewsSignals] = useState<RefreshSignal[]>([]);
   const [manualNewsSignals, setManualNewsSignals] = useState<RefreshSignal[]>([]);
@@ -194,12 +221,19 @@ export function DraftCommandCenter({
   const [selectedPlayerId, setSelectedPlayerId] = useState(candidates[0]?.player.id ?? "");
   const [favorites, setFavorites] = useState<Favorite[]>(seededFavorites);
   const [draftState, setDraftState] = useState(initialDraftState);
+  const [draftSession, setDraftSession] = useState<DraftSession>(() => createDraftSession(initialDraftState));
+  const [decisionJournal, setDecisionJournal] = useState<DraftDecisionJournalEntry[]>([]);
+  const [roomFreeze, setRoomFreeze] = useState<DraftRoomFreeze | null>(null);
+  const [acceptedRefresh, setAcceptedRefresh] = useState<DraftRefreshCheckpoint | null>(null);
+  const [screenshotText, setScreenshotText] = useState("");
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [screenshotRecovery, setScreenshotRecovery] = useState<ScreenshotDraftRecovery | null>(null);
+  const [backupText, setBackupText] = useState("");
   const [draftQuery, setDraftQuery] = useState("");
-  const [teamOverride, setTeamOverride] = useState("");
   const [setup, setSetup] = useState<LeagueIntake>({
     teamNames: "",
     myTeamName: "",
-    myDraftSlot: "11",
+    myDraftSlot: String(leagueSourceOfTruth.draft.mySlot),
     draftOrder: "",
     keepers: "",
     draftHistory: "",
@@ -246,16 +280,34 @@ export function DraftCommandCenter({
     setManualNewsSignals(readJson<RefreshSignal[]>(MANUAL_NEWS_KEY, []).filter((signal) => (
       !signal.expiresAt || new Date(signal.expiresAt).getTime() > now
     )));
+    const savedSession = readJson<DraftSession | null>(SESSION_KEY, null);
     const savedDraft = readJson<DraftState | null>(DRAFT_KEY, null);
-    if (savedDraft?.league?.id === initialDraftState.league.id && Array.isArray(savedDraft.availablePlayerIds)) {
+    if (savedSession) {
       try {
-        setDraftState(reconcileSavedDraftState(savedDraft, candidates, initialDraftState).state);
+        const replayed = replayDraftSession(savedSession, candidates, initialDraftState);
+        setDraftSession(savedSession);
+        setDraftState(replayed);
+      } catch {
+        window.localStorage.removeItem(SESSION_KEY);
+        setDraftState(initialDraftState);
+        setDraftSession(createDraftSession(initialDraftState));
+      }
+    } else if (savedDraft?.league?.id === initialDraftState.league.id && Array.isArray(savedDraft.availablePlayerIds)) {
+      try {
+        const reconciled = reconcileSavedDraftState(savedDraft, candidates, initialDraftState).state;
+        setDraftState(reconciled);
+        setDraftSession(createDraftSession(reconciled));
       } catch {
         window.localStorage.removeItem(DRAFT_KEY);
-        setDraftState(initialDraftState);
       }
     }
-    setSetup(readJson(SETUP_KEY, setup));
+    setDecisionJournal(readJson<DraftDecisionJournalEntry[]>(JOURNAL_KEY, []));
+    setRoomFreeze(readJson<DraftRoomFreeze | null>(FREEZE_KEY, null));
+    setAcceptedRefresh(readJson<DraftRefreshCheckpoint | null>(REFRESH_CHECKPOINT_KEY, null));
+    setSetup({
+      ...readJson(SETUP_KEY, setup),
+      myDraftSlot: String(leagueSourceOfTruth.draft.mySlot),
+    });
     setHydrated(true);
     // Loading browser-only working state once is intentional.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,6 +325,22 @@ export function DraftCommandCenter({
 
   useEffect(() => {
     if (!hydrated) return;
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(draftSession));
+  }, [draftSession, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(decisionJournal));
+  }, [decisionJournal, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (roomFreeze) window.localStorage.setItem(FREEZE_KEY, JSON.stringify(roomFreeze));
+    else window.localStorage.removeItem(FREEZE_KEY);
+  }, [hydrated, roomFreeze]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     window.localStorage.setItem(MANUAL_NEWS_KEY, JSON.stringify(manualNewsSignals));
   }, [hydrated, manualNewsSignals]);
 
@@ -282,6 +350,20 @@ export function DraftCommandCenter({
   }, [setup, hydrated]);
 
   const board = useMemo(() => buildRedraftBoard(candidates, draftState.league), [candidates, draftState.league]);
+  const currentRefresh = useMemo(
+    () => buildDraftRefreshCheckpoint(candidates, board, artifactCapturedAt),
+    [artifactCapturedAt, board, candidates],
+  );
+  const refreshDiff = useMemo(
+    () => {
+      try {
+        return compareDraftRefreshCheckpoints(acceptedRefresh, currentRefresh);
+      } catch {
+        return { added: currentRefresh.candidates, removed: [], movers: [], changed: true };
+      }
+    },
+    [acceptedRefresh, currentRefresh],
+  );
   const shadowBoard = useMemo(() => buildAdvancedResearchShadowBoard(candidates, draftState.league), [candidates, draftState.league]);
   const shadowById = useMemo(() => new Map(shadowBoard.map((entry) => [entry.playerId, entry])), [shadowBoard]);
   const boardById = useMemo(() => new Map(board.map((entry) => [entry.playerId, entry])), [board]);
@@ -400,6 +482,11 @@ export function DraftCommandCenter({
     () => rankDraftCandidates(draftState, candidates, wrap).slice(0, 5),
     [candidates, draftState, wrap],
   );
+  const sessionHealth = useMemo(() => getDraftSessionHealth(draftSession, draftState), [draftSession, draftState]);
+  const postDraftActions = useMemo(
+    () => buildPostDraftActionQueue(draftState, candidates),
+    [candidates, draftState],
+  );
   const draftSearchResults = useMemo(() => {
     const lowered = draftQuery.trim().toLowerCase();
     return sortedCandidates
@@ -428,28 +515,166 @@ export function DraftCommandCenter({
   }
 
   function recordPick(candidate: DraftCandidate) {
-    setDraftState((current) => applyDraftPick(current, candidate, teamOverride || undefined));
-    setDraftQuery("");
-    setTeamOverride("");
+    try {
+      assertDraftRoomFreeze(roomFreeze, draftState, currentRefresh.boardFingerprint);
+      if (pickInfo.teamId === draftState.myTeamId) {
+        setDecisionJournal((current) => [recordDraftDecision({
+          state: draftState,
+          selectedPlayerId: candidate.player.id,
+          recommendations: liveRecommendations,
+          candidates,
+        }), ...current]);
+      }
+      const result = appendDraftSessionPick(draftSession, candidates, draftState, {
+        playerId: candidate.player.id,
+        source: "manual",
+      });
+      setDraftSession(result.session);
+      setDraftState(result.state);
+      setSyncMessages(result.receipts);
+      setDraftQuery("");
+    } catch (error) {
+      setSyncMessages([error instanceof Error ? error.message : "The pick was refused."]);
+    }
   }
 
   function applyResolvedSetup() {
     if (!setupResolution.state) return;
     setDraftState(setupResolution.state);
-    setTeamOverride("");
+    setDraftSession(createDraftSession(setupResolution.state));
+    setRoomFreeze(null);
     setDraftQuery("");
   }
 
   function recoverFromSnapshot() {
     try {
+      assertDraftRoomFreeze(roomFreeze, draftState, currentRefresh.boardFingerprint);
       const events = parseYahooDraftEvents(syncText);
       const result = reconcileYahooDraftSnapshot(draftState, candidates, events);
       setSyncMessages(result.applied
         ? [`Recovered ${result.receipts.length} live picks. Board resumes at Pick ${result.state.currentPick}.`, ...result.receipts.slice(-5)]
         : result.errors);
-      if (result.applied) setDraftState(result.state);
+      if (result.applied) {
+        const replacement = replaceDraftSessionSnapshot(
+          draftSession,
+          candidates,
+          draftState,
+          result.state.drafted.filter((pick) => pick.eventType !== "keeper").map((pick) => ({
+            overallPick: pick.overallPick,
+            playerId: pick.playerId,
+            pickedAt: pick.pickedAt,
+            source: pick.source,
+          })),
+        );
+        setDraftState(replacement.state);
+        setDraftSession(replacement.session);
+      }
     } catch (error) {
       setSyncMessages([error instanceof Error ? error.message : "Could not parse the draft snapshot."]);
+    }
+  }
+
+  function undoDraftPick() {
+    try {
+      const result = revertDraftSessionEvent(draftSession, candidates, draftState);
+      setDraftSession(result.session);
+      setDraftState(result.state);
+      setSyncMessages(result.receipts);
+    } catch (error) {
+      setSyncMessages([error instanceof Error ? error.message : "The pick could not be undone."]);
+    }
+  }
+
+  function freezeReviewedRoom() {
+    try {
+      const next = freezeDraftRoom({
+        state: draftState,
+        candidateCount: candidates.length,
+        artifactCapturedAt,
+        setupReady: setupResolution.ready,
+        dataReady: dataQuality.status === "ready",
+        expectedKeeperFingerprint: setupResolution.state ? buildKeeperFingerprint(setupResolution.state.drafted) : undefined,
+        boardFingerprint: currentRefresh.boardFingerprint,
+      });
+      setRoomFreeze(next);
+      setAcceptedRefresh(currentRefresh);
+      window.localStorage.setItem(REFRESH_CHECKPOINT_KEY, JSON.stringify(currentRefresh));
+      setSyncMessages([`Room frozen with ${next.keeperCount} keepers · ${next.keeperFingerprint}.`]);
+    } catch (error) {
+      setSyncMessages([error instanceof Error ? error.message : "The room could not be frozen."]);
+    }
+  }
+
+  function stageScreenshotRecovery() {
+    setScreenshotRecovery(parseScreenshotDraftText(screenshotText, candidates, draftState));
+  }
+
+  function applyScreenshotRecovery() {
+    if (!screenshotRecovery || screenshotRecovery.proposals.length === 0) return;
+    try {
+      assertDraftRoomFreeze(roomFreeze, draftState, currentRefresh.boardFingerprint);
+      let session = draftSession;
+      let state = draftState;
+      const receipts: string[] = [];
+      for (const proposal of screenshotRecovery.proposals) {
+        const result = appendDraftSessionPick(session, candidates, state, {
+          overallPick: proposal.overallPick,
+          playerId: proposal.playerId,
+          source: "manual",
+          note: `Reviewed screenshot row: ${proposal.sourceLine}`,
+        });
+        session = result.session;
+        state = result.state;
+        receipts.push(...result.receipts);
+      }
+      setDraftSession(session);
+      setDraftState(state);
+      setSyncMessages([`Applied ${receipts.length} reviewed screenshot picks.`, ...receipts.slice(-5)]);
+      setScreenshotRecovery(null);
+      setScreenshotText("");
+    } catch (error) {
+      setSyncMessages([error instanceof Error ? error.message : "Screenshot recovery could not be applied."]);
+    }
+  }
+
+  function downloadDraftBackup() {
+    const payload = JSON.stringify({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      session: draftSession,
+      roomFreeze,
+      acceptedRefresh,
+      decisionJournal,
+    }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `moodin-draft-backup-pick-${draftState.currentPick}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function restoreDraftBackup() {
+    try {
+      const parsed = JSON.parse(backupText) as {
+        version?: number;
+        session?: DraftSession;
+        roomFreeze?: DraftRoomFreeze | null;
+        acceptedRefresh?: DraftRefreshCheckpoint | null;
+        decisionJournal?: DraftDecisionJournalEntry[];
+      };
+      if (parsed.version !== 1 || !parsed.session) throw new Error("Backup schema is missing or unsupported.");
+      const state = replayDraftSession(parsed.session, candidates, initialDraftState);
+      if (parsed.roomFreeze) assertDraftRoomFreeze(parsed.roomFreeze, state, currentRefresh.boardFingerprint);
+      setDraftSession(parsed.session);
+      setDraftState(state);
+      setRoomFreeze(parsed.roomFreeze ?? null);
+      setAcceptedRefresh(parsed.acceptedRefresh ?? null);
+      setDecisionJournal(Array.isArray(parsed.decisionJournal) ? parsed.decisionJournal : []);
+      setBackupText("");
+      setSyncMessages([`Restored audited session at Pick ${state.currentPick}.`]);
+    } catch (error) {
+      setSyncMessages([error instanceof Error ? error.message : "The backup could not be restored."]);
     }
   }
 
@@ -892,9 +1117,13 @@ export function DraftCommandCenter({
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div className="flex h-16 w-16 flex-col items-center justify-center rounded-2xl bg-cyan-400 text-slate-950"><span className="text-[10px] font-black uppercase">Pick</span><span className="text-2xl font-black">{draftState.currentPick}</span></div>
-                    <div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">{isDraftPreview ? "Draft engine preview" : `${teamLabel(teamOverride || pickInfo.teamId)} on the clock`}</p><h2 className="mt-1 text-2xl font-black">{isDraftPreview ? "Working first-pick scenario" : `Round ${pickInfo.round}, pick ${pickInfo.pickInRound}`}</h2><p className="mt-1 text-sm text-slate-400">{isDraftPreview ? "This becomes authoritative after final keepers are resolved and live picks begin." : draftState.picksUntilNextTurn === 0 ? "You are up now" : `${draftState.picksUntilNextTurn} picks until your turn`}</p></div>
+                    <div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">{isDraftPreview ? "Draft engine preview" : `${teamLabel(pickInfo.teamId)} on the clock`}</p><h2 className="mt-1 text-2xl font-black">{isDraftPreview ? "Working first-pick scenario" : `Round ${pickInfo.round}, pick ${pickInfo.pickInRound}`}</h2><p className="mt-1 text-sm text-slate-400">{isDraftPreview ? "Confirm keepers and freeze the room before recording live picks." : draftState.picksUntilNextTurn === 0 ? "You are up now" : `${draftState.picksUntilNextTurn} picks until your turn`}</p></div>
                   </div>
-                  <Button variant="outline" size="sm" disabled={!draftState.drafted.length} onClick={() => setDraftState((current) => undoLastDraftPick(current, candidates))}><Undo2 className="mr-2 h-4 w-4" /> Undo</Button>
+                  <Button variant="outline" size="sm" disabled={livePickCount === 0} onClick={undoDraftPick}><Undo2 className="mr-2 h-4 w-4" /> Undo</Button>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <div className={cn("rounded-xl border px-3 py-2 text-xs font-bold", sessionHealth.ok ? "border-emerald-300/20 bg-emerald-300/[0.07] text-emerald-100" : "border-rose-300/30 bg-rose-300/10 text-rose-100")}>{sessionHealth.message}</div>
+                  <div className={cn("rounded-xl border px-3 py-2 text-xs font-bold", roomFreeze ? "border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-100" : "border-amber-300/25 bg-amber-300/[0.08] text-amber-100")}>{roomFreeze ? `Room frozen ${new Date(roomFreeze.frozenAt).toLocaleString()} · ${roomFreeze.keeperCount} keepers` : "Live entry locked until setup is reviewed and frozen."}</div>
                 </div>
               </section>
 
@@ -954,6 +1183,7 @@ export function DraftCommandCenter({
                           {signal ? <span className={cn("rounded-lg bg-white/[0.06] px-2 py-1", valueSignalClass(signal))}>Our #{recommendation.explanation.ourBoardRank} · {signal.modelEdge > 0 ? "+" : ""}{signal.modelEdge} model edge</span> : null}
                           {signal && signal.targetAttribution !== "none" ? <span className="rounded-lg bg-amber-300/10 px-2 py-1 text-amber-100">{targetLabel(signal)} target</span> : null}
                           <span className="rounded-lg bg-violet-300/10 px-2 py-1 text-violet-100">{Math.round(recommendation.explanation.makeItBackProbability * 100)}% back</span>
+                          <span className={cn("rounded-lg px-2 py-1 capitalize", classifyRecommendationStability(recommendation) === "robust" ? "bg-emerald-300/10 text-emerald-100" : classifyRecommendationStability(recommendation) === "knife-edge" ? "bg-rose-300/10 text-rose-100" : "bg-amber-300/10 text-amber-100")}>{classifyRecommendationStability(recommendation)}</span>
                         </div>
                         <p className="mt-3 line-clamp-2 text-xs leading-5 text-slate-300">{recommendation.explanation.expectedPositionSelections.toFixed(1)} {primaryPosition(candidate)} picks projected before your next turn · {Math.round(recommendation.explanation.tierSurvivalProbability * 100)}% tier survival.</p>
                         <span className="mt-3 inline-flex rounded-lg bg-white/10 px-2 py-1 text-[10px] font-black">Tap to record pick</span>
@@ -964,7 +1194,7 @@ export function DraftCommandCenter({
               </section>
 
               <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4 sm:p-5">
-                <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">Record any pick</p><h3 className="mt-1 text-xl font-black">Fast player search</h3></div><Select value={teamOverride} onChange={(event) => setTeamOverride(event.target.value)} className="max-w-60"><option value="">On clock: {teamLabel(pickInfo.teamId)}</option>{draftState.teams.map((team) => <option key={team.teamId} value={team.teamId}>{teamLabel(team.teamId)}</option>)}</Select></div>
+                <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">Record any pick</p><h3 className="mt-1 text-xl font-black">Fast player search</h3></div><span className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-black text-slate-300">On clock: {teamLabel(pickInfo.teamId)}</span></div>
                 <label className="relative mt-4 block"><Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-500" /><Input autoFocus value={draftQuery} onChange={(event) => setDraftQuery(event.target.value)} placeholder="Type a player name…" className="pl-10" /></label>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {draftSearchResults.map((candidate) => {
@@ -980,6 +1210,21 @@ export function DraftCommandCenter({
                 <Textarea className="mt-3 min-h-32" value={syncText} onChange={(event) => setSyncText(event.target.value)} placeholder={'[{"overallPick":1,"playerName":"Player Name"}]'} />
                 <div className="mt-3 flex items-center gap-3"><Button variant="outline" onClick={recoverFromSnapshot} disabled={!syncText.trim()}>Validate & recover</Button><span className="text-xs text-slate-500">Atomic—no partial application</span></div>
                 {syncMessages.length > 0 ? <div className="mt-3 space-y-1 text-xs text-slate-400">{syncMessages.map((message) => <p key={message}>• {message}</p>)}</div> : null}
+                <div className="mt-5 border-t border-white/10 pt-5">
+                  <p className="text-sm font-black">Portable audited backup</p>
+                  <p className="mt-1 text-xs text-slate-500">Download before the draft and after major corrections. Restore validates league, keeper, board, and event-log identity before changing anything.</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={downloadDraftBackup}>Download backup</Button><Button variant="outline" onClick={restoreDraftBackup} disabled={!backupText.trim()}>Validate & restore</Button></div>
+                  <Textarea className="mt-3 min-h-24" value={backupText} onChange={(event) => setBackupText(event.target.value)} placeholder="Paste a Moodin draft backup JSON here to restore it." />
+                </div>
+                <div className="mt-5 border-t border-white/10 pt-5">
+                  <div className="flex items-center gap-2"><FileImage className="h-4 w-4 text-cyan-300" /><p className="text-sm font-black">Screenshot-assisted recovery</p></div>
+                  <p className="mt-1 text-xs leading-5 text-slate-500">Attach the Yahoo screenshot for side-by-side review, then paste its Live Text/OCR rows below. Moodin stages matches but never silently applies them.</p>
+                  <input type="file" accept="image/*" className="mt-3 block w-full text-xs text-slate-400 file:mr-3 file:rounded-xl file:border-0 file:bg-cyan-300/10 file:px-3 file:py-2 file:font-black file:text-cyan-100" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setScreenshotPreview(typeof reader.result === "string" ? reader.result : null); reader.readAsDataURL(file); }} />
+                  {screenshotPreview ? <Image src={screenshotPreview} alt="Draft screenshot under review" width={1200} height={800} unoptimized className="mt-3 max-h-64 w-full rounded-xl border border-white/10 object-contain" /> : null}
+                  <Textarea className="mt-3 min-h-28" value={screenshotText} onChange={(event) => setScreenshotText(event.target.value)} placeholder={"Pick 41 Player Name\n42 Another Player"} />
+                  <Button className="mt-3" variant="outline" onClick={stageScreenshotRecovery} disabled={!screenshotText.trim()}>Stage screenshot rows</Button>
+                  {screenshotRecovery ? <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs"><p className="font-black text-cyan-100">Review {screenshotRecovery.proposals.length} proposed picks</p>{screenshotRecovery.proposals.map((proposal) => <p key={`${proposal.overallPick}-${proposal.playerId}`} className="mt-1 text-slate-300">Pick {proposal.overallPick} · {proposal.playerName} · {proposal.confidence}</p>)}{screenshotRecovery.warnings.map((warning) => <p key={warning} className="mt-1 text-amber-200">• {warning}</p>)}{screenshotRecovery.unresolvedLines.map((line) => <p key={line} className="mt-1 text-rose-200">Unresolved: {line}</p>)}<Button className="mt-3" onClick={applyScreenshotRecovery} disabled={screenshotRecovery.proposals.length === 0 || screenshotRecovery.unresolvedLines.length > 0}>Confirm & apply reviewed rows</Button></div> : null}
+                </div>
               </details>
             </div>
 
@@ -1001,6 +1246,8 @@ export function DraftCommandCenter({
               </section>
               <section className="rounded-[28px] border border-amber-300/20 bg-[#0a1727]/92 p-4"><div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Favorites still available</p><p className="mt-1 text-sm text-slate-400">Your conviction, in draft order</p></div><Star className="h-5 w-5 fill-amber-300 text-amber-300" /></div><div className="mt-3 space-y-2">{favoriteCards.filter(({ candidate }) => availableIds.has(candidate.player.id)).slice(0, 10).map(({ favorite, candidate, board: entry }) => <button key={candidate.player.id} onClick={() => recordPick(candidate)} className="flex w-full items-center gap-3 rounded-xl bg-black/20 p-3 text-left"><span className="text-sm font-black text-slate-500">#{entry?.boardRank}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-black">{candidate.player.fullName}</span><span className="text-[11px] text-slate-500">{primaryPosition(candidate)} · ADP {candidate.market.adp}</span></span><span className={cn("rounded-lg border px-2 py-1 text-[10px] font-black", priorityMeta[favorite.priority].color)}>{priorityMeta[favorite.priority].short}</span></button>)}</div></section>
               <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Recent picks</p><div className="mt-3 space-y-2">{draftState.drafted.slice(0, 10).map((pick) => { const candidate = candidateById.get(pick.playerId); return <div key={`${pick.overallPick}-${pick.playerId}`} className="flex gap-3 rounded-xl bg-black/20 p-2.5 text-sm"><span className="w-8 font-black text-slate-500">{pick.overallPick}</span><span className="min-w-0"><span className="block truncate font-bold">{candidate?.player.fullName ?? pick.playerId}</span><span className="text-xs text-slate-500">{teamLabel(pick.teamId)}</span></span></div>; })}{draftState.drafted.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-500">No live picks recorded yet. Your progress will save automatically on this device.</p> : null}</div></section>
+              {decisionJournal.length > 0 ? <section className="rounded-[28px] border border-emerald-300/20 bg-[#0a1727]/92 p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Decision journal</p><p className="mt-1 text-sm text-slate-400">What the board knew at your picks</p><div className="mt-3 space-y-2">{decisionJournal.slice(0, 4).map((entry) => <div key={entry.id} className="rounded-xl bg-black/20 p-3 text-xs"><p className="font-black">Pick {entry.overallPick} · {candidateById.get(entry.selectedPlayerId)?.player.fullName ?? entry.selectedPlayerId}</p><p className="mt-1 text-slate-500">Top call: {entry.recommendations[0] ? candidateById.get(entry.recommendations[0].playerId)?.player.fullName : "—"} · {entry.recommendations[0]?.stability ?? "—"}</p></div>)}</div></section> : null}
+              {myRosterPlayers.length >= draftState.league.rosterSlots.filter((slot) => slot !== "IR").length ? <section className="rounded-[28px] border border-amber-300/20 bg-[#0a1727]/92 p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Roster action queue</p><p className="mt-1 text-sm text-slate-400">Triggers and actions—not a roster grade</p><div className="mt-3 space-y-2">{postDraftActions.map((action) => <div key={action.id} className="rounded-xl border border-white/[0.07] bg-black/20 p-3"><p className="text-sm font-black">{action.title}</p><p className="mt-1 text-xs text-amber-100">Trigger: {action.trigger}</p><p className="mt-1 text-xs text-slate-300">{action.action}</p><p className="mt-1 text-[11px] text-slate-500">{action.rationale}</p></div>)}</div></section> : null}
             </aside>
           </div>
         ) : null}
@@ -1011,7 +1258,7 @@ export function DraftCommandCenter({
               <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">League intake</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">Bring the room into focus.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">A day or two before the draft, add the official team names, order, and keepers here. The board can then account for who picks around you and which players are already gone.</p></div><div className="shrink-0 rounded-2xl bg-black/25 px-4 py-3 text-center"><p className="text-2xl font-black text-cyan-300">{setupCompleteCount}/4</p><p className="text-[10px] uppercase text-slate-500">ready</p></div></div>
               <div className="mt-6 grid gap-5 sm:grid-cols-2">
                 <label className="block"><span className="text-sm font-black">Your team name</span><span className="mt-1 block text-xs text-slate-500">Used to identify your roster in the draft room.</span><Input className="mt-2" value={setup.myTeamName} onChange={(event) => setSetup((current) => ({ ...current, myTeamName: event.target.value }))} placeholder="My team" /></label>
-                <label className="block"><span className="text-sm font-black">Your draft slot</span><span className="mt-1 block text-xs text-slate-500">Current working assumption is pick 11.</span><Input className="mt-2" inputMode="numeric" value={setup.myDraftSlot} onChange={(event) => setSetup((current) => ({ ...current, myDraftSlot: event.target.value }))} placeholder="11" /></label>
+                <label className="block"><span className="text-sm font-black">Your draft slot</span><span className="mt-1 block text-xs text-slate-500">Canonical slot {leagueSourceOfTruth.draft.mySlot}; change the source of truth first if the league changes it.</span><Input className="mt-2" inputMode="numeric" value={setup.myDraftSlot} onChange={(event) => setSetup((current) => ({ ...current, myDraftSlot: event.target.value }))} placeholder={String(leagueSourceOfTruth.draft.mySlot)} /></label>
                 <label className="block sm:col-span-2"><span className="text-sm font-black">Team names</span><span className="mt-1 block text-xs text-slate-500">One per line. These labels replace generic team IDs in the draft room.</span><Textarea className="mt-2 min-h-36" value={setup.teamNames} onChange={(event) => setSetup((current) => ({ ...current, teamNames: event.target.value }))} placeholder={"Team 1\nTeam 2\nTeam 3\n…"} /></label>
                 <label className="block sm:col-span-2"><span className="text-sm font-black">Official draft order</span><span className="mt-1 block text-xs text-slate-500">Paste the ordered list exactly as provided by the league.</span><Textarea className="mt-2 min-h-36" value={setup.draftOrder} onChange={(event) => setSetup((current) => ({ ...current, draftOrder: event.target.value }))} placeholder={"1. Team name\n2. Team name\n3. Team name\n…"} /></label>
                 <label className="block sm:col-span-2"><span className="text-sm font-black">All keepers</span><span className="mt-1 block text-xs text-slate-500">One line per keeper; include team and round cost when known.</span><Textarea className="mt-2 min-h-44" value={setup.keepers} onChange={(event) => setSetup((current) => ({ ...current, keepers: event.target.value }))} placeholder={"Team name — Player — Round 4\nTeam name — Player — Round 7"} /></label>
@@ -1021,16 +1268,18 @@ export function DraftCommandCenter({
               <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div><p className="text-sm font-black">Canonical setup receipt</p><p className="mt-1 text-xs text-slate-500">Review every match before replacing the saved draft room.</p></div>
-                  <Button disabled={!setupResolution.ready} onClick={applyResolvedSetup}>Apply to draft room</Button>
+                  <div className="flex gap-2"><Button disabled={!setupResolution.ready} onClick={applyResolvedSetup}>Apply reviewed setup</Button><Button variant="outline" disabled={!setupResolution.ready || dataQuality.status !== "ready"} onClick={freezeReviewedRoom}><ShieldCheck className="mr-2 h-4 w-4" /> Freeze room</Button></div>
                 </div>
                 {setupResolution.errors.length > 0 ? <div className="mt-3 space-y-1 text-xs text-rose-200">{setupResolution.errors.map((error) => <p key={error}>• {error}</p>)}</div> : null}
                 {setupResolution.receipts.length > 0 ? <div className="mt-3 space-y-1 text-xs text-emerald-100">{setupResolution.receipts.map((receipt) => <p key={receipt}>✓ {receipt}</p>)}</div> : null}
                 {setupResolution.ready ? <p className="mt-3 text-xs text-cyan-200">Ready: {setupResolution.teamNames.length} teams · you are {setupResolution.myTeamId} · {setupResolution.keeperCount} keepers resolved. Applying starts live tracking at the first unoccupied pick.</p> : null}
+                {roomFreeze ? <p className="mt-2 text-xs font-bold text-emerald-200">Frozen {new Date(roomFreeze.frozenAt).toLocaleString()} · artifact {roomFreeze.artifactCapturedAt} · {roomFreeze.keeperFingerprint}</p> : null}
               </div>
             </section>
             <aside className="space-y-4">
               <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Draft-day checklist</p><div className="mt-4 space-y-3">{[[teamNames.length >= draftState.league.teams, "All team names"], [Boolean(setup.draftOrder.trim()), "Official draft order"], [Boolean(setup.keepers.trim()), "League-wide keepers"], [Boolean(setup.myTeamName.trim()), "Your team identified"]].map(([done, label]) => <div key={String(label)} className="flex items-center gap-3 text-sm"><span className={cn("flex h-6 w-6 items-center justify-center rounded-full border", done ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-white/10 text-slate-600")}>{done ? <Check className="h-3.5 w-3.5" /> : null}</span><span className={done ? "text-slate-200" : "text-slate-500"}>{label}</span></div>)}</div></section>
               <section className="rounded-[28px] border border-cyan-300/20 bg-cyan-300/[0.07] p-5"><Users className="h-5 w-5 text-cyan-300" /><h3 className="mt-3 font-black">What this unlocks</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300"><li>Opponent-aware pick windows</li><li>Keeper-adjusted availability</li><li>Real names on the clock</li><li>Your exact roster and turn timing</li></ul></section>
+              <section className="rounded-[28px] border border-violet-300/20 bg-[#0a1727]/92 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200">Refresh control</p><h3 className="mt-2 font-black">Review before freeze</h3><p className="mt-2 text-xs leading-5 text-slate-400">Current board {currentRefresh.boardFingerprint} · captured {currentRefresh.capturedAt}</p>{acceptedRefresh ? <><p className={cn("mt-2 text-xs font-bold", refreshDiff.changed ? "text-amber-200" : "text-emerald-200")}>{refreshDiff.changed ? `${refreshDiff.added.length} added · ${refreshDiff.removed.length} removed · ${refreshDiff.movers.length} meaningful movers` : "Matches the last accepted board."}</p>{refreshDiff.movers.slice(0, 5).map((mover) => <p key={mover.playerId} className="mt-1 text-xs text-slate-400">{mover.fullName}: #{mover.previousRank} → #{mover.boardRank}</p>)}</> : <p className="mt-2 text-xs text-amber-200">No previously accepted refresh exists on this device. The first freeze establishes the rollback reference.</p>}</section>
               <details className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-5"><summary className="flex cursor-pointer list-none items-center justify-between text-sm font-black"><span className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Current data status</span><ChevronDown className="h-4 w-4" /></summary><p className="mt-3 text-xs leading-5 text-slate-400">{sourceMessage}</p><p className="mt-2 text-xs leading-5 text-slate-500">{boardSummary}</p></details>
             </aside>
           </div>

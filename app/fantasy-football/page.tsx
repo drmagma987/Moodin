@@ -41,6 +41,7 @@ export default async function FantasyFootballPage({ searchParams }: FantasyFootb
       sourceMode={sourceMode}
       sourceMessage={sourceMessage}
       dataQuality={dataQuality}
+      artifactCapturedAt={snapshot.capturedAt}
     />
   );
 }
