@@ -17,12 +17,12 @@ import {
 import {
   applyDraftPick,
   createInitialDraftState,
+  getSnakePickInfo,
   reconcileSavedDraftState,
   seedDraftStateWithKnownPicks,
   undoLastDraftPick,
 } from "@/lib/fantasy/draftState";
 import { resolveLeagueSetup } from "@/lib/fantasy/leagueSetup";
-import { buildOpponentDraftProfiles, chooseOpponentBehavior } from "@/lib/fantasy/opponentProfiles";
 import { buildDraftPlanSnapshot } from "@/lib/fantasy/draftPlan";
 import { buildDraftMorningPack } from "@/lib/fantasy/draftMorning";
 import { buildMarketDisagreementBoard } from "@/lib/fantasy/marketDisagreement";
@@ -85,7 +85,7 @@ import {
 } from "@/lib/fantasy/fantasyProsNews";
 import { scoreProjectionSnapshot, scoreStatProjection, yahooLeagueConfig, yahooLeagueRules } from "@/lib/fantasy/scoring";
 import type { SleeperTrendSnapshot } from "@/lib/fantasy/sleeper";
-import type { AdvancedResearchInput, DraftBoardMovementEntry, DraftCandidate, RefreshSignal } from "@/lib/fantasy/types";
+import type { AdvancedResearchInput, DraftBoardMovementEntry, DraftCandidate, DraftState, RefreshSignal } from "@/lib/fantasy/types";
 import { applyYahooDraftEvents } from "@/lib/fantasy/yahooDraft";
 import { reconcileYahooDraftSnapshot } from "@/lib/fantasy/yahooDraft";
 import {
@@ -109,8 +109,20 @@ import { parseScreenshotDraftText } from "@/lib/fantasy/screenshotDraftRecovery"
 import { buildPostDraftActionQueue } from "@/lib/fantasy/postDraftActions";
 import { recordDraftDecision } from "@/lib/fantasy/draftDecisionJournal";
 import { buildDraftRefreshCheckpoint, compareDraftRefreshCheckpoints } from "@/lib/fantasy/draftRefreshControl";
+import { explainWarRoomRecommendation, warRoomDraftCall } from "@/lib/fantasy/warRoomPresentation";
+import {
+  buildDraftRehearsalQueue,
+  createDraftRehearsalMetrics,
+  createDraftRehearsalScenario,
+  draftRehearsalScenarios,
+  selectRehearsalOpponentPick,
+  summarizeDraftRehearsal,
+} from "@/lib/fantasy/draftRehearsal";
 
 const require = createRequire(import.meta.url);
+const warRoomRehearsalFixture = JSON.parse(
+  readFileSync("lib/fantasy/data/warRoomDataset.generated.json", "utf8"),
+) as { candidates: DraftCandidate[]; draftState: DraftState };
 const yahooDomExtractor = require("../tools/yahoo-draft-extension/extractor.js") as {
   sanitizeYahooPageUrl: (url: string) => string;
   extractYahooSnapshot: (
@@ -1942,6 +1954,36 @@ test("pre-draft signals separate price, target attribution, and evidence", () =>
   );
 });
 
+test("war-room presentation translates model signals into plain draft decisions", () => {
+  const candidates = calibrateDraftCandidates(cloneFixtureCandidates(), yahooLeagueRules);
+  const state = createInitialDraftState(candidates);
+  const recommendation = rankDraftCandidates(state, candidates)[0];
+  assert.ok(recommendation);
+  const candidate = candidates.find((item) => item.player.id === recommendation.playerId);
+  const boardEntry = buildRedraftBoard(candidates, state.league).find((entry) => entry.playerId === recommendation.playerId);
+  assert.ok(candidate && boardEntry);
+  const signal = buildDraftBoardSignal(candidate, boardEntry, true);
+  const runSnapshot = buildPositionRunSnapshots(state, candidates).find(
+    (snapshot) => snapshot.position === candidate.player.positions[0],
+  );
+  const comparison = recommendation.explanation.positionalComparisonPlayerId
+    ? candidates.find((item) => item.player.id === recommendation.explanation.positionalComparisonPlayerId)
+    : null;
+  const presentation = explainWarRoomRecommendation({
+    candidate,
+    recommendation,
+    signal,
+    runSnapshot,
+    positionalComparison: comparison,
+  });
+  assert.match(presentation.chanceBack, /^\d+% chance available at your next pick$/);
+  assert.match(presentation.price, /Model board #\d+ · ADP/);
+  assert.doesNotMatch(`${presentation.whyNow} ${presentation.comparison ?? ""}`, /\bVORP?\b|tier cliff|knife-edge/i);
+  assert.equal(warRoomDraftCall("Target", signal), "Good Value");
+  assert.equal(warRoomDraftCall("Fair", signal), "Fair Value");
+  assert.equal(warRoomDraftCall("Avoid", signal), "Pass");
+});
+
 test("quick-read stars separate structural VOR, tier cliffs, and price action", () => {
   const receiver = cloneFixtureCandidates().find((candidate) => candidate.player.positions[0] === "WR")!;
   const secondReceiver = structuredClone(receiver);
@@ -2387,21 +2429,6 @@ test("full Yahoo snapshot recovery is atomic and resumes at the first missing pi
   ]);
   assert.equal(conflict.applied, false);
   assert.equal(conflict.state.currentPick, 1);
-});
-
-test("opponent profiles require useful history and otherwise retain a neutral fallback", () => {
-  const player = fixtureCandidates[0];
-  const picks = Array.from({ length: 8 }, (_, index) => ({
-    teamId: "team-2",
-    overallPick: Math.round(player.market.adp + 12 + index),
-    playerName: player.player.fullName,
-  }));
-  const profiles = buildOpponentDraftProfiles(picks, fixtureCandidates);
-  assert.equal(profiles["team-2"].source, "history");
-  assert.ok(profiles["team-2"].valueProbability > profiles["team-2"].needProbability);
-  assert.equal(chooseOpponentBehavior(undefined, 0.2), "value");
-  assert.equal(chooseOpponentBehavior(undefined, 0.5), "market");
-  assert.equal(chooseOpponentBehavior(undefined, 0.9), "need");
 });
 
 test("advanced usage walk-forward validation beats prior-PPG baseline on the held-out season", () => {
@@ -4033,5 +4060,121 @@ test("draft session survives 200 out-of-order replay and correction rehearsals",
     });
     assert.equal(corrected.state.currentPick, rehearsalCandidates.length + 1);
     assert.equal(replayDraftSession(corrected.session, fixtureCandidates, initial).drafted.length, rehearsalCandidates.length);
+  }
+});
+
+test("rehearsal scenarios and pick queues are deterministic and isolated", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  const first = createDraftRehearsalScenario({
+    initialState: initial,
+    candidates: fixtureCandidates,
+    scenario: "heavy-keepers",
+    seed: "repeatable-room",
+  });
+  const second = createDraftRehearsalScenario({
+    initialState: initial,
+    candidates: fixtureCandidates,
+    scenario: "heavy-keepers",
+    seed: "repeatable-room",
+  });
+  assert.deepEqual(
+    first.state.drafted.map((pick) => [pick.overallPick, pick.playerId]),
+    second.state.drafted.map((pick) => [pick.overallPick, pick.playerId]),
+  );
+  assert.ok(first.state.drafted.every((pick) => pick.eventType === "keeper"));
+  assert.equal(initial.drafted.length, 0, "practice setup must not mutate its real-room template");
+
+  const queueA = buildDraftRehearsalQueue({
+    session: createDraftSession(initial),
+    state: initial,
+    candidates: fixtureCandidates,
+    scenario: "normal-room",
+    seed: "queue-seed",
+    count: 4,
+  });
+  const queueB = buildDraftRehearsalQueue({
+    session: createDraftSession(initial),
+    state: initial,
+    candidates: fixtureCandidates,
+    scenario: "normal-room",
+    seed: "queue-seed",
+    count: 4,
+  });
+  assert.deepEqual(queueA.queue, queueB.queue);
+  assert.equal(initial.drafted.length, 0);
+});
+
+test("rehearsal scenarios change simulated selections without changing league facts", () => {
+  const initial = createInitialDraftState(warRoomRehearsalFixture.candidates);
+  const normal = selectRehearsalOpponentPick({
+    state: initial,
+    candidates: warRoomRehearsalFixture.candidates,
+    scenario: "normal-room",
+    seed: "bias-check",
+  });
+  const rbRun = selectRehearsalOpponentPick({
+    state: initial,
+    candidates: warRoomRehearsalFixture.candidates,
+    scenario: "rb-avalanche",
+    seed: "bias-check",
+  });
+  assert.ok(normal);
+  assert.ok(rbRun);
+  assert.equal(rbRun.player.positions[0], "RB");
+  assert.equal(initial.leagueConfigFingerprint, warRoomRehearsalFixture.draftState.leagueConfigFingerprint);
+});
+
+test("rehearsal scorecard measures operator integrity and response budgets", () => {
+  const clean = createDraftRehearsalMetrics("2026-08-24T12:00:00.000Z");
+  assert.equal(summarizeDraftRehearsal(clean).ready, false);
+  clean.manualEntries = 4;
+  clean.recoveredEntries = 2;
+  clean.reloadRecoveries = 1;
+  clean.rejectedEvents = 1;
+  clean.entryLatencyMs = [1200, 1600, 1800, 1400];
+  clean.recommendationLatencyMs = [80, 95, 110];
+  const ready = summarizeDraftRehearsal(clean);
+  assert.equal(ready.ready, true);
+  assert.equal(ready.integrityScore, 100);
+  const sloppy = summarizeDraftRehearsal({ ...clean, mismatches: 3 });
+  assert.equal(sloppy.ready, false);
+  assert.ok(sloppy.integrityScore < ready.integrityScore);
+});
+
+test("10 deterministic rehearsal rooms survive mixed opponent and manager turns", () => {
+  for (let rehearsal = 0; rehearsal < 10; rehearsal += 1) {
+    const scenario = draftRehearsalScenarios[rehearsal % draftRehearsalScenarios.length].id;
+    const setup = createDraftRehearsalScenario({
+      initialState: warRoomRehearsalFixture.draftState,
+      candidates: warRoomRehearsalFixture.candidates,
+      scenario,
+      seed: `pressure-${rehearsal}`,
+    });
+    let session = setup.session;
+    let state = setup.state;
+    const stopAt = 20;
+    while (state.currentPick <= stopAt) {
+      const pickInfo = getSnakePickInfo(state.currentPick, state.league.teams);
+      const candidate = pickInfo.teamId === state.myTeamId
+        ? [...warRoomRehearsalFixture.candidates]
+            .filter((item) => state.availablePlayerIds.includes(item.player.id))
+            .sort((a, b) => (a.market.adp ?? 999) - (b.market.adp ?? 999))[0] ?? null
+        : selectRehearsalOpponentPick({
+            state,
+            candidates: warRoomRehearsalFixture.candidates,
+            scenario,
+            seed: `pressure-${rehearsal}`,
+          });
+      assert.ok(candidate, `rehearsal ${rehearsal} should always find a candidate`);
+      const result = appendDraftSessionPick(session, warRoomRehearsalFixture.candidates, state, {
+        playerId: candidate.player.id,
+        source: pickInfo.teamId === state.myTeamId ? "manual" : "yahoo-browser",
+      });
+      session = result.session;
+      state = result.state;
+    }
+    const replayed = replayDraftSession(session, warRoomRehearsalFixture.candidates, warRoomRehearsalFixture.draftState);
+    assert.equal(replayed.currentPick, state.currentPick);
+    assert.deepEqual(replayed.availablePlayerIds, state.availablePlayerIds);
   }
 });
