@@ -5,6 +5,7 @@ import {
   replayDraftSession,
   type DraftSession,
 } from "@/lib/fantasy/draftSession";
+import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
 import type { DraftCandidate, DraftState, PlayerPosition } from "@/lib/fantasy/types";
 
 export type DraftRehearsalScenarioId =
@@ -14,7 +15,15 @@ export type DraftRehearsalScenarioId =
   | "target-wipe"
   | "heavy-keepers";
 
-export type DraftRehearsalInputMode = "manual" | "auto-sync" | "recovery";
+export type DraftRehearsalInputMode = "manual" | "auto-sync" | "recovery" | "timed-simulation";
+
+export type DraftRehearsalKeeperLoad = "none" | "light" | "typical" | "heavy";
+
+export type DraftRehearsalKeeperLoadOption = {
+  id: DraftRehearsalKeeperLoad;
+  title: string;
+  summary: string;
+};
 
 export type DraftRehearsalScenario = {
   id: DraftRehearsalScenarioId;
@@ -52,6 +61,13 @@ export const draftRehearsalScenarios: DraftRehearsalScenario[] = [
   { id: "onesie-run", title: "QB/TE run", summary: "Quarterbacks and tight ends disappear earlier than expected.", syntheticKeepers: false },
   { id: "target-wipe", title: "Target wipe", summary: "The room attacks the top of the available market board with little mercy.", syntheticKeepers: false },
   { id: "heavy-keepers", title: "Heavy keeper room", summary: "Synthetic opponent keepers consume early selections before live practice begins.", syntheticKeepers: true },
+];
+
+export const draftRehearsalKeeperLoads: DraftRehearsalKeeperLoadOption[] = [
+  { id: "none", title: "No opponent keepers", summary: "Only Gibbs and St. Brown are retained; every opponent keeper slot stays a live selection." },
+  { id: "light", title: "Light · 0–1 each", summary: "About half the opponents keep one player." },
+  { id: "typical", title: "Typical · 1–2 each", summary: "Every opponent keeps one player and about half keep a second." },
+  { id: "heavy", title: "Heavy · 2–3 each", summary: "Every opponent keeps two players and about half use the third slot." },
 ];
 
 export function createDraftRehearsalMetrics(now = new Date().toISOString()): DraftRehearsalMetrics {
@@ -97,6 +113,15 @@ function scenarioPositionBonus(scenario: DraftRehearsalScenarioId, position: Pla
   return 0;
 }
 
+function opponentKeeperCount(load: DraftRehearsalKeeperLoad, seed: string, slot: number) {
+  const seedOffset = Math.floor(stableRandom(`${seed}:keeper-load`) * 1000);
+  const extra = (slot + seedOffset) % 2 === 0 ? 1 : 0;
+  if (load === "light") return extra;
+  if (load === "typical") return 1 + extra;
+  if (load === "heavy") return 2 + extra;
+  return 0;
+}
+
 export function selectRehearsalOpponentPick(input: {
   state: DraftState;
   candidates: DraftCandidate[];
@@ -129,23 +154,41 @@ export function createDraftRehearsalScenario(input: {
   candidates: DraftCandidate[];
   scenario: DraftRehearsalScenarioId;
   seed: string;
+  keeperLoad?: DraftRehearsalKeeperLoad;
 }) {
   let session = createDraftSession(input.initialState);
   let state = replayDraftSession(session, input.candidates, input.initialState);
   const receipts: string[] = [];
-  if (input.scenario === "heavy-keepers") {
-    const keeperTeams = [1, 2, 3, 4];
-    for (const slot of keeperTeams) {
-      for (const round of [1, 2]) {
+  const keeperLoad = input.keeperLoad ?? (input.scenario === "heavy-keepers" ? "heavy" : "none");
+  const candidateNameById = new Map(input.candidates.map((candidate) => [candidate.player.id, candidate.player.fullName] as const));
+  const personalKeeperNames = new Set(
+    session.events
+      .filter((event) => event.status === "active" && event.eventType === "keeper" && event.teamId === state.myTeamId)
+      .map((event) => candidateNameById.get(event.playerId)),
+  );
+  if (input.keeperLoad !== undefined) {
+    for (const playerName of leagueSourceOfTruth.keepers.myDeclaredPlayers) {
+      if (!personalKeeperNames.has(playerName)) {
+        throw new Error(`Timed rehearsal requires canonical keeper ${playerName}.`);
+      }
+    }
+  }
+
+  if (keeperLoad !== "none") {
+    const mySlot = leagueSourceOfTruth.draft.mySlot;
+    for (let round = 1; round <= leagueSourceOfTruth.keepers.maximumPerTeam; round += 1) {
+      for (let slot = 1; slot <= state.league.teams; slot += 1) {
+        if (slot === mySlot || opponentKeeperCount(keeperLoad, input.seed, slot) < round) continue;
+        const overallPick = pickForRound(round, slot, state.league.teams);
         const candidate = selectRehearsalOpponentPick({
-          state,
+          state: { ...state, currentPick: overallPick },
           candidates: input.candidates,
-          scenario: "target-wipe",
+          scenario: input.scenario === "heavy-keepers" ? "target-wipe" : input.scenario,
           seed: `${input.seed}:keeper:${slot}:${round}`,
         });
         if (!candidate) continue;
         const result = appendDraftSessionPick(session, input.candidates, state, {
-          overallPick: pickForRound(round, slot, state.league.teams),
+          overallPick,
           playerId: candidate.player.id,
           eventType: "keeper",
           source: "manual",

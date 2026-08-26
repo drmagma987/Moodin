@@ -2,6 +2,7 @@ import type { DraftBoardSignal, LiveDraftActionLabel } from "@/lib/fantasy/draft
 import type {
   CandidateRecommendation,
   DraftCandidate,
+  DraftTurnContext,
   PositionRunSnapshot,
 } from "@/lib/fantasy/types";
 
@@ -18,6 +19,8 @@ export type WarRoomRecommendationExplanation = {
   chanceBack: string;
   price: string;
   comparison: string | null;
+  turnLabel: string | null;
+  turnSummary: string | null;
 };
 
 export function warRoomDraftCall(
@@ -41,8 +44,9 @@ export function explainWarRoomRecommendation(input: {
   signal: DraftBoardSignal;
   runSnapshot?: PositionRunSnapshot;
   positionalComparison?: DraftCandidate | null;
+  turnContext?: DraftTurnContext;
 }): WarRoomRecommendationExplanation {
-  const { candidate, recommendation, signal, runSnapshot, positionalComparison } = input;
+  const { candidate, recommendation, signal, runSnapshot, positionalComparison, turnContext } = input;
   const position = candidate.player.positions[0] ?? "WR";
   const chanceBack = Math.round(recommendation.explanation.makeItBackProbability * 100);
   const teamsWithNeed = (runSnapshot?.teamsWithStarterNeed ?? 0) + (runSnapshot?.teamsWithFlexNeed ?? 0);
@@ -57,7 +61,7 @@ export function explainWarRoomRecommendation(input: {
 
   if (signal.valueLabel === "Strong value" && priceGap >= 6) {
     driver = "Unpassable value";
-    whyNow = `Our board ranks him ${priceGap} picks ahead of his current ADP, and simulations give him only a ${chanceBack}% chance to reach your next pick.`;
+    whyNow = `Our overall model board ranks him ${priceGap} picks ahead of his current ADP, and simulations give him only a ${chanceBack}% chance to reach your next pick.`;
   } else if (chanceBack <= 35 && teamsWithNeed > 0) {
     driver = "Position demand";
     whyNow = `${plural(teamsWithNeed, "team")} selecting before your next turn can still use a ${position}; the model expects ${expectedSelections.toFixed(1)} ${position} selections before then.`;
@@ -66,7 +70,7 @@ export function explainWarRoomRecommendation(input: {
     whyNow = `${candidate.player.fullName} has only a ${chanceBack}% chance to return, and ${positionalComparison.player.fullName} is the next comparable ${position} currently available.`;
   } else if (signal.valueLabel === "Value" || signal.valueLabel === "Strong value") {
     driver = "Good market price";
-    whyNow = `Our board ranks him #${recommendation.explanation.ourBoardRank} versus ADP ${candidate.market.adp}, a ${Math.max(0, priceGap)}-pick discount at the current market price.`;
+    whyNow = `Our overall model board ranks him #${recommendation.explanation.ourBoardRank} versus ADP ${candidate.market.adp}, a ${Math.max(0, priceGap)}-pick discount at the current market price.`;
   } else if (candidate.signals?.roleSecurity.label === "secure") {
     driver = "Reliable workload";
     whyNow = `His expected role is one of the more dependable options still available, while the model gives him a ${chanceBack}% chance to reach your next pick.`;
@@ -79,7 +83,9 @@ export function explainWarRoomRecommendation(input: {
     driver,
     whyNow,
     chanceBack: `${chanceBack}% chance available at your next pick`,
-    price: `Model board #${recommendation.explanation.ourBoardRank} · ADP ${candidate.market.adp}`,
+    price: `Overall model board #${recommendation.explanation.ourBoardRank} · ADP ${candidate.market.adp}`,
     comparison,
+    turnLabel: turnContext?.label ?? null,
+    turnSummary: turnContext?.summary ?? null,
   };
 }

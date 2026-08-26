@@ -1,0 +1,17 @@
+{
+  "id": "wr3-open-three-kickers",
+  "discoveredAt": "2026-08-26T18:18:43.428Z",
+  "seed": "certification:wr-heavy:2",
+  "leagueConfigVersion": "2026.08.20-v2",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "currentPick": 149,
+  "round": 15,
+  "managerRoster": {
+    "positionCounts": { "RB": 8, "WR": 2, "QB": 2, "TE": 1, "K": 1 },
+    "openStarterSlots": ["WR"]
+  },
+  "observedRecommendation": { "playerId": "23297", "playerName": "Evan McPherson", "position": "K" },
+  "rootCause": "overly-weak-structural-heuristic",
+  "failure": "The existing K duplication penalty and late WR completion score were too weak, producing three kickers and no WR3.",
+  "expected": "A filled K slot cannot outrank a required late starter without overwhelming counterfactual evidence; the final roster must fill WR3."
+}

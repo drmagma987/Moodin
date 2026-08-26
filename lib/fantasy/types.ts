@@ -924,15 +924,20 @@ export type DraftState = {
   drafted: DraftPickEvent[];
   teams: TeamRosterState[];
   focus: DraftFocus;
-  opponentProfiles?: Record<string, OpponentDraftProfile>;
 };
 
-export type OpponentDraftProfile = {
-  sampleSize: number;
-  valueProbability: number;
-  marketProbability: number;
-  needProbability: number;
-  source: "history" | "neutral-fallback";
+export type DraftTurnMode = "pair-building" | "long-gap" | "standard";
+
+export type DraftTurnContext = {
+  mode: DraftTurnMode;
+  currentPick: number;
+  nextPick: number | null;
+  livePicksBeforeNextTurn: number[];
+  interveningTeamIds: string[];
+  distinctInterveningTeams: number;
+  sameTeamOwnsAllInterveningPicks: boolean;
+  label: string;
+  summary: string;
 };
 
 export type CandidateExplanation = {
@@ -983,6 +988,9 @@ export type CandidateRecommendation = {
   score: number;
   explanation: CandidateExplanation;
 };
+
+export type DraftRecommendationPolicyMode = "production" | "construction-ablation";
+export type DraftCounterfactualEvaluationMode = "quick-preview" | "exact-production";
 
 export type PositionMarketSnapshot = {
   position: PlayerPosition;
@@ -1090,6 +1098,8 @@ export type ConditionalDraftPathOutcome = {
   floorLineupPoints: number;
   ceilingLineupPoints: number;
   medianEdgeVsBestAlternative: number;
+  medianRegret: number;
+  downsideRegret: number;
   recommended: boolean;
   commonSequences: ConditionalDraftPathSequence[];
   summary: string;
@@ -1100,6 +1110,8 @@ export type ConditionalDraftPathBoard = {
   simulations: number;
   currentPick: number;
   futurePicks: number[];
+  policyMode: DraftRecommendationPolicyMode;
+  evaluationMode: DraftCounterfactualEvaluationMode;
   outcomes: ConditionalDraftPathOutcome[];
   summary: string;
 };

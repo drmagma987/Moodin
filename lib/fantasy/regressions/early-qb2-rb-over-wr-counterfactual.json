@@ -1,0 +1,22 @@
+{
+  "id": "early-qb2-rb-over-wr-counterfactual",
+  "discoveredAt": "2026-08-26T18:38:47.425Z",
+  "leagueConfigVersion": "2026.08.20-v2",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "currentPick": 32,
+  "managerRoster": {
+    "keepers": ["Jahmyr Gibbs", "Amon-Ra St. Brown"],
+    "livePicks": ["Josh Allen"],
+    "openCore": { "RB": 1, "WR": 2, "FLEX": 2, "TE": 1 }
+  },
+  "productionChoice": "Breece Hall",
+  "betterExactBranch": "Tetairoa McMillan",
+  "exactProductionContinuations": 32,
+  "productionMedianRegret": 21.7,
+  "baselineMedianRegret": 3.7,
+  "productionDownsideRegret": 154.4,
+  "baselineDownsideRegret": 94.0,
+  "rootCause": "simulation-objective-problem",
+  "failure": "The live objective underweighted the second and third required WR slots relative to an already-started RB room, despite the penalty-free continuation preferring WR.",
+  "expected": "Lineup-derived multi-slot demand should reflect each remaining exact starter; no player or fixture identity may affect the correction."
+}

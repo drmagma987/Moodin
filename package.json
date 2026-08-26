@@ -11,6 +11,8 @@
     "fantasy:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/fantasy-model.test.ts",
     "fantasy:snapshot": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs --env-file=.env.local ./scripts/build_fantasy_board_snapshot.mjs",
     "fantasy:pressure-test": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/run_fantasy_draft_pressure_test.mjs",
+    "fantasy:counterfactual-audit": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/run_fantasy_counterfactual_audit.mjs",
+    "fantasy:certify-policy": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/run_fantasy_policy_certification.mjs",
     "fantasy:historical-backtest": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/build_fantasy_historical_backtest.mjs",
     "fantasy:rookie-wr-validation": "python3 scripts/build_rookie_wr_validation.py"
   },

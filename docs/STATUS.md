@@ -1,6 +1,6 @@
 # Status
 
-Last updated: August 13, 2026
+Last updated: August 25, 2026
 
 ## Simplified news workflow
 
@@ -72,7 +72,7 @@ Last updated: August 13, 2026
 - Added a research-only QB and rookie metrics lane with zero rank impact. QB profiles separate designed runs, scrambles, EPA/dropback, CPOE, and touchdown sustainability. Rookie RB profiles prioritize college production (35%), reviewed NFL situation (30%), and season rushing-yard market (25%), with draft capital limited to 10%. Historical activation requires five held-out seasons, sufficient samples, at least 5% MAE improvement over the market baseline, and a three-point hit-rate lift.
 - Generated and integrated a keyless 192-player 2026 rookie college snapshot from SportsDataverse `cfbfastR` 2020–2025 play-by-play plus nflverse identity, covering older prospects' COVID-era eligibility. Career production is pooled without recency weighting. The shadow layer now adjusts projected football stats and rescores them under the exact league rules; it does not infer weekly yardage bonuses from season totals, and incomplete QB rushing histories remain at zero movement. The live board retains its existing bonus approximation until game-count inputs are available, so this research change does not move production ranks.
 - Incorporated the net-neutral framework's validated advanced-usage pieces: formal WR/TE WOPR, within-position Z-score standardization, target/reception-heavy RB opportunity, play-level expected TD regression, and bounded age fragility without a duplicate median penalty. Fixed the canonical nflverse crosswalk so 343 of 430 live candidates receive historical usage. Route-based TPRR/participation and standalone inside-the-10 HVT remain visibly withheld until full-coverage feeds exist. The live audit kept Josh Allen #28, Trey McBride #29, and Brock Bowers #41 with mixed—not position-wide—value labels.
-- Completed the draft-readiness workflow: official order/team/keeper text now resolves through an atomic canonical receipt, keeper costs consume the correct snake picks, live tracking skips keeper slots, saved state is rebuilt against the current pool, Undo preserves keepers, and full Yahoo snapshots can recover missed picks atomically. Weekly nflverse history now projects explicit 300/100-yard qualifying-game counts for exact bonus scoring. Optional past draft history learns opponent styles after eight matched picks, with a neutral fallback. A 2025 held-out validation improved advanced-usage MAE 4.5% RB, 6.4% WR, and 4.2% TE versus prior-PPG regression; QB/rookie research remains separately gated.
+- Completed the draft-readiness workflow: official order/team/keeper text now resolves through an atomic canonical receipt, keeper costs consume the correct snake picks, live tracking skips keeper slots, saved state is rebuilt against the current pool, Undo preserves keepers, and full Yahoo snapshots can recover missed picks atomically. Weekly nflverse history now projects explicit 300/100-yard qualifying-game counts for exact bonus scoring. A 2025 held-out validation improved advanced-usage MAE 4.5% RB, 6.4% WR, and 4.2% TE versus prior-PPG regression; QB/rookie research remains separately gated.
 - Added the live shadow-board/data phase: nflverse player identity now recognizes 57 current rookies without mutating production identity, nflverse season stats populate partial passing evidence for 46 QBs, and the pre-draft board exposes 103 research profiles in a separate Shadow view. Profiles with missing critical evidence show blockers but receive zero shadow movement; the verified production board remained byte-for-byte unchanged.
 - Upgraded the dedicated rookie-WR activation pipeline to component/residual v2: targets/game, catch rate, yards/target, TD/target, and rushing points are now modeled separately across 217 player-seasons and seven expanding-window holdouts. NFL opportunity alone improved MAE from 2.827 to 2.743 and Spearman from 0.565 to 0.623. College target-quality features (EPA, success, first downs, scoring-area share, explosiveness, and teammate-relative YPT) did not improve the combined challenger or rare WR3 PR-AUC, so the generated production gate remains fail-closed.
 - Repaired public rank-derived receiver stat lines by scaling their scoring components proportionally instead of subtracting only receiving yards. The refreshed 440-player board moved Makai Lemon from an impossible 65.8-catch/142.8-yard line to a coherent roughly 59-catch, 577-yard, 4.6-TD line after his 775-yard season-market correction.
@@ -98,6 +98,7 @@ Last updated: August 13, 2026
   - current injury evidence can mark recovery or active concern, while absence of injury language never implies healthy
 - Added a scoring-profile layer that distinguishes volume-backed projections from touchdown-fragile ones and feeds small median/stability adjustments into the bespoke board.
 - Added tier survival and position-run pressure so pick windows now reason about what is likely to disappear before the next turn.
+
 - Added a provider-neutral refresh layer for injury, role, camp, ADP, depth-chart, holdout, and offense-level signals.
 - Added a manual draft-week override path through `FANTASY_REFRESH_SIGNALS_JSON`, so late local notes can flow into the same refresh engine without waiting on a full provider integration.
 - Added a FantasyPros-style refresh normalizer so live news/injury payloads can be mapped into the same signal contract once real endpoint payloads are verified.
@@ -112,6 +113,12 @@ Last updated: August 13, 2026
   - `draft-sync` envelopes can stage or apply normalized Yahoo draft events through the existing importer path
   - bridge snapshots now persist locally, compare against the previous saved envelope, and flag stale-likely or no-new-picks states while surfacing incremental picks
 
+### 2026-08-25
+
+- Standardized every opponent selection simulation on the same neutral blend of current market cost, board value, live roster construction, positional need, and bounded uncertainty.
+- Removed the unused optional setup intake and legacy persisted fields; new setup and draft-state storage versions prevent those fields from returning.
+- Made live pick windows keeper-aware and slot-specific: simulations now skip occupied future picks, classify one-team short turns as pair-building decisions, classify 12-plus-selection wraps as long-gap exit picks, and adjust urgency accordingly.
+
 ## Recommended next slice
 
 1. Add real provider clients behind interfaces.
@@ -119,4 +126,4 @@ Last updated: August 13, 2026
 3. Replace fixture candidate data with FantasyPros-backed draft data.
 4. Add a Yahoo draft event fixture parser and manual pick-entry workflow.
 5. Build a Yahoo browser extractor against the new draft-event contract.
-6. Expand the draft engine into proper opponent-aware simulation.
+6. Expand the draft engine into a fuller room-wide neutral simulation.

@@ -7,6 +7,11 @@ import {
 
 const { getDraftLabDataset } = await import("../lib/fantasy/draftLab.ts");
 const dataset = await getDraftLabDataset("working");
+const requiredCandidatePositions = Object.entries(leagueSourceOfTruth.lineup)
+  .filter(([position, count]) => !["BN", "IR", "FLEX", "DST"].includes(position) && Number(count) > 0)
+  .map(([position]) => position);
+const candidatePositions = new Set(dataset.candidates.map((candidate) => candidate.player.positions[0]));
+const missingRequiredCandidatePositions = requiredCandidatePositions.filter((position) => !candidatePositions.has(position));
 if (
   !dataset.warRoomReady ||
   dataset.warRoomBlockers.length > 0 ||
@@ -15,10 +20,11 @@ if (
   dataset.leagueConfigVersion !== leagueSourceOfTruth.version ||
   dataset.leagueConfigFingerprint !== leagueSourceOfTruthFingerprint ||
   dataset.draftState.leagueConfigVersion !== leagueSourceOfTruth.version ||
-  dataset.draftState.leagueConfigFingerprint !== leagueSourceOfTruthFingerprint
+  dataset.draftState.leagueConfigFingerprint !== leagueSourceOfTruthFingerprint ||
+  missingRequiredCandidatePositions.length > 0
 ) {
   throw new Error(
-    `Refusing to publish an incomplete or mismatched war-room artifact (${dataset.sourceStatus.mode}, ${dataset.candidates.length} players, ready=${dataset.warRoomReady}).`,
+    `Refusing to publish an incomplete or mismatched war-room artifact (${dataset.sourceStatus.mode}, ${dataset.candidates.length} players, ready=${dataset.warRoomReady}, missing positions=${missingRequiredCandidatePositions.join(",") || "none"}).`,
   );
 }
 

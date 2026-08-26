@@ -1,6 +1,6 @@
 # Fantasy Draft Algorithm Review
 
-Last updated: August 13, 2026
+Last updated: August 25, 2026
 
 ## Product model
 
@@ -114,7 +114,7 @@ For each pick state, the engine:
 6. Calculates VONA: value now minus expected value available next turn.
 7. Reranks recommendations from roster need, structural value, run pressure, tier cliffs, market value, and evidence.
 
-Optional past-draft history can calibrate each opponent's tendency to take fallen value, follow market, or reach for need. A team requires at least eight matched historical picks; otherwise simulations use the explicit neutral 40% value / 30% market / 30% need prior.
+Opponent selections are modeled from current market cost, board value, roster construction, positional need, and bounded uncertainty.
 
 ## Guardrails
 

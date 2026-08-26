@@ -1,0 +1,11 @@
+{
+  "id": "backup-qb-with-core-open",
+  "discoveredAt": "2026-08-26T18:18:43.428Z",
+  "seeds": ["certification:late-qb:1", "certification:mixed:1", "certification:need-late:1"],
+  "leagueConfigVersion": "2026.08.20-v2",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "rounds": [9, 9, 10],
+  "rootCause": "overly-weak-structural-heuristic",
+  "failure": "QB2 could outrank required WR/TE/FLEX starters because the existing open-slot penalty was smaller than late-board raw replacement scores.",
+  "expected": "QB2 requires exceptional, independently supported downstream value while core starter slots remain open; close raw-score edges are insufficient."
+}

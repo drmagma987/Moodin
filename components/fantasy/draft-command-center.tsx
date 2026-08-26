@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { buildConditionalDraftPathBoard, buildPositionRunSnapshots, buildRedraftBoard, buildWrapSimulationSnapshot, rankDraftCandidates } from "@/lib/fantasy/draft";
-import { getSnakePickInfo, reconcileSavedDraftState } from "@/lib/fantasy/draftState";
+import { buildDraftTurnContext, getSnakePickInfo, reconcileSavedDraftState } from "@/lib/fantasy/draftState";
 import { buildDraftBoardSignal, buildDraftQuickScoreBoard, buildLiveDraftCall, preDraftActionLabel, type DraftActionLabel, type DraftBoardSignal, type LiveDraftActionLabel } from "@/lib/fantasy/draftSignals";
 import { buildMiddleRoundValuePocket } from "@/lib/fantasy/valuePocket";
 import { buildAdvancedResearchShadowBoard } from "@/lib/fantasy/advancedResearchShadow";
@@ -460,6 +460,7 @@ export function DraftCommandCenter({
 
   const pickInfo = getSnakePickInfo(draftState.currentPick, draftState.league.teams);
   const isMyTurn = pickInfo.teamId === draftState.myTeamId;
+  const turnContext = useMemo(() => buildDraftTurnContext(draftState), [draftState]);
   const wrap = useMemo<WrapSimulationSnapshot>(() => {
     // The Monte Carlo layer is useful after hydration, but running it during
     // server rendering delays the first byte and can make the room look hung.
@@ -526,8 +527,10 @@ export function DraftCommandCenter({
       const quickScore = quickScoreById.get(recommendation.playerId);
       if (!candidate || !signal || !quickScore) return [];
       const positionCount = myRosterTeam?.positionCounts[primaryPosition(candidate)] ?? 0;
-      const rosterFit = primaryPosition(candidate) === "QB" || primaryPosition(candidate) === "TE"
-        ? positionCount >= 2 ? "blocked" as const : positionCount === 0 ? "need" as const : "open" as const
+      const rosterFit = primaryPosition(candidate) === "QB"
+        ? positionCount >= 1 ? "blocked" as const : "need" as const
+        : primaryPosition(candidate) === "TE"
+          ? positionCount >= 2 ? "blocked" as const : positionCount === 0 ? "need" as const : "open" as const
         : positionCount < 2 ? "need" as const : "open" as const;
       const action = valuePocketById.get(candidate.player.id)?.liveCall ?? buildLiveDraftCall({
         candidate,
@@ -579,6 +582,7 @@ export function DraftCommandCenter({
         signal: heroSignal,
         runSnapshot: runSnapshotByPosition.get(primaryPosition(heroCandidate)),
         positionalComparison: heroComparisonCandidate,
+        turnContext,
       })
     : null;
   const heroDraftCall = heroLiveCall && heroSignal ? warRoomDraftCall(heroLiveCall.action, heroSignal) : null;
@@ -587,7 +591,6 @@ export function DraftCommandCenter({
     : null;
   const alternativePath = activeConditionalPaths?.outcomes.find((outcome) => outcome.initialPlayerId !== heroCandidate?.player.id) ?? null;
   const heroContinuation = heroPath?.commonSequences[0]?.picks.slice(1) ?? [];
-  const alternativeContinuation = alternativePath?.commonSequences[0]?.picks.slice(1) ?? [];
 
   function setFavorite(candidate: DraftCandidate, priority: FavoritePriority) {
     setFavorites((current) => {
@@ -1256,6 +1259,8 @@ export function DraftCommandCenter({
                   <p className="text-xs text-slate-500">Recalculates after every recorded selection</p>
                 </div>
 
+                {isMyTurn ? <div className={cn("mt-4 rounded-2xl border p-4", turnContext.mode === "long-gap" ? "border-rose-300/25 bg-rose-300/[0.07]" : turnContext.mode === "pair-building" ? "border-emerald-300/25 bg-emerald-300/[0.07]" : "border-white/10 bg-black/20")}><p className={cn("text-xs font-black uppercase tracking-[0.16em]", turnContext.mode === "long-gap" ? "text-rose-200" : turnContext.mode === "pair-building" ? "text-emerald-200" : "text-slate-300")}>{turnContext.label}</p><p className="mt-2 text-sm leading-6 text-slate-300">{turnContext.summary}</p></div> : null}
+
                 {heroCandidate && heroRecommendation && heroSignal && heroPresentation && heroDraftCall ? (
                   <div className="relative mt-4 overflow-hidden rounded-[24px] border border-cyan-300/40 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(8,20,35,0.96)_62%)] p-5 sm:p-6">
                     {favoriteById.has(heroCandidate.player.id) ? <VjEarmark /> : null}
@@ -1272,9 +1277,9 @@ export function DraftCommandCenter({
                     {isMyTurn ? <Button className="mt-4" disabled={!roomFreeze} onClick={() => recordPick(heroCandidate)}>{roomFreeze ? "Drafted by Vaughn" : "Freeze room to record"}</Button> : null}
 
                     <div className="mt-4 border-t border-white/10 pt-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-black">Take now vs. wait</p><p className="mt-1 text-xs text-slate-500">Compare the likely multi-pick rosters created by each choice.</p></div>{isMyTurn && !activeConditionalPaths ? <Button size="sm" variant="outline" onClick={compareTakeNowVsWait} disabled={conditionalPathsLoading}>{conditionalPathsLoading ? "Comparing paths…" : "Compare paths"}</Button> : null}</div>
+                      <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-black">{turnContext.mode === "pair-building" ? "Build the two-pick package" : turnContext.mode === "long-gap" ? "Protect the long-gap exit pick" : "Take now vs. wait"}</p><p className="mt-1 text-xs text-slate-500">{turnContext.mode === "pair-building" ? "Compare which opening choice creates the strongest paired selection at your next pick." : turnContext.mode === "long-gap" ? "Compare the current choice against what is realistically left after the room picks through." : "Compare the likely multi-pick rosters created by each choice."}</p></div>{isMyTurn && !activeConditionalPaths ? <Button size="sm" variant="outline" onClick={compareTakeNowVsWait} disabled={conditionalPathsLoading}>{conditionalPathsLoading ? "Comparing paths…" : turnContext.mode === "pair-building" ? "Compare packages" : "Compare paths"}</Button> : null}</div>
                       {!isMyTurn ? <p className="mt-3 text-xs leading-5 text-slate-400">The full path comparison becomes available when Vaughn is on the clock. Current return estimate: {heroPresentation.chanceBack.toLowerCase()}.</p> : null}
-                      {heroPath && alternativePath ? <div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-emerald-300/[0.07] p-3"><p className="text-xs font-black text-emerald-100">Take {heroCandidate.player.fullName} now</p><p className="mt-2 text-xs leading-5 text-slate-300">Most common later picks: {heroContinuation.length > 0 ? heroContinuation.map((pick) => pick.playerName).join(" → ") : "no later selection in range"}.</p></div><div className="rounded-2xl bg-white/[0.05] p-3"><p className="text-xs font-black text-slate-200">Take {alternativePath.initialPlayerName} instead</p><p className="mt-2 text-xs leading-5 text-slate-300">{heroCandidate.player.fullName} reaches your next pick in {Math.round(heroRecommendation.explanation.makeItBackProbability * 100)}% of simulations. Most common later picks: {alternativeContinuation.length > 0 ? alternativeContinuation.map((pick) => pick.playerName).join(" → ") : "no later selection in range"}.</p></div><p className="sm:col-span-2 text-xs leading-5 text-slate-300">Starting with {heroCandidate.player.fullName} produced the best projected multi-pick roster in {Math.round(heroPath.winRate * 100)}% of paired simulations.</p></div> : null}
+                      {heroPath && alternativePath ? <div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-emerald-300/[0.07] p-3"><p className="text-xs font-black text-emerald-100">Take {heroCandidate.player.fullName} now</p><p className="mt-2 text-xs leading-5 text-slate-300">Most common later picks: {heroContinuation.length > 0 ? heroContinuation.map((pick) => pick.playerName).join(" → ") : "no later selection in range"}.</p></div><div className="rounded-2xl bg-white/[0.05] p-3"><p className="text-xs font-black text-slate-200">Strongest case against: {alternativePath.initialPlayerName}</p><p className="mt-2 text-xs leading-5 text-slate-300">{heroCandidate.player.fullName} has a {Math.round(heroRecommendation.explanation.makeItBackProbability * 100)}% chance to reach your next pick. Passing now creates {alternativePath.medianRegret.toFixed(1)} median and {alternativePath.downsideRegret.toFixed(1)} downside season-value regret in this preview.</p></div><div className="sm:col-span-2 rounded-2xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300"><p><span className="font-black text-white">Quick paired preview:</span> {heroCandidate.player.fullName} wins {Math.round(heroPath.winRate * 100)}% of paired continuations and projects {Math.abs(heroPath.medianLineupPoints - alternativePath.medianLineupPoints).toFixed(1)} season-value points {heroPath.medianLineupPoints >= alternativePath.medianLineupPoints ? "ahead of" : "behind"} {alternativePath.initialPlayerName}.</p><p className="mt-1 font-bold text-amber-100">{Math.abs(heroPath.medianLineupPoints - alternativePath.medianLineupPoints) < 4 && Math.abs(heroPath.winRate - alternativePath.winRate) <= 0.1 ? "These choices are effectively tied; choose based on preference." : `The strongest quantitative argument against the recommendation is ${alternativePath.initialPlayerName}'s ${Math.round(alternativePath.winRate * 100)}% paired win rate.`}</p><p className="mt-1 text-slate-500">This is a responsive approximation, not exact-production certification evidence.</p></div></div> : null}
                     </div>
                   </div>
                 ) : null}
@@ -1306,7 +1311,7 @@ export function DraftCommandCenter({
                     const comparison = recommendation.explanation.positionalComparisonPlayerId ? candidateById.get(recommendation.explanation.positionalComparisonPlayerId) : null;
                     const presentation = explainWarRoomRecommendation({ candidate, recommendation, signal, runSnapshot: runSnapshotByPosition.get(primaryPosition(candidate)), positionalComparison: comparison });
                     const call = warRoomDraftCall(liveCall.action, signal);
-                    return <div key={candidate.player.id} className="relative grid gap-3 bg-[#091524] p-3 pr-10 sm:grid-cols-[52px_minmax(180px,1fr)_110px_minmax(180px,1.2fr)_auto] sm:items-center"><span className="text-lg font-black text-slate-400">#{recommendationRankById.get(candidate.player.id)}</span><span className="min-w-0"><span className="block truncate font-black">{candidate.player.fullName}</span><span className="text-xs text-slate-500">{primaryPosition(candidate)} · {candidate.player.team} · ADP {candidate.market.adp}</span></span><span className={cn("w-fit rounded-lg border px-2 py-1 text-[10px] font-black", warRoomCallClasses[call])}>{call}</span><span className="text-xs leading-5 text-slate-400"><span className="font-bold text-slate-200">{presentation.driver}:</span> {presentation.whyNow}</span><Button size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>{roomFreeze ? `Record for ${isMyTurn ? "Vaughn" : teamLabel(pickInfo.teamId)}` : "Room locked"}</Button>{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
+                    return <div key={candidate.player.id} className="relative grid gap-3 bg-[#091524] p-3 pr-10 sm:grid-cols-[52px_minmax(180px,1fr)_110px_minmax(180px,1.2fr)_auto] sm:items-center"><span className="text-slate-400"><span className="block text-[9px] font-black uppercase text-slate-600">Now</span><span className="text-lg font-black">#{recommendationRankById.get(candidate.player.id)}</span></span><span className="min-w-0"><span className="block truncate font-black">{candidate.player.fullName}</span><span className="text-xs text-slate-500">{primaryPosition(candidate)} · {candidate.player.team} · ADP {candidate.market.adp}</span></span><span className={cn("w-fit rounded-lg border px-2 py-1 text-[10px] font-black", warRoomCallClasses[call])}>{call}</span><span className="text-xs leading-5 text-slate-400"><span className="font-bold text-slate-200">{presentation.driver}:</span> {presentation.whyNow}</span><Button size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>{roomFreeze ? `Record for ${isMyTurn ? "Vaughn" : teamLabel(pickInfo.teamId)}` : "Room locked"}</Button>{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
                   })}
                   {remainingDraftBoard.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No remaining players match these filters.</p> : null}
                 </div>
@@ -1389,7 +1394,7 @@ export function DraftCommandCenter({
             </section>
             <aside className="space-y-4">
               <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Draft-day checklist</p><div className="mt-4 space-y-3">{[[teamNames.length >= draftState.league.teams, "All team names"], [Boolean(setup.draftOrder.trim()), "Official draft order"], [Boolean(setup.keepers.trim()), "League-wide keepers"], [Boolean(setup.myTeamName.trim()), "Your team identified"]].map(([done, label]) => <div key={String(label)} className="flex items-center gap-3 text-sm"><span className={cn("flex h-6 w-6 items-center justify-center rounded-full border", done ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-white/10 text-slate-600")}>{done ? <Check className="h-3.5 w-3.5" /> : null}</span><span className={done ? "text-slate-200" : "text-slate-500"}>{label}</span></div>)}</div></section>
-              <section className="rounded-[28px] border border-cyan-300/20 bg-cyan-300/[0.07] p-5"><Users className="h-5 w-5 text-cyan-300" /><h3 className="mt-3 font-black">What this unlocks</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300"><li>Opponent-aware pick windows</li><li>Keeper-adjusted availability</li><li>Real names on the clock</li><li>Your exact roster and turn timing</li></ul></section>
+              <section className="rounded-[28px] border border-cyan-300/20 bg-cyan-300/[0.07] p-5"><Users className="h-5 w-5 text-cyan-300" /><h3 className="mt-3 font-black">What this unlocks</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300"><li>Exact pick-owner windows</li><li>Keeper-adjusted availability</li><li>Real names on the clock</li><li>Your exact roster and turn timing</li></ul></section>
               <section className="rounded-[28px] border border-violet-300/20 bg-[#0a1727]/92 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200">Refresh control</p><h3 className="mt-2 font-black">Review before freeze</h3><p className="mt-2 text-xs leading-5 text-slate-400">Current board {currentRefresh.boardFingerprint} · captured {currentRefresh.capturedAt}</p>{acceptedRefresh ? <><p className={cn("mt-2 text-xs font-bold", refreshDiff.changed ? "text-amber-200" : "text-emerald-200")}>{refreshDiff.changed ? `${refreshDiff.added.length} added · ${refreshDiff.removed.length} removed · ${refreshDiff.movers.length} meaningful movers` : "Matches the last accepted board."}</p>{refreshDiff.movers.slice(0, 5).map((mover) => <p key={mover.playerId} className="mt-1 text-xs text-slate-400">{mover.fullName}: #{mover.previousRank} → #{mover.boardRank}</p>)}</> : <p className="mt-2 text-xs text-amber-200">No previously accepted refresh exists on this device. The first freeze establishes the rollback reference.</p>}</section>
               <details className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-5"><summary className="flex cursor-pointer list-none items-center justify-between text-sm font-black"><span className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Current data status</span><ChevronDown className="h-4 w-4" /></summary><p className="mt-3 text-xs leading-5 text-slate-400">{sourceMessage}</p><p className="mt-2 text-xs leading-5 text-slate-500">{boardSummary}</p></details>
             </aside>

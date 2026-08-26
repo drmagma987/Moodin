@@ -11,7 +11,7 @@ import type {
 
 const PUBLIC_ECR_URL = "https://www.fantasypros.com/nfl/rankings/ppr-cheatsheets.php?export=xls";
 const PUBLIC_ADP_URL = "https://www.fantasypros.com/nfl/adp/ppr-overall.php?export=xls";
-const DRAFT_POSITIONS: PlayerPosition[] = ["QB", "RB", "WR", "TE"];
+const DRAFT_POSITIONS: PlayerPosition[] = ["QB", "RB", "WR", "TE", "K"];
 
 type PublicBoardSeed = {
   playerId: string;
@@ -283,6 +283,18 @@ function buildEstimatedStats(
         fumblesLost: 1,
       };
     }
+    case "K": {
+      const madeFieldGoals = Math.max(20, 34 - positionRank * 0.45);
+      return {
+        fieldGoals0to19: Number((madeFieldGoals * 0.04).toFixed(1)),
+        fieldGoals20to29: Number((madeFieldGoals * 0.18).toFixed(1)),
+        fieldGoals30to39: Number((madeFieldGoals * 0.31).toFixed(1)),
+        fieldGoals40to49: Number((madeFieldGoals * 0.29).toFixed(1)),
+        fieldGoals50Plus: Number((madeFieldGoals * 0.18).toFixed(1)),
+        pointAfterMakes: Number(Math.max(24, 46 - positionRank * 0.8).toFixed(1)),
+        pointAfterMisses: 1,
+      };
+    }
     case "TE":
     default: {
       const receptions = Number(Math.max(28, 92 - positionRank * 1.55).toFixed(1));
@@ -318,7 +330,7 @@ export function tuneStatsToTarget(
     RB: ["rushingYards", "rushingTouchdowns", "receptions", "receivingYards", "receivingTouchdowns"],
     WR: ["rushingYards", "rushingTouchdowns", "receptions", "receivingYards", "receivingTouchdowns"],
     TE: ["receptions", "receivingYards", "receivingTouchdowns"],
-    K: [],
+    K: ["fieldGoals0to19", "fieldGoals20to29", "fieldGoals30to39", "fieldGoals40to49", "fieldGoals50Plus", "pointAfterMakes"],
     DST: [],
   };
   const keys = scalableByPosition[position];

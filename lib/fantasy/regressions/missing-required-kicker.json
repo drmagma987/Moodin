@@ -1,0 +1,21 @@
+{
+  "id": "missing-required-kicker-endgame",
+  "discoveredAt": "2026-08-26T18:11:55.314Z",
+  "seed": "certification:adp:1",
+  "leagueConfigVersion": "2026.08.20-v2",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "currentPick": 152,
+  "round": 16,
+  "managerRoster": {
+    "positionCounts": { "RB": 7, "WR": 4, "QB": 2, "TE": 2 },
+    "openStarterSlots": ["K"]
+  },
+  "observedRecommendation": {
+    "playerId": "24357",
+    "playerName": "Adonai Mitchell",
+    "position": "WR"
+  },
+  "rootCause": "bad-source-data",
+  "failure": "The authoritative 447-player artifact contained zero kickers despite one required K starter, so no policy could complete a legal roster.",
+  "expected": "Certification and final/live operation fail closed when any canonically required position has no resolvable candidate pool. With a valid kicker pool, Round 16 must fill K."
+}

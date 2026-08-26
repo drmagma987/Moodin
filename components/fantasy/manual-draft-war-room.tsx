@@ -1530,7 +1530,7 @@ export function ManualDraftWarRoom({
                   <h2 className="mt-2 text-xl font-black">Which choice builds the best next turn</h2>
                 </div>
                 <span className="rounded-full border border-[#d9b56d]/40 bg-[#d9b56d]/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-[#f8ddb3]">
-                  {conditionalPaths.simulations} paired rooms
+                  {conditionalPaths.evaluationMode === "exact-production" ? "Exact production" : "Quick preview"} · {conditionalPaths.simulations} paired rooms
                 </span>
               </div>
               <p className="mt-3 text-sm leading-6 text-[#dce4f1]">{conditionalPaths.summary}</p>
@@ -1582,6 +1582,9 @@ export function ManualDraftWarRoom({
                     ) : null}
                     <p className="mt-2 text-xs text-[#bfcadb]">
                       Median edge versus the strongest alternative in the same rooms: {outcome.medianEdgeVsBestAlternative >= 0 ? "+" : ""}{outcome.medianEdgeVsBestAlternative}
+                    </p>
+                    <p className="mt-1 text-xs text-[#bfcadb]">
+                      Median regret: {outcome.medianRegret} · downside regret: {outcome.downsideRegret}
                     </p>
                   </article>
                 ))}

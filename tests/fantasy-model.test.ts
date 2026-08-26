@@ -16,6 +16,7 @@ import {
 } from "@/lib/fantasy/draft";
 import {
   applyDraftPick,
+  buildDraftTurnContext,
   createInitialDraftState,
   getSnakePickInfo,
   reconcileSavedDraftState,
@@ -1977,7 +1978,7 @@ test("war-room presentation translates model signals into plain draft decisions"
     positionalComparison: comparison,
   });
   assert.match(presentation.chanceBack, /^\d+% chance available at your next pick$/);
-  assert.match(presentation.price, /Model board #\d+ · ADP/);
+  assert.match(presentation.price, /Overall model board #\d+ · ADP/);
   assert.doesNotMatch(`${presentation.whyNow} ${presentation.comparison ?? ""}`, /\bVORP?\b|tier cliff|knife-edge/i);
   assert.equal(warRoomDraftCall("Target", signal), "Good Value");
   assert.equal(warRoomDraftCall("Fair", signal), "Fair Value");
@@ -2688,7 +2689,34 @@ test("conditional draft paths compare paired multi-pick portfolios deterministic
   const state = seedDraftStateWithKnownPicks(initial, candidates, [
     { overallPick: 9, playerId: candidates[0].player.id, teamId: "team-9" },
     { overallPick: 12, playerId: candidates[1].player.id, teamId: "team-9" },
+    { overallPick: 10, playerId: candidates[2].player.id, teamId: "team-10" },
+    { overallPick: 11, playerId: candidates[3].player.id, teamId: "team-10" },
+    { overallPick: 30, playerId: candidates[4].player.id, teamId: "team-10" },
   ], { currentPick: 29 });
+  const shortTurn = buildDraftTurnContext(state);
+  const shortWrap = buildWrapSimulationSnapshot(state, candidates, { simulations: 40 });
+  assert.equal(state.picksUntilNextTurn, 1);
+  assert.equal(shortTurn.mode, "pair-building");
+  assert.equal(shortTurn.nextPick, 32);
+  assert.deepEqual(shortTurn.livePicksBeforeNextTurn, [31]);
+  assert.deepEqual(shortTurn.interveningTeamIds, ["team-10"]);
+  assert.equal(shortWrap.picksSimulated, 1);
+  assert.deepEqual(shortWrap.pickPredictions.map((pick) => pick.overallPick), [31]);
+
+  const longTurnState = seedDraftStateWithKnownPicks(initial, candidates, [
+    { overallPick: 9, playerId: candidates[0].player.id, teamId: "team-9" },
+    { overallPick: 12, playerId: candidates[1].player.id, teamId: "team-9" },
+    { overallPick: 10, playerId: candidates[2].player.id, teamId: "team-10" },
+    { overallPick: 11, playerId: candidates[3].player.id, teamId: "team-10" },
+    { overallPick: 30, playerId: candidates[4].player.id, teamId: "team-10" },
+  ], { currentPick: 32 });
+  const longTurn = buildDraftTurnContext(longTurnState);
+  assert.equal(longTurn.mode, "long-gap");
+  assert.equal(longTurn.nextPick, 49);
+  assert.equal(longTurn.livePicksBeforeNextTurn.length, 16);
+  assert.equal(longTurn.distinctInterveningTeams, 8);
+  assert.equal(longTurn.sameTeamOwnsAllInterveningPicks, false);
+
   const first = buildConditionalDraftPathBoard(state, candidates, undefined, {
     simulations: 40,
     candidateLimit: 5,
@@ -2701,6 +2729,8 @@ test("conditional draft paths compare paired multi-pick portfolios deterministic
   });
 
   assert.deepEqual(first.futurePicks, [29, 32, 49]);
+  assert.equal(first.evaluationMode, "quick-preview");
+  assert.equal(first.policyMode, "production");
   assert.ok(first.outcomes.length >= 3);
   assert.equal(first.outcomes.filter((outcome) => outcome.recommended).length, 1);
   assert.deepEqual(first.outcomes, second.outcomes);
@@ -2708,6 +2738,8 @@ test("conditional draft paths compare paired multi-pick portfolios deterministic
     assert.ok(outcome.winRate >= 0 && outcome.winRate <= 1);
     assert.ok(outcome.ceilingLineupPoints >= outcome.medianLineupPoints);
     assert.ok(outcome.medianLineupPoints >= outcome.floorLineupPoints);
+    assert.ok(outcome.medianRegret >= 0);
+    assert.ok(outcome.downsideRegret >= 0);
     for (const sequence of outcome.commonSequences) {
       assert.deepEqual(sequence.picks.map((pick) => pick.overallPick), [29, 32, 49]);
       assert.equal(new Set(sequence.picks.map((pick) => pick.playerId)).size, 3);
@@ -4177,4 +4209,99 @@ test("10 deterministic rehearsal rooms survive mixed opponent and manager turns"
     assert.equal(replayed.currentPick, state.currentPick);
     assert.deepEqual(replayed.availablePlayerIds, state.availablePlayerIds);
   }
+});
+
+test("mid-draft recommendations preserve overall model rank instead of renumbering the remaining pool", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const wanDale = candidates.find((candidate) => candidate.player.fullName === "Wan'Dale Robinson");
+  assert.ok(wanDale);
+  const overallBoard = buildRedraftBoard(candidates, warRoomRehearsalFixture.draftState.league);
+  const overallRank = overallBoard.find((entry) => entry.playerId === wanDale.player.id)?.boardRank;
+  assert.ok(overallRank && overallRank > 1);
+
+  const availablePlayerIds = candidates
+    .filter((candidate) => (candidate.market.adp ?? 999) >= 70 || candidate.player.id === wanDale.player.id)
+    .map((candidate) => candidate.player.id);
+  const state: DraftState = {
+    ...warRoomRehearsalFixture.draftState,
+    currentPick: 69,
+    availablePlayerIds,
+  };
+  const wrapPool = candidates.filter((candidate) => availablePlayerIds.includes(candidate.player.id)).slice(0, 80);
+  const wrap = buildWrapSimulationSnapshot(state, wrapPool, { simulations: 8 });
+  const recommendation = rankDraftCandidates(state, candidates, wrap).find((entry) => entry.playerId === wanDale.player.id);
+  assert.ok(recommendation);
+  assert.equal(recommendation.explanation.ourBoardRank, overallRank);
+});
+
+test("a filled QB slot suppresses second quarterbacks while required starters remain open", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 69,
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, QB: 1 },
+      openSlots: ["WR", "WR", "RB", "TE", "W/R/T", "K"],
+    } : team),
+  };
+  const wrapPool = candidates.filter((candidate) => state.availablePlayerIds.includes(candidate.player.id)).slice(0, 80);
+  const wrap = buildWrapSimulationSnapshot(state, wrapPool, { simulations: 8 });
+  const topTen = rankDraftCandidates(state, candidates, wrap).slice(0, 10);
+  assert.ok(topTen.every((recommendation) => candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] !== "QB"));
+  const production = rankDraftCandidates(state, candidates, wrap);
+  const ablated = rankDraftCandidates(state, candidates, wrap, {
+    policyMode: "construction-ablation",
+  });
+  const firstQuarterback = production.find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "QB"
+  );
+  assert.ok(firstQuarterback);
+  const ablatedQuarterback = ablated.find((recommendation) => recommendation.playerId === firstQuarterback.playerId);
+  assert.ok(ablatedQuarterback);
+  assert.ok(ablatedQuarterback.score > firstQuarterback.score + 40);
+});
+
+test("a filled TE slot suppresses early TE2 while flex and core starters remain open", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 49,
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, TE: 1 },
+      openSlots: ["QB", "WR", "WR", "RB", "W/R/T", "W/R/T", "K"],
+    } : team),
+  };
+  const wrap = buildWrapSimulationSnapshot(state, candidates.slice(0, 100), { simulations: 8 });
+  const topTen = rankDraftCandidates(state, candidates, wrap).slice(0, 10);
+  assert.ok(topTen.every((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] !== "TE"
+  ));
+});
+
+test("late roster-completion urgency promotes an unfilled starting quarterback", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 109,
+    availablePlayerIds: candidates
+      .filter((candidate) => candidate.market.adp >= 90)
+      .map((candidate) => candidate.player.id),
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, QB: 0, RB: 4, WR: 5, TE: 1 },
+      openSlots: ["QB", "K"],
+    } : team),
+  };
+  const wrap = buildWrapSimulationSnapshot(state, candidates.slice(0, 100), { simulations: 8 });
+  const top = rankDraftCandidates(state, candidates, wrap)[0];
+  assert.ok(top);
+  assert.equal(
+    candidates.find((candidate) => candidate.player.id === top.playerId)?.player.positions[0],
+    "QB",
+  );
 });

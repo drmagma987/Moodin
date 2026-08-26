@@ -5,6 +5,8 @@ import type {
   ConditionalDraftPathOutcome,
   ConditionalDraftPathPick,
   DraftDecisionSnapshot,
+  DraftCounterfactualEvaluationMode,
+  DraftRecommendationPolicyMode,
   DraftCandidate,
   DraftState,
   LeagueConfig,
@@ -23,8 +25,12 @@ import type {
   WrapSimulationPositionSnapshot,
   WrapSimulationSnapshot,
 } from "@/lib/fantasy/types";
-import { chooseOpponentBehavior } from "@/lib/fantasy/opponentProfiles";
-import { getSnakePickInfo } from "@/lib/fantasy/draftState";
+import {
+  applyDraftPick,
+  buildDraftTurnContext,
+  getLivePicksBeforeNextTurn,
+  getSnakePickInfo,
+} from "@/lib/fantasy/draftState";
 import { assertLeagueMatchesSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
 
 const FLEX_ELIGIBLE: PlayerPosition[] = ["RB", "WR", "TE"];
@@ -110,6 +116,22 @@ function replacementIndex(
   league: LeagueConfig,
 ) {
   return starterDemandByPosition(pool, league)[position] ?? 0;
+}
+
+function replacementBaselinesByPosition(
+  pool: DraftCandidate[],
+  league: LeagueConfig,
+) {
+  const demand = starterDemandByPosition(pool, league);
+  const baselines = new Map<PlayerPosition, number>();
+  for (const position of BOARD_POSITIONS) {
+    const samePosition = pool
+      .filter((candidate) => primaryPosition(candidate) === position)
+      .sort((a, b) => b.projection.range.p50 - a.projection.range.p50);
+    const replacement = samePosition[demand[position] ?? 0];
+    baselines.set(position, replacement?.projection.range.p50 ?? samePosition.at(-1)?.projection.range.p50 ?? 0);
+  }
+  return baselines;
 }
 
 function scarcityMultiplier(position: PlayerPosition, league: LeagueConfig) {
@@ -241,7 +263,10 @@ function positionNeedWeight(
       : 0;
 
   if (exactNeed > 0) {
-    return 1 + exactNeed * 0.32 + flexNeed;
+    // Each additional unfilled exact starter matters independently. Paired
+    // construction-ablation continuations showed that the old 0.32 slope
+    // underpriced WR2/WR3 demand in a three-WR, two-flex league.
+    return 1 + exactNeed * 0.62 + flexNeed;
   }
 
   if (flexNeed > 0) {
@@ -249,6 +274,46 @@ function positionNeedWeight(
   }
 
   return position === "WR" ? 0.48 : position === "RB" ? 0.44 : 0.28;
+}
+
+function rosterConstructionPenalty(
+  team: TeamRosterState | null,
+  position: PlayerPosition,
+  state: DraftState,
+) {
+  if (!team) return 0;
+  const currentCount = team.positionCounts[position] ?? 0;
+  const round = getSnakePickInfo(state.currentPick, state.league.teams).round;
+
+  if (position === "QB" && currentCount >= 1) {
+    if (currentCount >= 2) return 120;
+    if (team.openSlots.some((slot) => ["RB", "WR", "TE", "W/R/T"].includes(slot))) return 72;
+    return round <= 12 ? 22 : 7;
+  }
+
+  if (position === "TE" && currentCount >= 1) {
+    if (currentCount >= 2) return 110;
+    if (team.openSlots.some((slot) => ["RB", "WR", "W/R/T"].includes(slot))) return 64;
+    return round <= 12 ? 16 : 5;
+  }
+
+  if (position === "K" && currentCount >= 1) return 220;
+  if (position === "DST") return 70;
+  return 0;
+}
+
+function rosterCompletionBonus(
+  team: TeamRosterState | null,
+  position: PlayerPosition,
+  state: DraftState,
+) {
+  if (!team || !team.openSlots.includes(position)) return 0;
+  const round = getSnakePickInfo(state.currentPick, state.league.teams).round;
+  if (position === "QB" && round >= 10) return 84 + (round - 10) * 10;
+  if (position === "TE" && round >= 10) return 34 + (round - 10) * 6;
+  if ((position === "RB" || position === "WR") && round >= 13) return 60 + (round - 13) * 30;
+  if (position === "K" && round >= 14) return 55 + (round - 14) * 20;
+  return 0;
 }
 
 function cloneTeamState(team: TeamRosterState): TeamRosterState {
@@ -412,9 +477,7 @@ function estimateMakeItBackProbability(
   }
 
   const position = primaryPosition(candidate);
-  const needPressure = state.teams
-    .filter((team) => team.teamId !== state.myTeamId)
-    .slice(0, state.picksUntilNextTurn)
+  const needPressure = upcomingTeamsBeforeNextTurn(state)
     .reduce((sum, team) => sum + positionNeedWeight(team, position, state.league), 0);
 
   const marketPressure =
@@ -435,14 +498,16 @@ function valueOverReplacement(
   candidate: DraftCandidate,
   pool: DraftCandidate[],
   league: LeagueConfig,
+  cachedBaselines?: Map<PlayerPosition, number>,
 ) {
   const position = primaryPosition(candidate);
-  const samePosition = pool
-    .filter((item) => primaryPosition(item) === position)
-    .sort((a, b) => b.projection.range.p50 - a.projection.range.p50);
-
-  const replacement = samePosition[replacementIndex(position, pool, league)];
-  const replacementValue = replacement?.projection.range.p50 ?? candidate.projection.range.p50;
+  const replacementValue = cachedBaselines?.get(position) ?? (() => {
+    const samePosition = pool
+      .filter((item) => primaryPosition(item) === position)
+      .sort((a, b) => b.projection.range.p50 - a.projection.range.p50);
+    return samePosition[replacementIndex(position, pool, league)]?.projection.range.p50 ??
+      candidate.projection.range.p50;
+  })();
   return {
     valueOverReplacement: Number((candidate.projection.range.p50 - replacementValue).toFixed(2)),
     replacementBaseline: Number(replacementValue.toFixed(2)),
@@ -454,6 +519,7 @@ export function buildRedraftBoard(
   league: LeagueConfig,
 ): RedraftBoardEntry[] {
   const starterDemand = starterDemandByPosition(candidates, league);
+  const replacementBaselines = replacementBaselinesByPosition(candidates, league);
   const expectedMarketCost = (candidate: DraftCandidate) => {
     const ecr = Number.isFinite(candidate.market.ecr) && candidate.market.ecr > 0
       ? candidate.market.ecr
@@ -484,7 +550,7 @@ export function buildRedraftBoard(
 
   const baseEntries = candidates.map((candidate) => {
     const position = primaryPosition(candidate);
-    const replacement = valueOverReplacement(candidate, candidates, league);
+    const replacement = valueOverReplacement(candidate, candidates, league, replacementBaselines);
     const robustness = candidate.signals?.robustness;
     const refresh = candidate.signals?.refresh;
     const expectedOpportunity = candidate.signals?.expectedOpportunity;
@@ -628,8 +694,8 @@ function expectedMarketPick(candidate: DraftCandidate) {
 
 function upcomingTeamsBeforeNextTurn(state: DraftState) {
   const byId = new Map(state.teams.map((team) => [team.teamId, team]));
-  return Array.from({ length: state.picksUntilNextTurn }, (_, index) => {
-    const pickInfo = getSnakePickInfo(state.currentPick + index + 1, state.league.teams);
+  return getLivePicksBeforeNextTurn(state).overallPicks.map((overallPick) => {
+    const pickInfo = getSnakePickInfo(overallPick, state.league.teams);
     return byId.get(pickInfo.teamId) ?? null;
   }).filter((team): team is TeamRosterState => team !== null);
 }
@@ -662,7 +728,8 @@ export function buildWrapSimulationSnapshot(
   },
 ): WrapSimulationSnapshot {
   const available = getAvailableCandidates(state, pool);
-  const picksSimulated = state.picksUntilNextTurn;
+  const upcomingPicks = getLivePicksBeforeNextTurn(state).overallPicks;
+  const picksSimulated = upcomingPicks.length;
   const simulations = options?.simulations ?? 160;
 
   if (available.length === 0 || picksSimulated <= 0) {
@@ -679,7 +746,7 @@ export function buildWrapSimulationSnapshot(
   const seed = hashString(
     [
       state.currentPick,
-      state.picksUntilNextTurn,
+      upcomingPicks.join("|"),
       state.myTeamId,
       state.availablePlayerIds.slice(0, 24).join("|"),
       state.teams
@@ -710,7 +777,8 @@ export function buildWrapSimulationSnapshot(
     const perSimulationPositionCounts = new Map<PlayerPosition, number>();
 
     for (let pickIndex = 0; pickIndex < picksSimulated; pickIndex += 1) {
-      const overallPick = state.currentPick + pickIndex + 1;
+      const overallPick = upcomingPicks[pickIndex];
+      if (overallPick === undefined) continue;
       const pickInfo = getSnakePickInfo(overallPick, state.league.teams);
       const team = teamsById.get(pickInfo.teamId);
       if (!team) {
@@ -769,7 +837,7 @@ export function buildWrapSimulationSnapshot(
   const pickPredictions: OpponentPickPredictionSnapshot[] = Array.from(
     { length: picksSimulated },
     (_, pickIndex) => {
-      const overallPick = state.currentPick + pickIndex + 1;
+      const overallPick = upcomingPicks[pickIndex] ?? state.currentPick + pickIndex + 1;
       const pickInfo = getSnakePickInfo(overallPick, state.league.teams);
       const positionProbabilities: WrapSimulationPositionProbability[] = Array.from(
         pickPositionTallies[pickIndex]?.entries() ?? [],
@@ -1048,15 +1116,26 @@ export function rankDraftCandidates(
   state: DraftState,
   pool: DraftCandidate[],
   wrapSimulation = buildWrapSimulationSnapshot(state, pool),
+  options?: {
+    policyMode?: DraftRecommendationPolicyMode;
+    baseBoard?: RedraftBoardEntry[];
+  },
 ): CandidateRecommendation[] {
   assertLeagueMatchesSourceOfTruth(state.league);
   const availableCandidates = getAvailableCandidates(state, pool);
+  const availableReplacementBaselines = replacementBaselinesByPosition(
+    availableCandidates,
+    state.league,
+  );
+  const turnContext = buildDraftTurnContext(state);
+  const turnUrgencyMultiplier =
+    turnContext.mode === "long-gap" ? 1.18 : turnContext.mode === "pair-building" ? 0.82 : 1;
   const myTeam = state.teams.find((team) => team.teamId === state.myTeamId) ?? null;
   const runSnapshotByPosition = new Map(
     buildPositionRunSnapshots(state, pool, wrapSimulation).map((snapshot) => [snapshot.position, snapshot] as const),
   );
   const baseBoardById = new Map(
-    buildRedraftBoard(availableCandidates, state.league).map((entry) => [
+    (options?.baseBoard ?? buildRedraftBoard(pool, state.league)).map((entry) => [
       entry.playerId,
       entry,
     ] as const),
@@ -1072,7 +1151,12 @@ export function rankDraftCandidates(
       const position = primaryPosition(candidate);
       const runSnapshot = runSnapshotByPosition.get(position);
       const makeItBack = estimateMakeItBackProbability(candidate, state, wrapSimulation);
-      const replacement = valueOverReplacement(candidate, availableCandidates, state.league);
+      const replacement = valueOverReplacement(
+        candidate,
+        availableCandidates,
+        state.league,
+        availableReplacementBaselines,
+      );
       const valueNow = replacement.valueOverReplacement;
       const valueLater = Number((valueNow * makeItBack).toFixed(2));
       const upsideDelta = Number(
@@ -1104,6 +1188,16 @@ export function rankDraftCandidates(
       const roleSecurity = candidate.signals?.roleSecurity;
       const rosterNeed = myTeam ? positionNeedWeight(myTeam, position, state.league) : 0.45;
       const rosterNeedBonus = Number(((rosterNeed - 0.4) * 6.6).toFixed(2));
+      const remainingExactStarters = myTeam
+        ? Math.max(0, (countRequiredSlots(state.league)[position] ?? 0) - (myTeam.positionCounts[position] ?? 0))
+        : 0;
+      const multiStarterDemandBonus = options?.policyMode === "construction-ablation"
+        ? 0
+        : Math.max(0, remainingExactStarters - 1) * 22;
+      const constructionPenalty = options?.policyMode === "construction-ablation"
+        ? 0
+        : rosterConstructionPenalty(myTeam, position, state);
+      const completionBonus = rosterCompletionBonus(myTeam, position, state);
       const stabilityBonus = Number(
         (
           ((robustness ? 100 - robustness.fragilityScore : 58) / 100) * 2.8 +
@@ -1176,12 +1270,15 @@ export function rankDraftCandidates(
       const structuralScore = Number(
         (
           boardEntry.boardScore +
-          vona * 1.22 +
+          vona * 1.22 * turnUrgencyMultiplier +
           focusBonus +
-          (makeItBack <= 0.35 ? 1.8 : makeItBack <= 0.55 ? 0.8 : 0) +
-          tierPressureBonus * 0.35 -
+          (makeItBack <= 0.35 ? 1.8 : makeItBack <= 0.55 ? 0.8 : 0) * turnUrgencyMultiplier +
+          tierPressureBonus * 0.35 * turnUrgencyMultiplier -
           refreshBonus * (refresh?.status === "falling" ? 0.15 : -0.45) -
-          robustnessPenalty
+          robustnessPenalty -
+          constructionPenalty +
+          completionBonus +
+          multiStarterDemandBonus
         ).toFixed(2),
       );
       const marketLeverageScore = Number(
@@ -1206,6 +1303,14 @@ export function rankDraftCandidates(
             `${position} value is measured against the first projected non-starter after this league's required lineup and flex spots are allocated.`,
             `The next-round positional pocket adds ${boardEntry.positionalLeverage.score.toFixed(1)} points of leverage (${boardEntry.positionalLeverage.medianTierEdge.toFixed(1)} median-point tier edge).`,
             `${Math.round(makeItBack * 100)}% make-it-back odds create ${vona.toFixed(1)} VONA in a ${countRequiredSlots(state.league).WR ?? 0}-WR, ${flexSlotCount(state.league)}-flex format.`,
+            turnContext.summary,
+            constructionPenalty > 0
+              ? `${position} is already filled on Vaughn's roster, so this option carries a ${constructionPenalty.toFixed(0)}-point roster-construction penalty.`
+              : completionBonus > 0
+                ? `${position} remains unfilled late in the draft, adding ${completionBonus.toFixed(0)} points of empirically tested roster-completion urgency.`
+                : multiStarterDemandBonus > 0
+                  ? `${remainingExactStarters} exact ${position} starters remain open, adding ${multiStarterDemandBonus.toFixed(0)} points of multi-slot demand supported by paired construction-ablation results.`
+                  : "This position remains compatible with the current roster build.",
           ],
           ourBoardRank: boardEntry.boardRank,
           marketRank: boardEntry.marketRank,
@@ -1317,8 +1422,10 @@ function conditionalPercentile(values: number[], quantile: number) {
 
 function personalPickSequence(state: DraftState, count: number) {
   const picks: number[] = [];
+  const occupied = new Set(state.drafted.map((pick) => pick.overallPick));
   const maxPick = state.currentPick + state.league.teams * Math.max(2, count + 1);
   for (let overallPick = state.currentPick; overallPick <= maxPick; overallPick += 1) {
+    if (occupied.has(overallPick)) continue;
     if (getSnakePickInfo(overallPick, state.league.teams).teamId !== state.myTeamId) continue;
     picks.push(overallPick);
     if (picks.length >= count) break;
@@ -1418,10 +1525,8 @@ function conditionalOpponentPick(input: {
   state: DraftState;
   overallPick: number;
   random: () => number;
-  behavior: "value" | "market" | "need";
 }) {
   const round = getSnakePickInfo(input.overallPick, input.state.league.teams).round;
-  const behavior = input.behavior;
   const fallenElite = input.marketOrder.find((candidate) => {
     if (!input.available.has(candidate.player.id)) return false;
     const marketRank = input.boardById.get(candidate.player.id)?.marketRank ?? 999;
@@ -1436,9 +1541,8 @@ function conditionalOpponentPick(input: {
       const board = input.boardById.get(candidate.player.id);
       const marketRank = board?.marketRank ?? 300;
       const boardRank = board?.boardRank ?? 300;
-      const rank = behavior === "market" ? marketRank : boardRank;
+      const rank = marketRank * 0.6 + boardRank * 0.4;
       const fallenValue = clamp(input.overallPick - marketRank, -24, 36);
-      const needWeight = behavior === "need" ? 16 : behavior === "value" ? 4 : 9;
       const duplicatePenalty =
         (position === "QB" || position === "TE") && (input.team.positionCounts[position] ?? 0) >= 1
           ? round <= 10 ? -34 : -10
@@ -1448,7 +1552,7 @@ function conditionalOpponentPick(input: {
         score:
           -rank * 0.58 +
           fallenValue * 0.62 +
-          positionNeedWeight(input.team, position, input.state.league) * needWeight +
+          positionNeedWeight(input.team, position, input.state.league) * 9 +
           duplicatePenalty +
           input.random() * 8,
       };
@@ -1459,6 +1563,23 @@ function conditionalOpponentPick(input: {
 }
 
 function conditionalManagerPick(input: {
+  pool: DraftCandidate[];
+  state: DraftState;
+  policyMode: DraftRecommendationPolicyMode;
+  wrapSimulations: number;
+  baseBoard: RedraftBoardEntry[];
+}) {
+  const wrap = buildWrapSimulationSnapshot(input.state, input.pool, {
+    simulations: input.wrapSimulations,
+  });
+  const recommendation = rankDraftCandidates(input.state, input.pool, wrap, {
+    policyMode: input.policyMode,
+    baseBoard: input.baseBoard,
+  })[0];
+  return recommendation ? candidateByRecommendation(recommendation, input.pool) : null;
+}
+
+function conditionalLineupManagerPick(input: {
   available: Set<string>;
   boardOrder: DraftCandidate[];
   boardById: Map<string, RedraftBoardEntry>;
@@ -1475,29 +1596,17 @@ function conditionalManagerPick(input: {
     .slice(0, 48)
     .map((candidate) => {
       const median = conditionalLineupScore(
-        [...input.rosterIds, candidate.player.id],
-        input.candidateById,
-        input.pool,
-        input.state.league,
-        "p50",
-        input.medianBaselines,
+        [...input.rosterIds, candidate.player.id], input.candidateById, input.pool,
+        input.state.league, "p50", input.medianBaselines,
       );
       const floor = conditionalLineupScore(
-        [...input.rosterIds, candidate.player.id],
-        input.candidateById,
-        input.pool,
-        input.state.league,
-        "p10",
-        input.floorBaselines,
+        [...input.rosterIds, candidate.player.id], input.candidateById, input.pool,
+        input.state.league, "p10", input.floorBaselines,
       );
       const board = input.boardById.get(candidate.player.id);
       return {
         candidate,
-        score:
-          median +
-          floor * 0.12 +
-          (board?.boardEdge ?? 0) * 0.18 +
-          input.random() * 1.8,
+        score: median + floor * 0.12 + (board?.boardEdge ?? 0) * 0.18 + input.random() * 1.8,
       };
     })
     .sort((a, b) => b.score - a.score)
@@ -1509,10 +1618,21 @@ export function buildConditionalDraftPathBoard(
   state: DraftState,
   pool: DraftCandidate[],
   wrapSimulation = buildWrapSimulationSnapshot(state, pool),
-  options?: { simulations?: number; candidateLimit?: number; horizonPicks?: number },
+  options?: {
+    simulations?: number;
+    candidateLimit?: number;
+    horizonPicks?: number;
+    policyMode?: DraftRecommendationPolicyMode;
+    wrapSimulationsPerPick?: number;
+    evaluationMode?: DraftCounterfactualEvaluationMode;
+    forcedCandidateIds?: string[];
+  },
 ): ConditionalDraftPathBoard {
-  const simulations = Math.max(40, options?.simulations ?? 60);
+  const simulations = Math.max(1, options?.simulations ?? 60);
   const horizonPicks = Math.max(2, options?.horizonPicks ?? 3);
+  const policyMode = options?.policyMode ?? "production";
+  const evaluationMode = options?.evaluationMode ?? "quick-preview";
+  const wrapSimulationsPerPick = Math.max(4, options?.wrapSimulationsPerPick ?? 8);
   const futurePicks = personalPickSequence(state, horizonPicks);
   const onClock = getSnakePickInfo(state.currentPick, state.league.teams).teamId;
   if (onClock !== state.myTeamId || futurePicks[0] !== state.currentPick) {
@@ -1521,13 +1641,15 @@ export function buildConditionalDraftPathBoard(
       simulations,
       currentPick: state.currentPick,
       futurePicks,
+      policyMode,
+      evaluationMode,
       outcomes: [],
       summary: "Conditional paths activate when your team is on the clock.",
     };
   }
 
   const available = getAvailableCandidates(state, pool);
-  const board = buildRedraftBoard(available, state.league);
+  const board = buildRedraftBoard(pool, state.league);
   const boardById = new Map(board.map((entry) => [entry.playerId, entry]));
   const candidateById = new Map(pool.map((candidate) => [candidate.player.id, candidate]));
   const starterDemand = starterDemandByPosition(available, state.league);
@@ -1553,17 +1675,21 @@ export function buildConditionalDraftPathBoard(
   );
   const candidateLimit = options?.candidateLimit ?? 6;
   const rankedRecommendations = rankDraftCandidates(state, pool, wrapSimulation);
-  const recommendationIds = [
-    ...rankedRecommendations.slice(0, Math.max(2, candidateLimit - 4)).map((recommendation) => recommendation.playerId),
-    ...(["RB", "WR", "TE", "QB"] as PlayerPosition[]).flatMap((position) => {
-      const recommendation = rankedRecommendations.find((entry) => {
-        const candidate = candidateById.get(entry.playerId);
-        return candidate ? primaryPosition(candidate) === position : false;
-      });
-      return recommendation ? [recommendation.playerId] : [];
-    }),
-    ...rankedRecommendations.map((recommendation) => recommendation.playerId),
-  ].filter((playerId, index, ids) => ids.indexOf(playerId) === index).slice(0, candidateLimit);
+  const recommendationIds = (options?.forcedCandidateIds?.length
+    ? options.forcedCandidateIds.filter((playerId) => state.availablePlayerIds.includes(playerId))
+    : [
+        ...rankedRecommendations.slice(0, Math.max(2, candidateLimit - 4)).map((recommendation) => recommendation.playerId),
+        ...(["RB", "WR", "TE", "QB"] as PlayerPosition[]).flatMap((position) => {
+          const recommendation = rankedRecommendations.find((entry) => {
+            const candidate = candidateById.get(entry.playerId);
+            return candidate ? primaryPosition(candidate) === position : false;
+          });
+          return recommendation ? [recommendation.playerId] : [];
+        }),
+        ...rankedRecommendations.map((recommendation) => recommendation.playerId),
+      ])
+    .filter((playerId, index, ids) => ids.indexOf(playerId) === index)
+    .slice(0, candidateLimit);
   const initialCandidates = recommendationIds
     .map((playerId) => candidateById.get(playerId))
     .filter((candidate): candidate is DraftCandidate => Boolean(candidate));
@@ -1578,19 +1704,10 @@ export function buildConditionalDraftPathBoard(
     const trialScores = new Map<string, number>();
     for (const initialCandidate of initialCandidates) {
       const random = createSeededRandom(hashString(`${state.currentPick}:conditional:${simulationIndex}`));
-      const behaviorByTeamId = new Map(
-        state.teams.map((team) => {
-          const behaviorRoll = createSeededRandom(
-            hashString(`${state.currentPick}:conditional-behavior:${simulationIndex}:${team.teamId}`),
-          )();
-          const behavior = chooseOpponentBehavior(state.opponentProfiles?.[team.teamId], behaviorRoll);
-          return [team.teamId, behavior] as const;
-        }),
-      );
       const liveAvailable = new Set(state.availablePlayerIds);
-      const teamsById = new Map(
-        state.teams.map((team) => [team.teamId, cloneTeamState(team)] as const),
-      );
+      let simulatedState = applyDraftPick(state, initialCandidate, state.myTeamId, {
+        source: "manual",
+      });
       let myRosterIds = [...initialRosterIds, initialCandidate.player.id];
       const pathPicks: ConditionalDraftPathPick[] = [{
         overallPick: state.currentPick,
@@ -1599,40 +1716,48 @@ export function buildConditionalDraftPathBoard(
         position: primaryPosition(initialCandidate),
       }];
       liveAvailable.delete(initialCandidate.player.id);
-      const firstTeam = teamsById.get(state.myTeamId);
-      if (firstTeam) teamsById.set(state.myTeamId, updateTeamStateWithSimulatedPick(firstTeam, initialCandidate));
-
       const lastPick = futurePicks.at(-1) ?? state.currentPick;
+      const occupied = new Set(state.drafted.map((pick) => pick.overallPick));
       for (let overallPick = state.currentPick + 1; overallPick <= lastPick; overallPick += 1) {
+        if (occupied.has(overallPick)) continue;
         const pick = getSnakePickInfo(overallPick, state.league.teams);
-        const team = teamsById.get(pick.teamId);
+        const team = simulatedState.teams.find((entry) => entry.teamId === pick.teamId);
         if (!team) continue;
         const selected = pick.teamId === state.myTeamId
-          ? conditionalManagerPick({
-              available: liveAvailable,
-              boardOrder,
-              boardById,
-              rosterIds: myRosterIds,
-              candidateById,
-              pool,
-              state,
-              random,
-              medianBaselines: replacementBaselines.get("p50")!,
-              floorBaselines: replacementBaselines.get("p10")!,
-            })
+          ? evaluationMode === "exact-production"
+            ? conditionalManagerPick({
+                pool,
+                state: simulatedState,
+                policyMode,
+                wrapSimulations: wrapSimulationsPerPick,
+                baseBoard: board,
+              })
+            : conditionalLineupManagerPick({
+                available: liveAvailable,
+                boardOrder,
+                boardById,
+                rosterIds: myRosterIds,
+                candidateById,
+                pool,
+                state: simulatedState,
+                random,
+                medianBaselines: replacementBaselines.get("p50")!,
+                floorBaselines: replacementBaselines.get("p10")!,
+              })
           : conditionalOpponentPick({
               available: liveAvailable,
               marketOrder,
               boardById,
               team,
-              state,
+              state: simulatedState,
               overallPick,
               random,
-              behavior: behaviorByTeamId.get(pick.teamId) ?? "value",
             });
         if (!selected) continue;
         liveAvailable.delete(selected.player.id);
-        teamsById.set(pick.teamId, updateTeamStateWithSimulatedPick(team, selected));
+        simulatedState = applyDraftPick(simulatedState, selected, pick.teamId, {
+          source: "manual",
+        });
         if (pick.teamId === state.myTeamId) {
           myRosterIds = [...myRosterIds, selected.player.id];
           pathPicks.push({
@@ -1707,6 +1832,12 @@ export function buildConditionalDraftPathBoard(
       medianEdgeVsBestAlternative: Number(
         conditionalPercentile(edgeSamples.get(candidate.player.id) ?? [], 0.5).toFixed(1),
       ),
+      medianRegret: Number(
+        Math.max(0, -conditionalPercentile(edgeSamples.get(candidate.player.id) ?? [], 0.5)).toFixed(1),
+      ),
+      downsideRegret: Number(
+        Math.max(0, -conditionalPercentile(edgeSamples.get(candidate.player.id) ?? [], 0.1)).toFixed(1),
+      ),
       recommended: false,
       commonSequences: sequences,
       summary: "",
@@ -1723,6 +1854,8 @@ export function buildConditionalDraftPathBoard(
     simulations,
     currentPick: state.currentPick,
     futurePicks,
+    policyMode,
+    evaluationMode,
     outcomes,
     summary: outcomes[0]
       ? `${outcomes[0].initialPlayerName} creates the strongest current three-pick portfolio across ${simulations} paired room simulations.`

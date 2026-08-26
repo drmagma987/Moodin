@@ -1,6 +1,6 @@
 # Decision Logic
 
-Last updated: August 13, 2026
+Last updated: August 25, 2026
 
 ## Core philosophy
 
@@ -26,13 +26,21 @@ If a position pool does not reach the league-derived replacement index, its VOR 
 
 The live assistant does not stop at the base-board rank. When the user's team is on the clock, it forces each serious candidate into the current pick and simulates through the next two personal selections.
 
-- Opponents receive stable value-first, market-first, or position-need behavior within each paired room.
+- Opponent selections use the same neutral blend of market cost, board value, live roster need, and bounded uncertainty in every simulation.
+- Personal pick windows are built from exact unoccupied snake slots, so consumed keeper picks never become phantom selections.
+- A short window controlled by one intervening team is treated as a pair-building pick; a 12-plus-selection window is treated as the last pick before a long gap and increases make-it-back and tier-survival urgency.
 - Materially fallen top-24 market players trigger a strong best-player-available override so elite value does not unrealistically slide because a roster already has that position.
 - Every candidate is tested against the same room seeds and sampled player outcomes.
 - Follow-up selections maximize the projected lineup portfolio while retaining board edge, role evidence, floor, and roster construction.
 - Outputs compare path win rate, lineup floor/median/ceiling, median edge versus the best alternative, and the most common exact pick sequence.
 
 This layer answers “player now plus what later?” rather than treating a standalone rank as the final recommendation.
+
+The conditional output now records its evaluation mode. `quick-preview` is the responsive browser comparison. `exact-production` calls the same live `rankDraftCandidates()` policy at every continuation and is reserved for offline validation until its state-independent calculations are cached. Both modes report median and downside regret, not only a winner percentage.
+
+Construction penalties can be disabled through the explicit `construction-ablation` policy mode. This is a diagnostic control: if a roster-construction conclusion disappears when the penalty is removed, it was encoded rather than discovered. Release scenarios must show that strategically dominated branches still lose in paired roster outcomes under ablation.
+
+The release suite also compares the live choice with two deliberately simpler policies: roster-constrained ADP and roster-constrained model-board order. Production may differ, but it cannot carry more than five projected median-regret points versus either baseline in the 2,000-room discovery cohort. Small exact-policy cohorts use a wider 15-point tolerance because they are integration checks rather than stable estimators.
 
 ## Personal targets and model values
 

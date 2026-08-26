@@ -1,4 +1,5 @@
 import { buildLiveDraftCall, type DraftBoardSignal, type DraftQuickScore, type LiveDraftCall } from "@/lib/fantasy/draftSignals";
+import { getLivePicksBeforeNextTurn, getSnakePickInfo } from "@/lib/fantasy/draftState";
 import type { DraftCandidate, DraftState, WrapSimulationSnapshot } from "@/lib/fantasy/types";
 
 type ValuePocketBoardEntry = {
@@ -27,7 +28,7 @@ function estimateSurvival(
 ) {
   const threatened = wrap.threatenedPlayers.find((player) => player.playerId === candidate.player.id);
   if (threatened) return Math.max(0.03, Math.min(0.97, 1 - threatened.lossProbability));
-  const nextPick = state.currentPick + state.picksUntilNextTurn + 1;
+  const nextPick = getLivePicksBeforeNextTurn(state).nextPick ?? state.currentPick + 1;
   const cushion = candidate.market.adp - nextPick;
   return Math.max(0.05, Math.min(0.95, 0.5 + cushion / 34));
 }
@@ -63,7 +64,7 @@ export function buildMiddleRoundValuePocket(args: {
       const makeItBackProbability = estimateSurvival(candidate, args.state, args.wrap);
       const run = runByPosition.get(position);
       const tierSurvivalProbability = run
-        ? Math.max(0.05, Math.min(0.95, 1 - run.expectedSelections / Math.max(1, args.state.picksUntilNextTurn + 1)))
+        ? Math.max(0.05, Math.min(0.95, 1 - run.expectedSelections / Math.max(1, args.wrap.picksSimulated + 1)))
         : makeItBackProbability;
       const positionCount = myTeam?.positionCounts[position] ?? 0;
       const rosterFit = position === "QB" || position === "TE"
@@ -74,7 +75,9 @@ export function buildMiddleRoundValuePocket(args: {
         quickScore,
         signal,
         currentPick: args.state.currentPick,
-        isMyTurn: args.state.picksUntilNextTurn === 0,
+        isMyTurn:
+          getSnakePickInfo(args.state.currentPick, args.state.league.teams).teamId ===
+          args.state.myTeamId,
         makeItBackProbability,
         tierSurvivalProbability,
         rosterFit,

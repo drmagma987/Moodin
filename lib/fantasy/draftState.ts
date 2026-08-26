@@ -2,6 +2,7 @@ import type {
   DraftCandidate,
   DraftPickEvent,
   DraftState,
+  DraftTurnContext,
   LeagueConfig,
   PlayerPosition,
   TeamRosterState,
@@ -52,14 +53,89 @@ export function calculatePicksUntilNextTurn(
   currentPick: number,
   teamCount: number,
   myTeamId: string,
+  occupiedOverallPicks: Iterable<number> = [],
 ) {
-  for (let nextPick = currentPick + 1; nextPick <= currentPick + teamCount * 2; nextPick += 1) {
-    if (getSnakePickInfo(nextPick, teamCount).teamId === myTeamId) {
-      return nextPick - currentPick - 1;
+  const occupied = new Set(occupiedOverallPicks);
+  for (let nextPick = currentPick + 1; nextPick <= currentPick + teamCount * 4; nextPick += 1) {
+    if (getSnakePickInfo(nextPick, teamCount).teamId === myTeamId && !occupied.has(nextPick)) {
+      let livePicks = 0;
+      for (let overallPick = currentPick + 1; overallPick < nextPick; overallPick += 1) {
+        if (!occupied.has(overallPick)) livePicks += 1;
+      }
+      return livePicks;
     }
   }
 
   return teamCount - 1;
+}
+
+export function getLivePicksBeforeNextTurn(state: DraftState) {
+  const occupied = new Set(state.drafted.map((pick) => pick.overallPick));
+  let nextPick: number | null = null;
+  for (
+    let overallPick = state.currentPick + 1;
+    overallPick <= state.currentPick + state.league.teams * 4;
+    overallPick += 1
+  ) {
+    if (
+      getSnakePickInfo(overallPick, state.league.teams).teamId === state.myTeamId &&
+      !occupied.has(overallPick)
+    ) {
+      nextPick = overallPick;
+      break;
+    }
+  }
+  if (nextPick === null) return { nextPick, overallPicks: [] as number[] };
+  const overallPicks = Array.from(
+    { length: Math.max(0, nextPick - state.currentPick - 1) },
+    (_, index) => state.currentPick + index + 1,
+  ).filter((overallPick) => !occupied.has(overallPick));
+  return { nextPick, overallPicks };
+}
+
+export function buildDraftTurnContext(state: DraftState): DraftTurnContext {
+  const { nextPick, overallPicks } = getLivePicksBeforeNextTurn(state);
+  const interveningTeamIds = overallPicks.map(
+    (overallPick) => getSnakePickInfo(overallPick, state.league.teams).teamId,
+  );
+  const distinctInterveningTeams = new Set(interveningTeamIds).size;
+  const sameTeamOwnsAllInterveningPicks =
+    interveningTeamIds.length > 0 && distinctInterveningTeams === 1;
+  const isManagerOnClock =
+    getSnakePickInfo(state.currentPick, state.league.teams).teamId === state.myTeamId;
+  const longGapThreshold = Math.max(8, state.league.teams + 2);
+  const mode: DraftTurnContext["mode"] =
+    isManagerOnClock && sameTeamOwnsAllInterveningPicks && overallPicks.length <= 2
+      ? "pair-building"
+      : isManagerOnClock && overallPicks.length >= longGapThreshold
+        ? "long-gap"
+        : "standard";
+  const label =
+    mode === "pair-building"
+      ? "Pair-building pick"
+      : mode === "long-gap"
+        ? "Last pick before the long gap"
+        : "Standard pick window";
+  const summary =
+    mode === "pair-building"
+      ? `${overallPicks.length} live selection${overallPicks.length === 1 ? "" : "s"} by one team stand between this pick and Pick ${nextPick ?? "—"}. Optimize the two-player package.`
+      : mode === "long-gap"
+        ? `${overallPicks.length} live selections across ${distinctInterveningTeams} teams stand between this pick and Pick ${nextPick ?? "—"}. Treat fragile tiers as now-or-never decisions.`
+        : nextPick
+          ? `${overallPicks.length} live selection${overallPicks.length === 1 ? "" : "s"} stand between the current pick and Pick ${nextPick}.`
+          : "No later personal pick is available in the active draft window.";
+
+  return {
+    mode,
+    currentPick: state.currentPick,
+    nextPick,
+    livePicksBeforeNextTurn: overallPicks,
+    interveningTeamIds,
+    distinctInterveningTeams,
+    sameTeamOwnsAllInterveningPicks,
+    label,
+    summary,
+  };
 }
 
 function nextOpenOverallPick(drafted: DraftPickEvent[], start: number) {
@@ -92,7 +168,6 @@ function buildInitialDraftState(
     drafted: [],
     teams: createTeams(league),
     focus: options?.focus ?? "balanced",
-    opponentProfiles: {},
   };
 }
 
@@ -226,7 +301,6 @@ export function seedDraftStateWithKnownPicks(
       positionCounts: { ...team.positionCounts },
       openSlots: [...team.openSlots],
     })),
-    opponentProfiles: { ...(state.opponentProfiles ?? {}) },
   };
 
   const orderedPicks = [...picks].sort((a, b) => a.overallPick - b.overallPick);
@@ -277,6 +351,7 @@ export function seedDraftStateWithKnownPicks(
       currentPick,
       nextState.league.teams,
       nextState.myTeamId,
+      nextState.drafted.map((pick) => pick.overallPick),
     ),
   };
 }
@@ -315,7 +390,12 @@ export function applyDraftPick(
   return {
     ...state,
     currentPick: nextPick,
-    picksUntilNextTurn: calculatePicksUntilNextTurn(nextPick, state.league.teams, state.myTeamId),
+    picksUntilNextTurn: calculatePicksUntilNextTurn(
+      nextPick,
+      state.league.teams,
+      state.myTeamId,
+      nextDrafted.map((pick) => pick.overallPick),
+    ),
     availablePlayerIds: state.availablePlayerIds.filter((id) => id !== playerId),
     drafted: nextDrafted,
     teams,
@@ -374,7 +454,12 @@ export function undoLastDraftPick(
   return {
     ...state,
     currentPick,
-    picksUntilNextTurn: calculatePicksUntilNextTurn(currentPick, state.league.teams, state.myTeamId),
+    picksUntilNextTurn: calculatePicksUntilNextTurn(
+      currentPick,
+      state.league.teams,
+      state.myTeamId,
+      rest.map((pick) => pick.overallPick),
+    ),
     availablePlayerIds: [lastPick.playerId, ...state.availablePlayerIds],
     drafted: rest,
     teams,

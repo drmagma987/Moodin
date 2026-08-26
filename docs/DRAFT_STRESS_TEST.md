@@ -40,6 +40,16 @@ The random stream is seeded by league, strategy, simulation index, and board siz
 - Direct ADP and rank-proxy market cost remain labeled separately. Proxy-based survival percentages are useful for relative testing, not exact room forecasts.
 - If a model discount is unlikely to survive until an acceptable price, the board reports no acquisition window instead of recommending an early compromise.
 
+## Production-policy counterfactual gate
+
+The broad strategy stress test remains a fast comparison against intentionally separate heuristic baselines. It is not allowed to stand in as proof that the live recommendation policy is sound.
+
+`npm run fantasy:counterfactual-audit` now runs five golden roster states: early QB2, early TE2, core starters before backup onesies, a late missing-QB deadline, and an exceptional falling flex-eligible player. It combines 10,000 penalty-free discovery rooms with exact-production continuation branches. Every state compares the live recommendation against constrained ADP and constrained model-board baselines, rejects explicitly dominated alternatives, and preserves the falling-elite exception.
+
+The first expanded run discovered two live-policy defects rather than confirming the model: Tyler Warren was preferred despite Brock Bowers already filling TE, and Khalil Shakir was preferred while QB remained empty in Round 11. The release-gated policy now applies the simulator-supported TE2 opportunity-cost penalty and round-sensitive roster-completion urgency. Those corrections remain subject to the falling-elite and baseline gates.
+
+Exact-production evaluation is currently an offline release gate because repeated full-board scarcity and wrap calculations are too expensive for the live browser. The interactive conditional panel remains labeled by the `quick-preview` evaluation mode; it reports regret but is not treated as equivalent to the release audit.
+
 ## Next Calibration
 
-When Yahoo opens, import the other teams' keepers and replace rank-proxy cost with stronger current ADP. Mock-draft results can then be compared with the simulated survival curves to tune opponent behavior without changing downstream draft logic.
+When Yahoo opens, import the other teams' keepers and replace rank-proxy cost with stronger current ADP. Mock-draft results can then be compared with the simulated survival curves to tune the neutral selection model without changing downstream draft logic.

@@ -1,6 +1,5 @@
 import { createInitialDraftState, seedDraftStateWithKnownPicks } from "@/lib/fantasy/draftState";
 import type { DraftCandidate, DraftState, LeagueConfig } from "@/lib/fantasy/types";
-import { buildOpponentDraftProfiles } from "@/lib/fantasy/opponentProfiles";
 import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
 
 export type LeagueSetupInput = {
@@ -9,7 +8,6 @@ export type LeagueSetupInput = {
   myDraftSlot: string;
   draftOrder: string;
   keepers: string;
-  draftHistory?: string;
 };
 
 export type LeagueSetupResolution = {
@@ -124,20 +122,5 @@ export function resolveLeagueSetup(
 
   const initial = createInitialDraftState(candidates, { league, myTeamId, currentPick: 1, focus: "structural" });
   const state = seedDraftStateWithKnownPicks(initial, candidates, keeperPicks, { currentPick: 1 });
-  if (input.draftHistory?.trim()) {
-    try {
-      const rows = JSON.parse(input.draftHistory) as Array<{ teamId?: string; teamName?: string; overallPick: number; playerName: string }>;
-      const history = rows.map((row) => ({
-        teamId: row.teamId ?? teamIdByName.get(normalize(row.teamName ?? "")) ?? "",
-        overallPick: row.overallPick,
-        playerName: row.playerName,
-      })).filter((row) => row.teamId);
-      state.opponentProfiles = buildOpponentDraftProfiles(history, candidates);
-      const learned = Object.values(state.opponentProfiles).filter((profile) => profile.source === "history").length;
-      receipts.push(`${learned} opponent profiles learned; all other teams use the neutral 40/30/30 fallback.`);
-    } catch {
-      return { ready: false, teamNames, myTeamId, keeperCount: keeperPicks.length, state: null, receipts, errors: ["Draft history must be a JSON array of teamName/teamId, overallPick, and playerName."] };
-    }
-  }
   return { ready: true, teamNames, myTeamId, keeperCount: keeperPicks.length, state, receipts, errors };
 }
