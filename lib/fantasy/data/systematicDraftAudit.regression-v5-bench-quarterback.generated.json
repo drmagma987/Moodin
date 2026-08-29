@@ -1,0 +1,211 @@
+{
+  "generatedAt": "2026-08-29T04:25:17.277Z",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "evaluationMode": "exact-production",
+  "continuationPolicyMode": "production",
+  "policyCertificationVersion": "2026-08-28-v5",
+  "productionWrapSimulations": 16,
+  "pairedSeedPolicy": "identical state/pick/simulation seed across every forced choice",
+  "screenSamples": 8,
+  "closeOrDisputedSamples": 32,
+  "forcedCandidateLimit": 5,
+  "stateCount": 1,
+  "expectedStateCount": 1,
+  "complete": true,
+  "phaseCounts": {
+    "early": 0,
+    "middle": 1,
+    "late": 0,
+    "endgame": 0
+  },
+  "opponentBehaviors": [
+    "runs"
+  ],
+  "escalatedCloseOrDisputed": 1,
+  "pendingCloseEscalations": 0,
+  "effectivelyTied": 1,
+  "suspiciousCount": 0,
+  "elapsedMs": 260001,
+  "allPassed": true,
+  "states": [
+    {
+      "id": "replay:runs-1:72",
+      "seed": "certification:runs:1",
+      "roomType": "runs",
+      "phase": "middle",
+      "pick": 72,
+      "round": 8,
+      "rosterBefore": {
+        "counts": {
+          "RB": 3,
+          "WR": 2,
+          "TE": 1,
+          "QB": 1
+        },
+        "openRequiredSlots": [
+          "WR",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "17240",
+          "25395",
+          "26434",
+          "23046",
+          "12119"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "22985",
+        "player": "Wan'Dale Robinson",
+        "position": "WR",
+        "winRate": 0.07,
+        "expectedStarterValue": 2371.5,
+        "floorStarterValue": 1819.7,
+        "ceilingStarterValue": 3009.6,
+        "medianRegret": 8.2,
+        "downsideRegret": 14.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 72,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            },
+            {
+              "overallPick": 89,
+              "playerId": "18598",
+              "playerName": "Jakobi Meyers",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.94
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "27016",
+        "player": "Luther Burden III",
+        "position": "WR",
+        "winRate": 0.18,
+        "expectedStarterValue": 2372.2,
+        "floorStarterValue": 1838.2,
+        "ceilingStarterValue": 3002.7,
+        "medianRegret": 9,
+        "downsideRegret": 29.2,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 72,
+              "playerId": "27016",
+              "playerName": "Luther Burden III",
+              "position": "WR"
+            },
+            {
+              "overallPick": 89,
+              "playerId": "18598",
+              "playerName": "Jakobi Meyers",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.81
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "23106",
+        "player": "Parker Washington",
+        "position": "WR",
+        "winRate": 0.67,
+        "expectedStarterValue": 2378.2,
+        "floorStarterValue": 1823.5,
+        "ceilingStarterValue": 3019.7,
+        "medianRegret": 0,
+        "downsideRegret": 11.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 72,
+              "playerId": "23106",
+              "playerName": "Parker Washington",
+              "position": "WR"
+            },
+            {
+              "overallPick": 89,
+              "playerId": "18598",
+              "playerName": "Jakobi Meyers",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.81
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "17253",
+          "player": "Courtland Sutton",
+          "position": "WR",
+          "winRate": 0.05,
+          "expectedStarterValue": 2367.2,
+          "floorStarterValue": 1815,
+          "ceilingStarterValue": 3005.8,
+          "medianRegret": 12,
+          "downsideRegret": 17.5,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 72,
+                "playerId": "17253",
+                "playerName": "Courtland Sutton",
+                "position": "WR"
+              },
+              {
+                "overallPick": 89,
+                "playerId": "18598",
+                "playerName": "Jakobi Meyers",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.78
+          }
+        },
+        {
+          "playerId": "23000",
+          "player": "Brian Thomas Jr.",
+          "position": "WR",
+          "winRate": 0.03,
+          "expectedStarterValue": 2369.7,
+          "floorStarterValue": 1817.7,
+          "ceilingStarterValue": 3008.1,
+          "medianRegret": 10.1,
+          "downsideRegret": 18,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 72,
+                "playerId": "23000",
+                "playerName": "Brian Thomas Jr.",
+                "position": "WR"
+              },
+              {
+                "overallPick": 89,
+                "playerId": "18598",
+                "playerName": "Jakobi Meyers",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.91
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 8.2,
+      "pass": true
+    }
+  ]
+}

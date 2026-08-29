@@ -1,0 +1,1551 @@
+{
+  "generatedAt": "2026-08-29T12:44:54.799Z",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "evaluationMode": "exact-production",
+  "continuationPolicyMode": "production",
+  "policyCertificationVersion": "2026-08-28-v5",
+  "productionWrapSimulations": 16,
+  "pairedSeedPolicy": "identical state/pick/simulation seed across every forced choice",
+  "screenSamples": 8,
+  "closeOrDisputedSamples": 32,
+  "forcedCandidateLimit": 5,
+  "stateCount": 8,
+  "expectedStateCount": 8,
+  "complete": true,
+  "phaseCounts": {
+    "early": 0,
+    "middle": 8,
+    "late": 0,
+    "endgame": 0
+  },
+  "opponentBehaviors": [
+    "home-reach",
+    "chaotic",
+    "mixed",
+    "need-aware",
+    "need-late",
+    "adp",
+    "early-qb",
+    "late-qb"
+  ],
+  "escalatedCloseOrDisputed": 8,
+  "pendingCloseEscalations": 0,
+  "effectivelyTied": 7,
+  "suspiciousCount": 0,
+  "elapsedMs": 16941663,
+  "allPassed": true,
+  "states": [
+    {
+      "id": "middle:home-reach:2",
+      "seed": "systematic:home-reach:2",
+      "roomType": "home-reach",
+      "phase": "middle",
+      "pick": 69,
+      "round": 7,
+      "rosterBefore": {
+        "counts": {
+          "RB": 3,
+          "WR": 2,
+          "TE": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "25989",
+          "25395",
+          "19790",
+          "26434"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "25411",
+        "player": "Rome Odunze",
+        "position": "WR",
+        "winRate": 0.58,
+        "expectedStarterValue": 2338.9,
+        "floorStarterValue": 1779.3,
+        "ceilingStarterValue": 2977.3,
+        "medianRegret": 0,
+        "downsideRegret": 36.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "25411",
+              "playerName": "Rome Odunze",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "19780",
+              "playerName": "Trevor Lawrence",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.97
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "25411",
+        "player": "Rome Odunze",
+        "position": "WR",
+        "winRate": 0.58,
+        "expectedStarterValue": 2338.9,
+        "floorStarterValue": 1779.3,
+        "ceilingStarterValue": 2977.3,
+        "medianRegret": 0,
+        "downsideRegret": 36.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "25411",
+              "playerName": "Rome Odunze",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "19780",
+              "playerName": "Trevor Lawrence",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.97
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25411",
+        "player": "Rome Odunze",
+        "position": "WR",
+        "winRate": 0.58,
+        "expectedStarterValue": 2338.9,
+        "floorStarterValue": 1779.3,
+        "ceilingStarterValue": 2977.3,
+        "medianRegret": 0,
+        "downsideRegret": 36.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "25411",
+              "playerName": "Rome Odunze",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "19780",
+              "playerName": "Trevor Lawrence",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.97
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "19780",
+          "player": "Trevor Lawrence",
+          "position": "QB",
+          "winRate": 0.33,
+          "expectedStarterValue": 2319.8,
+          "floorStarterValue": 1744,
+          "ceilingStarterValue": 2976.7,
+          "medianRegret": 0,
+          "downsideRegret": 102.3,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "19780",
+                "playerName": "Trevor Lawrence",
+                "position": "QB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "25411",
+                "playerName": "Rome Odunze",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.44
+          }
+        },
+        {
+          "playerId": "19797",
+          "player": "Brock Purdy",
+          "position": "QB",
+          "winRate": 0.09,
+          "expectedStarterValue": 2312.6,
+          "floorStarterValue": 1740,
+          "ceilingStarterValue": 2965.7,
+          "medianRegret": 10.3,
+          "downsideRegret": 135.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "19797",
+                "playerName": "Brock Purdy",
+                "position": "QB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "25411",
+                "playerName": "Rome Odunze",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.44
+          }
+        },
+        {
+          "playerId": "23160",
+          "player": "Jaxson Dart",
+          "position": "QB",
+          "winRate": 0,
+          "expectedStarterValue": 2300.9,
+          "floorStarterValue": 1720.2,
+          "ceilingStarterValue": 2963.4,
+          "medianRegret": 21.9,
+          "downsideRegret": 103.6,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "23160",
+                "playerName": "Jaxson Dart",
+                "position": "QB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "25411",
+                "playerName": "Rome Odunze",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.44
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "middle:chaotic:1",
+      "seed": "systematic:chaotic:1",
+      "roomType": "chaotic",
+      "phase": "middle",
+      "pick": 69,
+      "round": 7,
+      "rosterBefore": {
+        "counts": {
+          "RB": 3,
+          "WR": 2,
+          "QB": 1
+        },
+        "openRequiredSlots": [
+          "WR",
+          "TE",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "17240",
+          "23163",
+          "22982",
+          "23046"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "18466",
+        "player": "Terry McLaurin",
+        "position": "WR",
+        "winRate": 0.28,
+        "expectedStarterValue": 2395.3,
+        "floorStarterValue": 1865.6,
+        "ceilingStarterValue": 3016.4,
+        "medianRegret": 1.4,
+        "downsideRegret": 34.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "18466",
+              "playerName": "Terry McLaurin",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "25391",
+              "playerName": "Quinshon Judkins",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "27166",
+        "player": "Cam Skattebo",
+        "position": "RB",
+        "winRate": 0.08,
+        "expectedStarterValue": 2373.4,
+        "floorStarterValue": 1814.6,
+        "ceilingStarterValue": 3033.6,
+        "medianRegret": 19.8,
+        "downsideRegret": 89.5,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "27166",
+              "playerName": "Cam Skattebo",
+              "position": "RB"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "22718",
+              "playerName": "Jake Ferguson",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.47
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "18466",
+        "player": "Terry McLaurin",
+        "position": "WR",
+        "winRate": 0.28,
+        "expectedStarterValue": 2395.3,
+        "floorStarterValue": 1865.6,
+        "ceilingStarterValue": 3016.4,
+        "medianRegret": 1.4,
+        "downsideRegret": 34.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "18466",
+              "playerName": "Terry McLaurin",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "25391",
+              "playerName": "Quinshon Judkins",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "22985",
+          "player": "Wan'Dale Robinson",
+          "position": "WR",
+          "winRate": 0.36,
+          "expectedStarterValue": 2378.6,
+          "floorStarterValue": 1819.4,
+          "ceilingStarterValue": 3033.6,
+          "medianRegret": 12.5,
+          "downsideRegret": 47.7,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "22985",
+                "playerName": "Wan'Dale Robinson",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "25391",
+                "playerName": "Quinshon Judkins",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.59
+          }
+        },
+        {
+          "playerId": "25391",
+          "player": "Quinshon Judkins",
+          "position": "RB",
+          "winRate": 0.22,
+          "expectedStarterValue": 2378.6,
+          "floorStarterValue": 1819.4,
+          "ceilingStarterValue": 3033.6,
+          "medianRegret": 11.3,
+          "downsideRegret": 84.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "25391",
+                "playerName": "Quinshon Judkins",
+                "position": "RB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "18466",
+                "playerName": "Terry McLaurin",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.38
+          }
+        },
+        {
+          "playerId": "17253",
+          "player": "Courtland Sutton",
+          "position": "WR",
+          "winRate": 0.06,
+          "expectedStarterValue": 2374.3,
+          "floorStarterValue": 1814.7,
+          "ceilingStarterValue": 3029.8,
+          "medianRegret": 24.7,
+          "downsideRegret": 93.2,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "17253",
+                "playerName": "Courtland Sutton",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "25391",
+                "playerName": "Quinshon Judkins",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.59
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": -9.9,
+      "pass": true
+    },
+    {
+      "id": "middle:mixed:2",
+      "seed": "systematic:mixed:2",
+      "roomType": "mixed",
+      "phase": "middle",
+      "pick": 69,
+      "round": 7,
+      "rosterBefore": {
+        "counts": {
+          "RB": 2,
+          "WR": 3,
+          "TE": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "19222",
+          "15514",
+          "12123",
+          "26434"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "19780",
+        "player": "Trevor Lawrence",
+        "position": "QB",
+        "winRate": 0.35,
+        "expectedStarterValue": 2291.2,
+        "floorStarterValue": 1726,
+        "ceilingStarterValue": 2963.8,
+        "medianRegret": 14.1,
+        "downsideRegret": 104.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "19780",
+              "playerName": "Trevor Lawrence",
+              "position": "QB"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.69
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23886",
+        "player": "Christian Watson",
+        "position": "WR",
+        "winRate": 0.04,
+        "expectedStarterValue": 2291,
+        "floorStarterValue": 1725.9,
+        "ceilingStarterValue": 2963.8,
+        "medianRegret": 34.5,
+        "downsideRegret": 73.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "23886",
+              "playerName": "Christian Watson",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "19780",
+              "playerName": "Trevor Lawrence",
+              "position": "QB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "23106",
+        "player": "Parker Washington",
+        "position": "WR",
+        "winRate": 0.57,
+        "expectedStarterValue": 2316.4,
+        "floorStarterValue": 1736.4,
+        "ceilingStarterValue": 2977.7,
+        "medianRegret": 0,
+        "downsideRegret": 73.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "23106",
+              "playerName": "Parker Washington",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "19780",
+              "playerName": "Trevor Lawrence",
+              "position": "QB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "23084",
+          "player": "Caleb Williams",
+          "position": "QB",
+          "winRate": 0.03,
+          "expectedStarterValue": 2266.5,
+          "floorStarterValue": 1693.8,
+          "ceilingStarterValue": 2947.9,
+          "medianRegret": 47.9,
+          "downsideRegret": 126,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "23084",
+                "playerName": "Caleb Williams",
+                "position": "QB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "18705",
+                "playerName": "Tony Pollard",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.81
+          }
+        },
+        {
+          "playerId": "19797",
+          "player": "Brock Purdy",
+          "position": "QB",
+          "winRate": 0,
+          "expectedStarterValue": 2283.9,
+          "floorStarterValue": 1722,
+          "ceilingStarterValue": 2952.8,
+          "medianRegret": 42.3,
+          "downsideRegret": 114.3,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "19797",
+                "playerName": "Brock Purdy",
+                "position": "QB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "18705",
+                "playerName": "Tony Pollard",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.88
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 14.1,
+      "pass": true
+    },
+    {
+      "id": "middle:need-aware:1",
+      "seed": "systematic:need-aware:1",
+      "roomType": "need-aware",
+      "phase": "middle",
+      "pick": 69,
+      "round": 7,
+      "rosterBefore": {
+        "counts": {
+          "RB": 2,
+          "WR": 2,
+          "TE": 1,
+          "QB": 1
+        },
+        "openRequiredSlots": [
+          "WR",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "17240",
+          "22936",
+          "25411",
+          "17233"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "22985",
+        "player": "Wan'Dale Robinson",
+        "position": "WR",
+        "winRate": 0.09,
+        "expectedStarterValue": 2295.4,
+        "floorStarterValue": 1737.1,
+        "ceilingStarterValue": 2960.1,
+        "medianRegret": 6.4,
+        "downsideRegret": 32.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.84
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23106",
+        "player": "Parker Washington",
+        "position": "WR",
+        "winRate": 0.88,
+        "expectedStarterValue": 2303.8,
+        "floorStarterValue": 1740.8,
+        "ceilingStarterValue": 2970.2,
+        "medianRegret": 0,
+        "downsideRegret": 11.9,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "23106",
+              "playerName": "Parker Washington",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "23106",
+        "player": "Parker Washington",
+        "position": "WR",
+        "winRate": 0.88,
+        "expectedStarterValue": 2303.8,
+        "floorStarterValue": 1740.8,
+        "ceilingStarterValue": 2970.2,
+        "medianRegret": 0,
+        "downsideRegret": 11.9,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "23106",
+              "playerName": "Parker Washington",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "18705",
+          "player": "Tony Pollard",
+          "position": "RB",
+          "winRate": 0.03,
+          "expectedStarterValue": 2295.4,
+          "floorStarterValue": 1737.1,
+          "ceilingStarterValue": 2960.1,
+          "medianRegret": 7.2,
+          "downsideRegret": 74.1,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "18705",
+                "playerName": "Tony Pollard",
+                "position": "RB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "22985",
+                "playerName": "Wan'Dale Robinson",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.81
+          }
+        },
+        {
+          "playerId": "18598",
+          "player": "Jakobi Meyers",
+          "position": "WR",
+          "winRate": 0,
+          "expectedStarterValue": 2286.7,
+          "floorStarterValue": 1722,
+          "ceilingStarterValue": 2958.8,
+          "medianRegret": 16.1,
+          "downsideRegret": 37.9,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "18598",
+                "playerName": "Jakobi Meyers",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "18705",
+                "playerName": "Tony Pollard",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.81
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 6.4,
+      "pass": true
+    },
+    {
+      "id": "middle:need-late:2",
+      "seed": "systematic:need-late:2",
+      "roomType": "need-late",
+      "phase": "middle",
+      "pick": 69,
+      "round": 7,
+      "rosterBefore": {
+        "counts": {
+          "RB": 2,
+          "WR": 2,
+          "TE": 1,
+          "QB": 1
+        },
+        "openRequiredSlots": [
+          "WR",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "22982",
+          "23062",
+          "26434",
+          "17233"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "22985",
+        "player": "Wan'Dale Robinson",
+        "position": "WR",
+        "winRate": 0.09,
+        "expectedStarterValue": 2243.3,
+        "floorStarterValue": 1672.8,
+        "ceilingStarterValue": 2920.6,
+        "medianRegret": 2.3,
+        "downsideRegret": 15.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.63
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "22726",
+        "player": "Rhamondre Stevenson",
+        "position": "RB",
+        "winRate": 0.05,
+        "expectedStarterValue": 2229.6,
+        "floorStarterValue": 1661.8,
+        "ceilingStarterValue": 2920.6,
+        "medianRegret": 22.7,
+        "downsideRegret": 104.5,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "22726",
+              "playerName": "Rhamondre Stevenson",
+              "position": "RB"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.66
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "18705",
+        "player": "Tony Pollard",
+        "position": "RB",
+        "winRate": 0.05,
+        "expectedStarterValue": 2243.3,
+        "floorStarterValue": 1672.8,
+        "ceilingStarterValue": 2920.6,
+        "medianRegret": 10,
+        "downsideRegret": 85.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.66
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "25333",
+          "player": "Michael Wilson",
+          "position": "WR",
+          "winRate": 0.44,
+          "expectedStarterValue": 2249.6,
+          "floorStarterValue": 1663.1,
+          "ceilingStarterValue": 2920.6,
+          "medianRegret": 0,
+          "downsideRegret": 16.7,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "25333",
+                "playerName": "Michael Wilson",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "22985",
+                "playerName": "Wan'Dale Robinson",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.66
+          }
+        },
+        {
+          "playerId": "19647",
+          "player": "Rico Dowdle",
+          "position": "RB",
+          "winRate": 0.37,
+          "expectedStarterValue": 2245,
+          "floorStarterValue": 1665.6,
+          "ceilingStarterValue": 2920.6,
+          "medianRegret": 0,
+          "downsideRegret": 9.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "19647",
+                "playerName": "Rico Dowdle",
+                "position": "RB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "22985",
+                "playerName": "Wan'Dale Robinson",
+                "position": "WR"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 2.3,
+      "pass": true
+    },
+    {
+      "id": "middle:adp:1",
+      "seed": "systematic:adp:1",
+      "roomType": "adp",
+      "phase": "middle",
+      "pick": 69,
+      "round": 7,
+      "rosterBefore": {
+        "counts": {
+          "RB": 2,
+          "WR": 2,
+          "TE": 1,
+          "QB": 1
+        },
+        "openRequiredSlots": [
+          "WR",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "22936",
+          "25395",
+          "12119",
+          "17233"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "23106",
+        "player": "Parker Washington",
+        "position": "WR",
+        "winRate": 0.63,
+        "expectedStarterValue": 2257.8,
+        "floorStarterValue": 1692.2,
+        "ceilingStarterValue": 2930.9,
+        "medianRegret": 0,
+        "downsideRegret": 55,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "23106",
+              "playerName": "Parker Washington",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.84
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23886",
+        "player": "Christian Watson",
+        "position": "WR",
+        "winRate": 0.03,
+        "expectedStarterValue": 2232.5,
+        "floorStarterValue": 1681.7,
+        "ceilingStarterValue": 2888.5,
+        "medianRegret": 26.2,
+        "downsideRegret": 79.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "23886",
+              "playerName": "Christian Watson",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.78
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "23106",
+        "player": "Parker Washington",
+        "position": "WR",
+        "winRate": 0.63,
+        "expectedStarterValue": 2257.8,
+        "floorStarterValue": 1692.2,
+        "ceilingStarterValue": 2930.9,
+        "medianRegret": 0,
+        "downsideRegret": 55,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "23106",
+              "playerName": "Parker Washington",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.84
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "25333",
+          "player": "Michael Wilson",
+          "position": "WR",
+          "winRate": 0.22,
+          "expectedStarterValue": 2238.9,
+          "floorStarterValue": 1672.1,
+          "ceilingStarterValue": 2913.3,
+          "medianRegret": 18.6,
+          "downsideRegret": 33.8,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "25333",
+                "playerName": "Michael Wilson",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "18705",
+                "playerName": "Tony Pollard",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.53
+          }
+        },
+        {
+          "playerId": "18598",
+          "player": "Jakobi Meyers",
+          "position": "WR",
+          "winRate": 0.09,
+          "expectedStarterValue": 2242.4,
+          "floorStarterValue": 1673.4,
+          "ceilingStarterValue": 2919.5,
+          "medianRegret": 17.4,
+          "downsideRegret": 44.7,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "18598",
+                "playerName": "Jakobi Meyers",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "18705",
+                "playerName": "Tony Pollard",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.88
+          }
+        },
+        {
+          "playerId": "22985",
+          "player": "Wan'Dale Robinson",
+          "position": "WR",
+          "winRate": 0.03,
+          "expectedStarterValue": 2251.1,
+          "floorStarterValue": 1688.4,
+          "ceilingStarterValue": 2920.8,
+          "medianRegret": 7.4,
+          "downsideRegret": 56.5,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "22985",
+                "playerName": "Wan'Dale Robinson",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "18705",
+                "playerName": "Tony Pollard",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.94
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": -7.4,
+      "pass": true
+    },
+    {
+      "id": "middle:early-qb:2",
+      "seed": "systematic:early-qb:2",
+      "roomType": "early-qb",
+      "phase": "middle",
+      "pick": 69,
+      "round": 7,
+      "rosterBefore": {
+        "counts": {
+          "RB": 3,
+          "WR": 2,
+          "TE": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "22936",
+          "25395",
+          "19790",
+          "19210"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "19797",
+        "player": "Brock Purdy",
+        "position": "QB",
+        "winRate": 0.66,
+        "expectedStarterValue": 2275.8,
+        "floorStarterValue": 1723.6,
+        "ceilingStarterValue": 2906.6,
+        "medianRegret": 0,
+        "downsideRegret": 45.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "19797",
+              "playerName": "Brock Purdy",
+              "position": "QB"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.88
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "18239",
+        "player": "David Montgomery",
+        "position": "RB",
+        "winRate": 0,
+        "expectedStarterValue": 2209.4,
+        "floorStarterValue": 1696,
+        "ceilingStarterValue": 2859,
+        "medianRegret": 65.6,
+        "downsideRegret": 92.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "18239",
+              "playerName": "David Montgomery",
+              "position": "RB"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "23106",
+        "player": "Parker Washington",
+        "position": "WR",
+        "winRate": 0.22,
+        "expectedStarterValue": 2210.6,
+        "floorStarterValue": 1687.6,
+        "ceilingStarterValue": 2869.2,
+        "medianRegret": 55.2,
+        "downsideRegret": 145.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "23106",
+              "playerName": "Parker Washington",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "18705",
+              "playerName": "Tony Pollard",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.78
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "23160",
+          "player": "Jaxson Dart",
+          "position": "QB",
+          "winRate": 0.13,
+          "expectedStarterValue": 2264.1,
+          "floorStarterValue": 1703.8,
+          "ceilingStarterValue": 2904.3,
+          "medianRegret": 18.6,
+          "downsideRegret": 85.9,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "23160",
+                "playerName": "Jaxson Dart",
+                "position": "QB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "22985",
+                "playerName": "Wan'Dale Robinson",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.69
+          }
+        },
+        {
+          "playerId": "23084",
+          "player": "Caleb Williams",
+          "position": "QB",
+          "winRate": 0,
+          "expectedStarterValue": 2258.4,
+          "floorStarterValue": 1695.4,
+          "ceilingStarterValue": 2901.7,
+          "medianRegret": 21.5,
+          "downsideRegret": 55.1,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "23084",
+                "playerName": "Caleb Williams",
+                "position": "QB"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "22985",
+                "playerName": "Wan'Dale Robinson",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.91
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "separated-at-current-sample",
+      "classification": "strongly-supported",
+      "regretGapVsBestAlternative": -18.6,
+      "pass": true
+    },
+    {
+      "id": "middle:late-qb:1",
+      "seed": "systematic:late-qb:1",
+      "roomType": "late-qb",
+      "phase": "middle",
+      "pick": 69,
+      "round": 7,
+      "rosterBefore": {
+        "counts": {
+          "RB": 2,
+          "WR": 2,
+          "TE": 1,
+          "QB": 1
+        },
+        "openRequiredSlots": [
+          "WR",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "22936",
+          "23021",
+          "17298",
+          "25411"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "22985",
+        "player": "Wan'Dale Robinson",
+        "position": "WR",
+        "winRate": 0.26,
+        "expectedStarterValue": 2286.1,
+        "floorStarterValue": 1727.4,
+        "ceilingStarterValue": 2949.4,
+        "medianRegret": 0,
+        "downsideRegret": 15.2,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "19647",
+              "playerName": "Rico Dowdle",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.94
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "27329",
+        "player": "Jadarian Price",
+        "position": "RB",
+        "winRate": 0.08,
+        "expectedStarterValue": 2275.6,
+        "floorStarterValue": 1726.7,
+        "ceilingStarterValue": 2949.4,
+        "medianRegret": 17.9,
+        "downsideRegret": 89.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "27329",
+              "playerName": "Jadarian Price",
+              "position": "RB"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.84
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "19647",
+        "player": "Rico Dowdle",
+        "position": "RB",
+        "winRate": 0.18,
+        "expectedStarterValue": 2286.1,
+        "floorStarterValue": 1727.4,
+        "ceilingStarterValue": 2949.4,
+        "medianRegret": 1.9,
+        "downsideRegret": 17.2,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 69,
+              "playerId": "19647",
+              "playerName": "Rico Dowdle",
+              "position": "RB"
+            },
+            {
+              "overallPick": 72,
+              "playerId": "22985",
+              "playerName": "Wan'Dale Robinson",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.97
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "23000",
+          "player": "Brian Thomas Jr.",
+          "position": "WR",
+          "winRate": 0.28,
+          "expectedStarterValue": 2284.3,
+          "floorStarterValue": 1725.4,
+          "ceilingStarterValue": 2948,
+          "medianRegret": 1.8,
+          "downsideRegret": 15.5,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "23000",
+                "playerName": "Brian Thomas Jr.",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "19647",
+                "playerName": "Rico Dowdle",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.72
+          }
+        },
+        {
+          "playerId": "18598",
+          "player": "Jakobi Meyers",
+          "position": "WR",
+          "winRate": 0.2,
+          "expectedStarterValue": 2277.5,
+          "floorStarterValue": 1712.4,
+          "ceilingStarterValue": 2948.2,
+          "medianRegret": 9.1,
+          "downsideRegret": 24,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 69,
+                "playerId": "18598",
+                "playerName": "Jakobi Meyers",
+                "position": "WR"
+              },
+              {
+                "overallPick": 72,
+                "playerId": "19647",
+                "playerName": "Rico Dowdle",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.69
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": -1.8,
+      "pass": true
+    }
+  ]
+}

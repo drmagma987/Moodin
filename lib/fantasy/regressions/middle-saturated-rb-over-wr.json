@@ -1,0 +1,28 @@
+{
+  "id": "middle-saturated-rb-over-wr",
+  "status": "fixed-and-verified",
+  "seed": "systematic:home-reach:2",
+  "currentPick": 69,
+  "rosterCounts": { "RB": 4, "WR": 2 },
+  "openRequiredSlots": ["QB", "WR", "TE", "K"],
+  "failure": "Production recommended a fifth RB, Tony Pollard, while WR3 was empty and all RB/FLEX lineup paths were already occupied.",
+  "preFixExactEvidence": {
+    "pairedContinuations": 32,
+    "productionWinRate": 0,
+    "productionMedianRegret": 81,
+    "productionDownsideRegret": 126.7,
+    "constrainedBaseline": "Luther Burden III",
+    "baselineWinRate": 1
+  },
+  "rootCause": "RB/WR construction scoring did not price the marginal-lineup cost of a bench-only player while another flex-eligible exact starter remained empty.",
+  "correction": "A lineup-derived saturation penalty now applies symmetrically after a position consumes all of its exact and flex paths. Construction ablation removes the penalty, and overwhelming value can still overcome it.",
+  "postFixSerializedStateEvidence": {
+    "pairedContinuations": 32,
+    "production": "Trevor Lawrence",
+    "productionWinRate": 0.53,
+    "productionMedianRegret": 0,
+    "productionDownsideRegret": 93.7,
+    "baselineMedianRegret": 6.4,
+    "classification": "effectively-tied"
+  }
+}

@@ -3,6 +3,8 @@ import snapshot from "../lib/fantasy/data/warRoomDataset.generated.json" with { 
 import {
   buildRedraftBoard,
   buildWrapSimulationSnapshot,
+  DRAFT_POLICY_CERTIFICATION_VERSION,
+  PRODUCTION_WRAP_SIMULATIONS,
   rankDraftCandidates,
 } from "../lib/fantasy/draft.ts";
 import {
@@ -15,7 +17,10 @@ import {
   leagueSourceOfTruthFingerprint,
 } from "../lib/fantasy/leagueSourceOfTruth.ts";
 
-const OUTPUT = new URL("../lib/fantasy/data/draftPolicyCertification.generated.json", import.meta.url);
+const OUTPUT = new URL(
+  process.env.FANTASY_CERT_OUTPUT ?? "../lib/fantasy/data/draftPolicyCertification.generated.json",
+  import.meta.url,
+);
 const ALL_ROOM_TYPES = [
   "adp", "early-qb", "late-qb", "early-te", "rb-heavy", "wr-heavy", "runs",
   "model", "home-reach", "chaotic", "mixed", "need-aware", "need-late",
@@ -113,12 +118,12 @@ function runRoom(roomType, run) {
     if (pickInfo.teamId === state.myTeamId) {
       // Full-draft certification checks policy/state integration. The separate exact
       // counterfactual audit owns high-sample continuation evidence.
-      const wrap = buildWrapSimulationSnapshot(state, candidates, { simulations: 2 });
-      const live = rankDraftCandidates(state, candidates, wrap);
+      const wrap = buildWrapSimulationSnapshot(state, candidates);
+      const live = rankDraftCandidates(state, candidates, wrap, { baseBoard: board });
       // One serialized-state parity probe per complete room is sufficient because
       // both surfaces import this same pure engine; unit tests cover later states.
       if (decisions.length === 0) {
-        const rehearsal = rankDraftCandidates(structuredClone(state), candidates, wrap);
+        const rehearsal = rankDraftCandidates(structuredClone(state), candidates, wrap, { baseBoard: board });
         if (live[0]?.playerId !== rehearsal[0]?.playerId) failures.push(`parity mismatch at Pick ${state.currentPick}`);
       }
       selected = live[0] ? candidateById.get(live[0].playerId) : null;
@@ -139,13 +144,16 @@ function runRoom(roomType, run) {
       const openCore = before.openSlots.some((slot) => ["RB", "WR", "W/R/T"].includes(slot));
       const duplicate = before.counts[position] ?? 0;
       let classification = scoreGap <= 2 ? "defensible/close" : "strongly-supported";
-      if ((position === "K" || position === "DST") && pickInfo.round < 13) classification = "clearly-wrong";
+      if ((position === "K" || position === "DST") && pickInfo.round < 14) classification = "clearly-wrong";
       if ((position === "QB" || position === "TE") && duplicate >= 1 && openCore && pickInfo.round < 11) classification = "suspicious";
       if (classification === "clearly-wrong") failures.push(`implausible ${position} at Pick ${state.currentPick}`);
       decisions.push({
         pick: state.currentPick, round: pickInfo.round, rosterBefore: before, selectedPlayerId: selected.player.id,
         selectedPlayer: selected.player.fullName, selectedPosition: position, topAlternatives: top.slice(1),
         chanceAvailableNextPick: top[0]?.makeItBack ?? null, expectedAdvantage: Number(scoreGap.toFixed(2)), classification,
+        ...(classification === "suspicious" || classification === "clearly-wrong"
+          ? { serializedState: structuredClone(state) }
+          : {}),
       });
       if (live[0]?.playerId !== top[0]?.playerId) failures.push(`board-order mismatch at Pick ${state.currentPick}`);
     } else {
@@ -179,6 +187,8 @@ const suspiciousStates = drafts.flatMap((draft) => draft.suspicious.map((decisio
 const report = {
   generatedAt: new Date().toISOString(), leagueConfigVersion: leagueSourceOfTruth.version,
   leagueConfigFingerprint: leagueSourceOfTruthFingerprint, engine: "rankDraftCandidates",
+  policyCertificationVersion: DRAFT_POLICY_CERTIFICATION_VERSION,
+  productionWrapSimulations: PRODUCTION_WRAP_SIMULATIONS,
   opponentBehaviors: ROOM_TYPES, completedDrafts: drafts.length,
   managerDecisions: drafts.reduce((sum, draft) => sum + draft.decisions.length, 0),
   serializedParityChecks: drafts.length,

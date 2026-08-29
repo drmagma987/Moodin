@@ -1,0 +1,1623 @@
+{
+  "generatedAt": "2026-08-29T12:44:54.757Z",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "evaluationMode": "exact-production",
+  "continuationPolicyMode": "production",
+  "policyCertificationVersion": "2026-08-28-v5",
+  "productionWrapSimulations": 16,
+  "pairedSeedPolicy": "identical state/pick/simulation seed across every forced choice",
+  "screenSamples": 8,
+  "closeOrDisputedSamples": 32,
+  "forcedCandidateLimit": 5,
+  "stateCount": 8,
+  "expectedStateCount": 8,
+  "complete": true,
+  "phaseCounts": {
+    "early": 0,
+    "middle": 0,
+    "late": 0,
+    "endgame": 8
+  },
+  "opponentBehaviors": [
+    "need-aware",
+    "need-late",
+    "adp",
+    "early-qb",
+    "late-qb",
+    "early-te",
+    "rb-heavy",
+    "wr-heavy"
+  ],
+  "escalatedCloseOrDisputed": 8,
+  "pendingCloseEscalations": 0,
+  "effectivelyTied": 8,
+  "suspiciousCount": 0,
+  "elapsedMs": 12799913,
+  "allPassed": true,
+  "states": [
+    {
+      "id": "endgame:need-aware:2",
+      "seed": "systematic:need-aware:2",
+      "roomType": "need-aware",
+      "phase": "endgame",
+      "pick": 149,
+      "round": 15,
+      "rosterBefore": {
+        "counts": {
+          "RB": 4,
+          "WR": 4,
+          "TE": 3,
+          "QB": 2,
+          "K": 1
+        },
+        "openRequiredSlots": [],
+        "starters": [
+          "22968",
+          "19799",
+          "22936",
+          "23021",
+          "17265",
+          "19210",
+          "19780",
+          "18705",
+          "22985",
+          "17575"
+        ],
+        "bench": [
+          "23084",
+          "22718",
+          "23794",
+          "17349"
+        ]
+      },
+      "production": {
+        "playerId": "22980",
+        "player": "Tyrone Tracy Jr.",
+        "position": "RB",
+        "winRate": 0.13,
+        "expectedStarterValue": 2298.8,
+        "floorStarterValue": 1748.2,
+        "ceilingStarterValue": 2955.9,
+        "medianRegret": 0,
+        "downsideRegret": 138.4,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "16421",
+              "playerName": "Alvin Kamara",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.88
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.14,
+        "expectedStarterValue": 2298.8,
+        "floorStarterValue": 1748.2,
+        "ceilingStarterValue": 2955.9,
+        "medianRegret": 0,
+        "downsideRegret": 154.9,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.14,
+        "expectedStarterValue": 2298.8,
+        "floorStarterValue": 1748.2,
+        "ceilingStarterValue": 2955.9,
+        "medianRegret": 0,
+        "downsideRegret": 154.9,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "11616",
+          "player": "Keenan Allen",
+          "position": "WR",
+          "winRate": 0.5,
+          "expectedStarterValue": 2298.8,
+          "floorStarterValue": 1748.2,
+          "ceilingStarterValue": 3053,
+          "medianRegret": 0,
+          "downsideRegret": 0,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "11616",
+                "playerName": "Keenan Allen",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "16421",
+          "player": "Alvin Kamara",
+          "position": "RB",
+          "winRate": 0.11,
+          "expectedStarterValue": 2298.8,
+          "floorStarterValue": 1748.2,
+          "ceilingStarterValue": 2955.9,
+          "medianRegret": 0,
+          "downsideRegret": 138.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "16421",
+                "playerName": "Alvin Kamara",
+                "position": "RB"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "24357",
+          "player": "Adonai Mitchell",
+          "position": "WR",
+          "winRate": 0.11,
+          "expectedStarterValue": 2298.8,
+          "floorStarterValue": 1748.2,
+          "ceilingStarterValue": 2955.9,
+          "medianRegret": 0,
+          "downsideRegret": 95,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "24357",
+                "playerName": "Adonai Mitchell",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "endgame:need-late:1",
+      "seed": "systematic:need-late:1",
+      "roomType": "need-late",
+      "phase": "endgame",
+      "pick": 149,
+      "round": 15,
+      "rosterBefore": {
+        "counts": {
+          "RB": 2,
+          "WR": 6,
+          "TE": 3,
+          "QB": 2,
+          "K": 1
+        },
+        "openRequiredSlots": [],
+        "starters": [
+          "22968",
+          "19799",
+          "22936",
+          "23062",
+          "25411",
+          "17233",
+          "19647",
+          "22985",
+          "23107",
+          "17575"
+        ],
+        "bench": [
+          "22718",
+          "23160",
+          "23794",
+          "17349"
+        ]
+      },
+      "production": {
+        "playerId": "22980",
+        "player": "Tyrone Tracy Jr.",
+        "position": "RB",
+        "winRate": 0.21,
+        "expectedStarterValue": 2281.3,
+        "floorStarterValue": 1736.6,
+        "ceilingStarterValue": 2936.8,
+        "medianRegret": 0,
+        "downsideRegret": 5.9,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "16421",
+              "playerName": "Alvin Kamara",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.75
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23096",
+        "player": "Tyler Shough",
+        "position": "QB",
+        "winRate": 0.15,
+        "expectedStarterValue": 2281.3,
+        "floorStarterValue": 1736.6,
+        "ceilingStarterValue": 2936.8,
+        "medianRegret": 0,
+        "downsideRegret": 21.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "23096",
+              "playerName": "Tyler Shough",
+              "position": "QB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.28,
+        "expectedStarterValue": 2281.3,
+        "floorStarterValue": 1736.6,
+        "ceilingStarterValue": 2936.8,
+        "medianRegret": 0,
+        "downsideRegret": 7.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "16421",
+          "player": "Alvin Kamara",
+          "position": "RB",
+          "winRate": 0.2,
+          "expectedStarterValue": 2281.3,
+          "floorStarterValue": 1736.6,
+          "ceilingStarterValue": 2936.8,
+          "medianRegret": 0,
+          "downsideRegret": 7.5,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "16421",
+                "playerName": "Alvin Kamara",
+                "position": "RB"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "24357",
+          "player": "Adonai Mitchell",
+          "position": "WR",
+          "winRate": 0.17,
+          "expectedStarterValue": 2281.3,
+          "floorStarterValue": 1736.6,
+          "ceilingStarterValue": 2936.8,
+          "medianRegret": 0,
+          "downsideRegret": 10.1,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "24357",
+                "playerName": "Adonai Mitchell",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "endgame:adp:2",
+      "seed": "systematic:adp:2",
+      "roomType": "adp",
+      "phase": "endgame",
+      "pick": 149,
+      "round": 15,
+      "rosterBefore": {
+        "counts": {
+          "RB": 3,
+          "WR": 5,
+          "TE": 3,
+          "QB": 2,
+          "K": 1
+        },
+        "openRequiredSlots": [],
+        "starters": [
+          "22968",
+          "19799",
+          "22936",
+          "25395",
+          "25411",
+          "19210",
+          "19780",
+          "22985",
+          "18598",
+          "17575"
+        ],
+        "bench": [
+          "23084",
+          "22718",
+          "23794",
+          "17349"
+        ]
+      },
+      "production": {
+        "playerId": "22980",
+        "player": "Tyrone Tracy Jr.",
+        "position": "RB",
+        "winRate": 0.15,
+        "expectedStarterValue": 2309.9,
+        "floorStarterValue": 1771.3,
+        "ceilingStarterValue": 2945.9,
+        "medianRegret": 0,
+        "downsideRegret": 38.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "16421",
+              "playerName": "Alvin Kamara",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.72
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.18,
+        "expectedStarterValue": 2309.9,
+        "floorStarterValue": 1771.3,
+        "ceilingStarterValue": 2945.9,
+        "medianRegret": 0,
+        "downsideRegret": 53.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.18,
+        "expectedStarterValue": 2309.9,
+        "floorStarterValue": 1771.3,
+        "ceilingStarterValue": 2945.9,
+        "medianRegret": 0,
+        "downsideRegret": 53.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "27339",
+          "player": "Denzel Boston",
+          "position": "WR",
+          "winRate": 0.37,
+          "expectedStarterValue": 2309.9,
+          "floorStarterValue": 1771.3,
+          "ceilingStarterValue": 2949.9,
+          "medianRegret": 0,
+          "downsideRegret": 0,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "27339",
+                "playerName": "Denzel Boston",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "16421",
+          "player": "Alvin Kamara",
+          "position": "RB",
+          "winRate": 0.15,
+          "expectedStarterValue": 2309.9,
+          "floorStarterValue": 1771.3,
+          "ceilingStarterValue": 2945.9,
+          "medianRegret": 0,
+          "downsideRegret": 38.3,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "16421",
+                "playerName": "Alvin Kamara",
+                "position": "RB"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "24357",
+          "player": "Adonai Mitchell",
+          "position": "WR",
+          "winRate": 0.15,
+          "expectedStarterValue": 2309.9,
+          "floorStarterValue": 1771.3,
+          "ceilingStarterValue": 2945.9,
+          "medianRegret": 0,
+          "downsideRegret": 20.5,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "24357",
+                "playerName": "Adonai Mitchell",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "endgame:early-qb:1",
+      "seed": "systematic:early-qb:1",
+      "roomType": "early-qb",
+      "phase": "endgame",
+      "pick": 149,
+      "round": 15,
+      "rosterBefore": {
+        "counts": {
+          "RB": 4,
+          "WR": 4,
+          "QB": 2,
+          "TE": 3,
+          "K": 1
+        },
+        "openRequiredSlots": [],
+        "starters": [
+          "22968",
+          "19799",
+          "25989",
+          "25395",
+          "22982",
+          "19790",
+          "19780",
+          "22985",
+          "22718",
+          "17575"
+        ],
+        "bench": [
+          "23084",
+          "17349",
+          "23019",
+          "19562"
+        ]
+      },
+      "production": {
+        "playerId": "22980",
+        "player": "Tyrone Tracy Jr.",
+        "position": "RB",
+        "winRate": 0.16,
+        "expectedStarterValue": 2374.3,
+        "floorStarterValue": 1825.3,
+        "ceilingStarterValue": 3005.9,
+        "medianRegret": 0,
+        "downsideRegret": 27.4,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "16421",
+              "playerName": "Alvin Kamara",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.75
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23096",
+        "player": "Tyler Shough",
+        "position": "QB",
+        "winRate": 0.21,
+        "expectedStarterValue": 2374.3,
+        "floorStarterValue": 1825.3,
+        "ceilingStarterValue": 3005.9,
+        "medianRegret": 0,
+        "downsideRegret": 55.5,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "23096",
+              "playerName": "Tyler Shough",
+              "position": "QB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.18,
+        "expectedStarterValue": 2374.3,
+        "floorStarterValue": 1825.3,
+        "ceilingStarterValue": 3005.9,
+        "medianRegret": 0,
+        "downsideRegret": 36.9,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "24357",
+          "player": "Adonai Mitchell",
+          "position": "WR",
+          "winRate": 0.32,
+          "expectedStarterValue": 2374.3,
+          "floorStarterValue": 1825.3,
+          "ceilingStarterValue": 3005.9,
+          "medianRegret": 0,
+          "downsideRegret": 0,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "24357",
+                "playerName": "Adonai Mitchell",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "16421",
+          "player": "Alvin Kamara",
+          "position": "RB",
+          "winRate": 0.14,
+          "expectedStarterValue": 2374.3,
+          "floorStarterValue": 1825.3,
+          "ceilingStarterValue": 3005.9,
+          "medianRegret": 0,
+          "downsideRegret": 28.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "16421",
+                "playerName": "Alvin Kamara",
+                "position": "RB"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "endgame:late-qb:2",
+      "seed": "systematic:late-qb:2",
+      "roomType": "late-qb",
+      "phase": "endgame",
+      "pick": 149,
+      "round": 15,
+      "rosterBefore": {
+        "counts": {
+          "RB": 4,
+          "WR": 4,
+          "TE": 3,
+          "QB": 2,
+          "K": 1
+        },
+        "openRequiredSlots": [],
+        "starters": [
+          "22968",
+          "19799",
+          "22936",
+          "25395",
+          "17298",
+          "19210",
+          "19278",
+          "22985",
+          "23107",
+          "17575"
+        ],
+        "bench": [
+          "15600",
+          "22718",
+          "17349",
+          "27520"
+        ]
+      },
+      "production": {
+        "playerId": "22980",
+        "player": "Tyrone Tracy Jr.",
+        "position": "RB",
+        "winRate": 0.14,
+        "expectedStarterValue": 2339.2,
+        "floorStarterValue": 1811.6,
+        "ceilingStarterValue": 2962.5,
+        "medianRegret": 0,
+        "downsideRegret": 37.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "16421",
+              "playerName": "Alvin Kamara",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.72
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.18,
+        "expectedStarterValue": 2339.2,
+        "floorStarterValue": 1811.6,
+        "ceilingStarterValue": 2962.5,
+        "medianRegret": 0,
+        "downsideRegret": 37.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.18,
+        "expectedStarterValue": 2339.2,
+        "floorStarterValue": 1811.6,
+        "ceilingStarterValue": 2962.5,
+        "medianRegret": 0,
+        "downsideRegret": 37.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "26035",
+          "player": "Jordyn Tyson",
+          "position": "WR",
+          "winRate": 0.36,
+          "expectedStarterValue": 2339.2,
+          "floorStarterValue": 1811.6,
+          "ceilingStarterValue": 2962.5,
+          "medianRegret": 0,
+          "downsideRegret": 0,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "26035",
+                "playerName": "Jordyn Tyson",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "24357",
+          "player": "Adonai Mitchell",
+          "position": "WR",
+          "winRate": 0.18,
+          "expectedStarterValue": 2339.2,
+          "floorStarterValue": 1811.6,
+          "ceilingStarterValue": 2962.5,
+          "medianRegret": 0,
+          "downsideRegret": 7.1,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "24357",
+                "playerName": "Adonai Mitchell",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "16421",
+          "player": "Alvin Kamara",
+          "position": "RB",
+          "winRate": 0.14,
+          "expectedStarterValue": 2339.2,
+          "floorStarterValue": 1811.6,
+          "ceilingStarterValue": 2962.5,
+          "medianRegret": 0,
+          "downsideRegret": 37.8,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "16421",
+                "playerName": "Alvin Kamara",
+                "position": "RB"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "endgame:early-te:1",
+      "seed": "systematic:early-te:1",
+      "roomType": "early-te",
+      "phase": "endgame",
+      "pick": 149,
+      "round": 15,
+      "rosterBefore": {
+        "counts": {
+          "RB": 4,
+          "WR": 4,
+          "QB": 2,
+          "TE": 3,
+          "K": 1
+        },
+        "openRequiredSlots": [],
+        "starters": [
+          "22968",
+          "19799",
+          "25395",
+          "23062",
+          "19210",
+          "17233",
+          "22985",
+          "18705",
+          "22718",
+          "17575"
+        ],
+        "bench": [
+          "19780",
+          "17349",
+          "23794",
+          "19562"
+        ]
+      },
+      "production": {
+        "playerId": "22980",
+        "player": "Tyrone Tracy Jr.",
+        "position": "RB",
+        "winRate": 0.13,
+        "expectedStarterValue": 2273.6,
+        "floorStarterValue": 1724.9,
+        "ceilingStarterValue": 2948.6,
+        "medianRegret": 0,
+        "downsideRegret": 47.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "16421",
+              "playerName": "Alvin Kamara",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.72
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.23,
+        "expectedStarterValue": 2273.6,
+        "floorStarterValue": 1724.9,
+        "ceilingStarterValue": 2948.6,
+        "medianRegret": 0,
+        "downsideRegret": 47.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.23,
+        "expectedStarterValue": 2273.6,
+        "floorStarterValue": 1724.9,
+        "ceilingStarterValue": 2948.6,
+        "medianRegret": 0,
+        "downsideRegret": 47.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "27339",
+          "player": "Denzel Boston",
+          "position": "WR",
+          "winRate": 0.38,
+          "expectedStarterValue": 2273.6,
+          "floorStarterValue": 1724.9,
+          "ceilingStarterValue": 2952.5,
+          "medianRegret": 0,
+          "downsideRegret": 0,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "27339",
+                "playerName": "Denzel Boston",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "16421",
+          "player": "Alvin Kamara",
+          "position": "RB",
+          "winRate": 0.13,
+          "expectedStarterValue": 2273.6,
+          "floorStarterValue": 1724.9,
+          "ceilingStarterValue": 2948.6,
+          "medianRegret": 0,
+          "downsideRegret": 47.8,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "16421",
+                "playerName": "Alvin Kamara",
+                "position": "RB"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "24357",
+          "player": "Adonai Mitchell",
+          "position": "WR",
+          "winRate": 0.13,
+          "expectedStarterValue": 2273.6,
+          "floorStarterValue": 1724.9,
+          "ceilingStarterValue": 2948.6,
+          "medianRegret": 0,
+          "downsideRegret": 20.7,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "24357",
+                "playerName": "Adonai Mitchell",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "endgame:rb-heavy:2",
+      "seed": "systematic:rb-heavy:2",
+      "roomType": "rb-heavy",
+      "phase": "endgame",
+      "pick": 149,
+      "round": 15,
+      "rosterBefore": {
+        "counts": {
+          "RB": 3,
+          "WR": 5,
+          "TE": 3,
+          "QB": 2,
+          "K": 1
+        },
+        "openRequiredSlots": [],
+        "starters": [
+          "22968",
+          "19799",
+          "22936",
+          "19222",
+          "25411",
+          "23046",
+          "22985",
+          "23106",
+          "23891",
+          "17575"
+        ],
+        "bench": [
+          "11594",
+          "23160",
+          "22718",
+          "27520"
+        ]
+      },
+      "production": {
+        "playerId": "22980",
+        "player": "Tyrone Tracy Jr.",
+        "position": "RB",
+        "winRate": 0.13,
+        "expectedStarterValue": 2278,
+        "floorStarterValue": 1731.6,
+        "ceilingStarterValue": 2960.8,
+        "medianRegret": 0,
+        "downsideRegret": 32.5,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "16421",
+              "playerName": "Alvin Kamara",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.88
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.13,
+        "expectedStarterValue": 2278,
+        "floorStarterValue": 1731.6,
+        "ceilingStarterValue": 2960.8,
+        "medianRegret": 0,
+        "downsideRegret": 36,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "17349",
+        "player": "Dalton Schultz",
+        "position": "TE",
+        "winRate": 0.47,
+        "expectedStarterValue": 2278,
+        "floorStarterValue": 1731.6,
+        "ceilingStarterValue": 2972.2,
+        "medianRegret": 0,
+        "downsideRegret": 0,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "17349",
+              "playerName": "Dalton Schultz",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "24357",
+          "player": "Adonai Mitchell",
+          "position": "WR",
+          "winRate": 0.16,
+          "expectedStarterValue": 2278,
+          "floorStarterValue": 1731.6,
+          "ceilingStarterValue": 2960.8,
+          "medianRegret": 0,
+          "downsideRegret": 33.8,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "24357",
+                "playerName": "Adonai Mitchell",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "16421",
+          "player": "Alvin Kamara",
+          "position": "RB",
+          "winRate": 0.13,
+          "expectedStarterValue": 2278,
+          "floorStarterValue": 1731.6,
+          "ceilingStarterValue": 2960.8,
+          "medianRegret": 0,
+          "downsideRegret": 31.1,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "16421",
+                "playerName": "Alvin Kamara",
+                "position": "RB"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "endgame:wr-heavy:1",
+      "seed": "systematic:wr-heavy:1",
+      "roomType": "wr-heavy",
+      "phase": "endgame",
+      "pick": 149,
+      "round": 15,
+      "rosterBefore": {
+        "counts": {
+          "RB": 4,
+          "WR": 4,
+          "TE": 3,
+          "QB": 2,
+          "K": 1
+        },
+        "openRequiredSlots": [],
+        "starters": [
+          "22968",
+          "19799",
+          "25989",
+          "25395",
+          "26434",
+          "19231",
+          "15600",
+          "22985",
+          "23019",
+          "17575"
+        ],
+        "bench": [
+          "19797",
+          "22718",
+          "23794",
+          "17349"
+        ]
+      },
+      "production": {
+        "playerId": "22980",
+        "player": "Tyrone Tracy Jr.",
+        "position": "RB",
+        "winRate": 0.17,
+        "expectedStarterValue": 2321.2,
+        "floorStarterValue": 1763.5,
+        "ceilingStarterValue": 2969.7,
+        "medianRegret": 0,
+        "downsideRegret": 32.5,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "16421",
+              "playerName": "Alvin Kamara",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.75
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23096",
+        "player": "Tyler Shough",
+        "position": "QB",
+        "winRate": 0.13,
+        "expectedStarterValue": 2321.2,
+        "floorStarterValue": 1763.5,
+        "ceilingStarterValue": 2969.7,
+        "medianRegret": 0,
+        "downsideRegret": 81.4,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "23096",
+              "playerName": "Tyler Shough",
+              "position": "QB"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25247",
+        "player": "Dalton Kincaid",
+        "position": "TE",
+        "winRate": 0.16,
+        "expectedStarterValue": 2321.2,
+        "floorStarterValue": 1763.5,
+        "ceilingStarterValue": 2969.7,
+        "medianRegret": 0,
+        "downsideRegret": 81.4,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 149,
+              "playerId": "25247",
+              "playerName": "Dalton Kincaid",
+              "position": "TE"
+            },
+            {
+              "overallPick": 152,
+              "playerId": "22980",
+              "playerName": "Tyrone Tracy Jr.",
+              "position": "RB"
+            }
+          ],
+          "probability": 1
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "24357",
+          "player": "Adonai Mitchell",
+          "position": "WR",
+          "winRate": 0.42,
+          "expectedStarterValue": 2321.2,
+          "floorStarterValue": 1763.5,
+          "ceilingStarterValue": 2978.6,
+          "medianRegret": 0,
+          "downsideRegret": 0,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "24357",
+                "playerName": "Adonai Mitchell",
+                "position": "WR"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "16421",
+          "player": "Alvin Kamara",
+          "position": "RB",
+          "winRate": 0.13,
+          "expectedStarterValue": 2321.2,
+          "floorStarterValue": 1763.5,
+          "ceilingStarterValue": 2969.7,
+          "medianRegret": 0,
+          "downsideRegret": 81.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 149,
+                "playerId": "16421",
+                "playerName": "Alvin Kamara",
+                "position": "RB"
+              },
+              {
+                "overallPick": 152,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    }
+  ]
+}

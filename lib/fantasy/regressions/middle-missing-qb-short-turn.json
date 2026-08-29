@@ -1,0 +1,29 @@
+{
+  "id": "middle-missing-qb-short-turn",
+  "status": "fixed-and-verified",
+  "seed": "systematic:need-late:2",
+  "currentPick": 69,
+  "rosterCounts": { "RB": 3, "WR": 2, "TE": 1, "QB": 0 },
+  "openRequiredSlots": ["QB", "WR", "W/R/T", "K"],
+  "failure": "Production recommended Wan'Dale Robinson while a starting QB was empty; exact continuations showed the WR survived the short turn after taking a QB.",
+  "preFixExactEvidence": {
+    "pairedContinuations": 32,
+    "productionWinRate": 0.25,
+    "productionMedianRegret": 26.1,
+    "productionDownsideRegret": 35,
+    "constrainedAdpChoice": "Jayden Daniels",
+    "baselineWinRate": 0.69,
+    "baselineMedianRegret": 0
+  },
+  "rootCause": "Starting-QB urgency was zero through Round 9 and jumped abruptly in Round 10, underpricing a Round-7 take-now/wait package.",
+  "correction": "Starting-QB urgency now ramps smoothly from Round 7 through Round 10 and applies only while the QB slot is open. Backup-QB suppression is unchanged.",
+  "postFixSerializedStateEvidence": {
+    "pairedContinuations": 32,
+    "production": "Jalen Hurts",
+    "productionWinRate": 1,
+    "productionMedianRegret": 0,
+    "productionDownsideRegret": 0,
+    "constrainedAdpMedianRegret": 11.9,
+    "classification": "effectively-tied-with-baseline-at-release-tolerance"
+  }
+}

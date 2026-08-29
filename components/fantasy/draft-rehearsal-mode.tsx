@@ -74,7 +74,7 @@ function measureNow() {
 }
 
 function buildRehearsalWrap(state: DraftState, wrapPool: DraftCandidate[]) {
-  return buildWrapSimulationSnapshot(state, wrapPool, { simulations: 8 });
+  return buildWrapSimulationSnapshot(state, wrapPool);
 }
 
 export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds = [] }: DraftRehearsalModeProps) {
@@ -155,12 +155,12 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
     [candidates],
   );
   const rehearsalWrap = useMemo(() => buildRehearsalWrap(draftState, wrapPool), [draftState, wrapPool]);
+  const rehearsalBoard = useMemo(() => buildRedraftBoard(candidates, draftState.league), [candidates, draftState.league]);
   const rankedRecommendations = useMemo(
-    () => rankDraftCandidates(draftState, candidates, rehearsalWrap),
-    [candidates, draftState, rehearsalWrap],
+    () => rankDraftCandidates(draftState, candidates, rehearsalWrap, { baseBoard: rehearsalBoard }),
+    [candidates, draftState, rehearsalBoard, rehearsalWrap],
   );
   const recommendations = useMemo(() => rankedRecommendations.slice(0, 4), [rankedRecommendations]);
-  const rehearsalBoard = useMemo(() => buildRedraftBoard(candidates, draftState.league), [candidates, draftState.league]);
   const boardById = useMemo(() => new Map(rehearsalBoard.map((entry) => [entry.playerId, entry] as const)), [rehearsalBoard]);
   const boardSignalById = useMemo(
     () => new Map(candidates.flatMap((candidate) => {
@@ -277,7 +277,7 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
   function recordRecommendationLatency(state: DraftState) {
     const started = measureNow();
     const wrap = buildRehearsalWrap(state, wrapPool);
-    rankDraftCandidates(state, candidates, wrap).slice(0, 4);
+    rankDraftCandidates(state, candidates, wrap, { baseBoard: rehearsalBoard }).slice(0, 4);
     const elapsed = measureNow() - started;
     setMetrics((current) => ({ ...current, recommendationLatencyMs: [...current.recommendationLatencyMs, elapsed] }));
   }
@@ -407,7 +407,7 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
       });
       const started = measureNow();
       const nextWrap = buildRehearsalWrap(result.state, wrapPool);
-      rankDraftCandidates(result.state, candidates, nextWrap).slice(0, 4);
+      rankDraftCandidates(result.state, candidates, nextWrap, { baseBoard: rehearsalBoard }).slice(0, 4);
       const elapsed = measureNow() - started;
       setSession(result.session);
       setDraftState(result.state);
@@ -419,7 +419,7 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
       setMessages([`Timed extension event applied at Pick ${draftState.currentPick}.`]);
     }, paceMs);
     return () => window.clearTimeout(timeout);
-  }, [autoRunning, candidates, complete, draftState, inputMode, isMyTurn, paceMs, scenario, seed, session, wrapPool]);
+  }, [autoRunning, candidates, complete, draftState, inputMode, isMyTurn, paceMs, rehearsalBoard, scenario, seed, session, wrapPool]);
 
   useEffect(() => {
     if (!simulationStarted || inputMode !== "timed-simulation" || isMyTurn || complete) return;

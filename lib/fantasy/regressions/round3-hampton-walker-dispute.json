@@ -1,0 +1,71 @@
+{
+  "id": "round3-hampton-walker-dispute",
+  "status": "counterfactual-pairing-regression",
+  "source": "systematic exact-production audit",
+  "seed": "systematic:adp:1",
+  "currentPick": 29,
+  "managerTeamId": "team-9",
+  "managerRosterPlayerIds": ["22968", "19799"],
+  "managerRoster": ["Jahmyr Gibbs", "Amon-Ra St. Brown"],
+  "openRequiredSlots": ["QB", "WR", "WR", "RB", "TE", "W/R/T", "W/R/T", "K"],
+  "productionChoice": { "playerId": "25395", "player": "Omarion Hampton", "position": "RB" },
+  "constrainedAdpChoice": { "playerId": "23021", "player": "Kenneth Walker III", "position": "RB" },
+  "screenEvidence": {
+    "evaluationMode": "exact-production",
+    "pairedContinuations": 8,
+    "productionMedianRegret": 59.4,
+    "productionDownsideRegret": 107.7,
+    "adpMedianRegret": 0,
+    "adpDownsideRegret": 0,
+    "productionMedianLineupPoints": 2070.7,
+    "adpMedianLineupPoints": 2067.3
+  },
+  "reproduction": "Rebuild the canonical snapshot, then run FANTASY_SYSTEMATIC_LIMIT=1 npm run fantasy:systematic-audit. The seed deterministically reconstructs all picks before Pick 29.",
+  "confirmedEvidenceBeforeFix": {
+    "pairedContinuations": 32,
+    "productionWinRate": 0.3,
+    "productionMedianRegret": 28.1,
+    "productionDownsideRegret": 87.1,
+    "adpWinRate": 0.7,
+    "adpMedianRegret": 0,
+    "adpDownsideRegret": 35.3
+  },
+  "rootCause": "The evaluator paired opponent behavior but seeded forced-player outcome quantiles by player ID. Alternatives therefore received different luck inside the same paired trial, adding player-specific noise to regret.",
+  "correction": "Forced alternatives now use a common outcome-quantile seed within each paired trial. Production ranking scores and player identities are unchanged.",
+  "postFixEvidence": {
+    "pairedContinuations": 32,
+    "productionWinRate": 0.63,
+    "productionMedianRegret": 0,
+    "productionDownsideRegret": 5.7,
+    "adpWinRate": 0.38,
+    "adpMedianRegret": 2.8,
+    "adpDownsideRegret": 11.7,
+    "classification": "effectively-tied"
+  },
+  "threeBranchProductionRegression": {
+    "status": "corrected",
+    "pairedContinuations": 32,
+    "productionPortfolio": "Omarion Hampton then Breece Hall",
+    "productionMedianRegret": 28.4,
+    "productionDownsideRegret": 97.9,
+    "bestPortfolio": "Breece Hall then Emeka Egbuka",
+    "bestPortfolioWinRate": 0.77,
+    "rootCause": "The remaining-second/third-WR demand term was too weak to make the production continuation choose a required WR over an RB3 at the short turn.",
+    "correction": "The lineup-derived multi-starter demand term increased from 22 to 44 points per additional exact starter. Construction ablation removes it; no player identity is used.",
+    "postFixEvidence": {
+      "pairedContinuations": 32,
+      "productionPortfolio": "Omarion Hampton then Emeka Egbuka",
+      "productionWinRate": 0.5,
+      "productionMedianRegret": 0,
+      "productionDownsideRegret": 46.7,
+      "adpPortfolio": "Kenneth Walker III then Emeka Egbuka",
+      "adpWinRate": 0.47,
+      "adpMedianRegret": 1.2,
+      "adpDownsideRegret": 11.3,
+      "thirdBranchPortfolio": "Breece Hall then Emeka Egbuka",
+      "thirdBranchWinRate": 0.03,
+      "classification": "effectively-tied"
+    }
+  },
+  "expected": "Production must remain within the stated 15-point median-regret tolerance of the constrained ADP branch, or the underlying general scoring/objective cause must be corrected without player or scenario identity checks."
+}

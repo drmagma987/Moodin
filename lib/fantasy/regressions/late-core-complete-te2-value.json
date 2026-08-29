@@ -1,0 +1,29 @@
+{
+  "id": "late-core-complete-te2-value",
+  "status": "fixed-and-verified",
+  "seed": "systematic:rb-heavy:2",
+  "currentPick": 109,
+  "rosterCounts": { "RB": 2, "WR": 5, "TE": 1, "QB": 2 },
+  "openRequiredSlots": ["K"],
+  "failure": "Production recommended bench WR Khalil Shakir because Jake Ferguson retained a TE2 penalty after every core and FLEX starter was already filled.",
+  "preFixExactProductionEvidence": {
+    "pairedContinuations": 32,
+    "productionWinRate": 0.07,
+    "productionMedianRegret": 30.3,
+    "productionDownsideRegret": 50.4,
+    "modelChoice": "Jake Ferguson",
+    "modelWinRate": 0.73,
+    "modelMedianRegret": 0
+  },
+  "rootCause": "QB2/TE2 construction penalties persisted even after the condition they protect—open core starters—was gone.",
+  "correction": "QB2/TE2 suppression now applies while RB/WR/TE/FLEX starters remain open. A second onesie is evaluated on merit after core construction is complete; QB3/TE3 penalties remain strong.",
+  "postFixSerializedStateEvidence": {
+    "pairedContinuations": 32,
+    "production": "Jake Ferguson",
+    "productionWinRate": 0.67,
+    "productionMedianRegret": 0,
+    "productionDownsideRegret": 0,
+    "constrainedAdpMedianRegret": 17.1,
+    "constrainedAdpDownsideRegret": 43.4
+  }
+}

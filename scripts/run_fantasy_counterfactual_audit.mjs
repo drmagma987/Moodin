@@ -3,6 +3,8 @@ import {
   buildConditionalDraftPathBoard,
   buildRedraftBoard,
   buildWrapSimulationSnapshot,
+  DRAFT_POLICY_CERTIFICATION_VERSION,
+  PRODUCTION_WRAP_SIMULATIONS,
   rankDraftCandidates,
 } from "../lib/fantasy/draft.ts";
 import {
@@ -193,7 +195,7 @@ function summarizeOutcome(outcome) {
 
 function evaluateScenario(spec) {
   const wrap = buildWrapSimulationSnapshot(spec.state, candidates, { simulations: 16 });
-  const productionRecommendations = rankDraftCandidates(spec.state, candidates, wrap);
+  const productionRecommendations = rankDraftCandidates(spec.state, candidates, wrap, { baseBoard: board });
   const production = productionRecommendations[0];
   const productionCandidate = production ? candidateById.get(production.playerId) : null;
   const adpBaseline = baselineChoice(byMarket, spec.state);
@@ -241,7 +243,7 @@ function evaluateScenario(spec) {
     simulations: 8,
     candidateLimit: exactForcedIds.length,
     horizonPicks: 2,
-    policyMode: "construction-ablation",
+    policyMode: "production",
     evaluationMode: "exact-production",
     wrapSimulationsPerPick: 4,
     forcedCandidateIds: exactForcedIds,
@@ -259,7 +261,7 @@ function evaluateScenario(spec) {
         simulations: exactSampleSize,
         candidateLimit: exactForcedIds.length,
         horizonPicks: 2,
-        policyMode: "construction-ablation",
+        policyMode: "production",
         evaluationMode: "exact-production",
         wrapSimulationsPerPick: 4,
         forcedCandidateIds: exactForcedIds,
@@ -326,6 +328,8 @@ const report = {
   elapsedMs: Date.now() - startedAt,
   totalDiscoveryRooms: selectedScenarioSpecs.length * 2_000,
   exactPolicyRoomsPerForcedChoice: { screen: 8, closeOrDisputed: 32 },
+  policyCertificationVersion: DRAFT_POLICY_CERTIFICATION_VERSION,
+  productionWrapSimulations: PRODUCTION_WRAP_SIMULATIONS,
   scenarios,
   allPassed: scenarios.every((scenario) => scenario.pass),
 };

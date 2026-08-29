@@ -1,0 +1,56 @@
+{
+  "status": "saved-before-policy-change",
+  "source": "32-state systematic exact-production screen",
+  "evaluationMode": "exact-production",
+  "pairedContinuationsPerChoice": 8,
+  "states": [
+    {
+      "id": "early:early-te:2",
+      "seed": "systematic:early-te:2",
+      "currentPick": 29,
+      "rosterCounts": { "RB": 1, "WR": 1 },
+      "production": "DeVonta Smith",
+      "bestScreenAlternative": "Kenneth Walker III",
+      "productionMedianRegret": 44.8
+    },
+    {
+      "id": "early:wr-heavy:2",
+      "seed": "systematic:wr-heavy:2",
+      "currentPick": 29,
+      "rosterCounts": { "RB": 1, "WR": 1 },
+      "production": "Derrick Henry",
+      "bestScreenAlternative": "Kenneth Walker III",
+      "productionMedianRegret": 40.2
+    },
+    {
+      "id": "early:model:2",
+      "seed": "systematic:model:2",
+      "currentPick": 29,
+      "rosterCounts": { "RB": 1, "WR": 1 },
+      "production": "Derrick Henry",
+      "bestScreenAlternative": "Kenneth Walker III",
+      "productionMedianRegret": 17.6
+    },
+    {
+      "id": "middle:home-reach:2",
+      "seed": "systematic:home-reach:2",
+      "currentPick": 69,
+      "rosterCounts": { "RB": 4, "WR": 2 },
+      "openRequiredSlots": ["QB", "WR", "TE", "K"],
+      "production": "Tony Pollard",
+      "bestScreenAlternative": "Luther Burden III",
+      "productionMedianRegret": 91.6
+    },
+    {
+      "id": "middle:need-late:2",
+      "seed": "systematic:need-late:2",
+      "currentPick": 69,
+      "rosterCounts": { "RB": 3, "WR": 2, "TE": 1 },
+      "openRequiredSlots": ["QB", "WR", "W/R/T", "K"],
+      "production": "Wan'Dale Robinson",
+      "bestScreenAlternative": "Jayden Daniels",
+      "productionMedianRegret": 26.1
+    }
+  ],
+  "requiredNextStep": "Run 32 paired exact-production continuations for every state before changing shared policy."
+}

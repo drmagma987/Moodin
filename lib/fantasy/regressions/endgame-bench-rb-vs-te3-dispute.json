@@ -1,0 +1,21 @@
+{
+  "id": "endgame-bench-rb-vs-te3-dispute",
+  "status": "saved-before-policy-change",
+  "source": "post-fix 32-state systematic screen",
+  "seed": "systematic:need-late:1",
+  "currentPick": 149,
+  "rosterCounts": { "RB": 3, "WR": 6, "TE": 2, "QB": 2, "K": 1 },
+  "openRequiredSlots": [],
+  "productionChoice": { "playerId": "22980", "player": "Tyrone Tracy Jr.", "position": "RB" },
+  "constrainedModelChoice": { "playerId": "17349", "player": "Dalton Schultz", "position": "TE" },
+  "screenEvidence": {
+    "evaluationMode": "exact-production",
+    "pairedContinuations": 8,
+    "productionMedianRegret": 21.2,
+    "productionDownsideRegret": 30.2,
+    "modelMedianRegret": 0,
+    "modelDownsideRegret": 0
+  },
+  "reproduction": "Replay the serialized suspicious state in systematicDraftAudit.shard-3.generated.json or rebuild systematic:need-late:1 to Pick 149.",
+  "requiredNextStep": "Escalate the plausible bench branches to 32 exact-production continuations before changing policy."
+}

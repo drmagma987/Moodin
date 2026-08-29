@@ -1,0 +1,215 @@
+{
+  "generatedAt": "2026-08-29T12:46:22.681Z",
+  "status": "candidate-freeze-requires-human-confirmation",
+  "warning": "This receipt proves artifact identity and engine readiness, but is not the final draft-day freeze. Re-run with FANTASY_FINAL_FREEZE=1 only after reviewing same-day injuries, keepers, and draft order.",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "artifactCapturedAt": "2026-08-26T18:14:01.016Z",
+  "candidateCount": 490,
+  "boardFingerprint": "fnv1a-5ef07ac7",
+  "freeze": {
+    "schemaVersion": 1,
+    "frozenAt": "2026-08-29T12:46:22.425Z",
+    "leagueConfigVersion": "2026.08.20-v2",
+    "leagueConfigFingerprint": "fnv1a-6863848b",
+    "keeperFingerprint": "fnv1a-abf0fa67",
+    "boardFingerprint": "fnv1a-5ef07ac7",
+    "keeperCount": 2,
+    "artifactCapturedAt": "2026-08-26T18:14:01.016Z",
+    "candidateCount": 490,
+    "checks": [
+      "canonical-identity",
+      "keeper-review",
+      "full-board-data"
+    ]
+  },
+  "failClosedChecks": {
+    "canonicalStateAccepted": true,
+    "canonicalFreezeAccepted": true,
+    "staleBoardRejected": true
+  },
+  "automatedTimedRehearsals": [
+    {
+      "scenario": "normal-room",
+      "seed": "draft-day-readiness:normal-room:1",
+      "queuedOpponentPicks": 26,
+      "currentPick": 29,
+      "topRecommendation": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB"
+      },
+      "topAlternatives": [
+        {
+          "playerId": "17298",
+          "player": "Josh Allen",
+          "score": 154.06
+        },
+        {
+          "playerId": "22982",
+          "player": "Breece Hall",
+          "score": 143.77
+        },
+        {
+          "playerId": "22955",
+          "player": "Brock Bowers",
+          "score": 139.38
+        }
+      ],
+      "recommendationLatencyMs": 36.6,
+      "wrapLatencyMs": 28.8,
+      "rankingLatencyMs": 7.8,
+      "setupLatencyMs": 63,
+      "parity": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario": "rb-avalanche",
+      "seed": "draft-day-readiness:rb-avalanche:2",
+      "queuedOpponentPicks": 26,
+      "currentPick": 29,
+      "topRecommendation": {
+        "playerId": "18218",
+        "player": "A.J. Brown",
+        "position": "WR"
+      },
+      "topAlternatives": [
+        {
+          "playerId": "20130",
+          "player": "Nico Collins",
+          "score": 167.35
+        },
+        {
+          "playerId": "22963",
+          "player": "George Pickens",
+          "score": 157.44
+        },
+        {
+          "playerId": "17298",
+          "player": "Josh Allen",
+          "score": 154.06
+        }
+      ],
+      "recommendationLatencyMs": 28.7,
+      "wrapLatencyMs": 22.8,
+      "rankingLatencyMs": 5.9,
+      "setupLatencyMs": 51,
+      "parity": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario": "onesie-run",
+      "seed": "draft-day-readiness:onesie-run:3",
+      "queuedOpponentPicks": 26,
+      "currentPick": 29,
+      "topRecommendation": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB"
+      },
+      "topAlternatives": [
+        {
+          "playerId": "19222",
+          "player": "DeVonta Smith",
+          "score": 153.31
+        },
+        {
+          "playerId": "22982",
+          "player": "Breece Hall",
+          "score": 143.53
+        },
+        {
+          "playerId": "22739",
+          "player": "Javonte Williams",
+          "score": 136.52
+        }
+      ],
+      "recommendationLatencyMs": 27.7,
+      "wrapLatencyMs": 22.3,
+      "rankingLatencyMs": 5.4,
+      "setupLatencyMs": 49,
+      "parity": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario": "target-wipe",
+      "seed": "draft-day-readiness:target-wipe:4",
+      "queuedOpponentPicks": 26,
+      "currentPick": 29,
+      "topRecommendation": {
+        "playerId": "17298",
+        "player": "Josh Allen",
+        "position": "QB"
+      },
+      "topAlternatives": [
+        {
+          "playerId": "22982",
+          "player": "Breece Hall",
+          "score": 142.01
+        },
+        {
+          "playerId": "22955",
+          "player": "Brock Bowers",
+          "score": 139.38
+        },
+        {
+          "playerId": "23062",
+          "player": "Emeka Egbuka",
+          "score": 134.14
+        }
+      ],
+      "recommendationLatencyMs": 26.5,
+      "wrapLatencyMs": 22.3,
+      "rankingLatencyMs": 4.2,
+      "setupLatencyMs": 47,
+      "parity": true,
+      "failures": [],
+      "passed": true
+    },
+    {
+      "scenario": "heavy-keepers",
+      "seed": "draft-day-readiness:heavy-keepers:5",
+      "queuedOpponentPicks": 4,
+      "currentPick": 29,
+      "topRecommendation": {
+        "playerId": "17298",
+        "player": "Josh Allen",
+        "position": "QB"
+      },
+      "topAlternatives": [
+        {
+          "playerId": "19222",
+          "player": "DeVonta Smith",
+          "score": 153.42
+        },
+        {
+          "playerId": "22982",
+          "player": "Breece Hall",
+          "score": 144.2
+        },
+        {
+          "playerId": "22955",
+          "player": "Brock Bowers",
+          "score": 139.38
+        }
+      ],
+      "recommendationLatencyMs": 26.3,
+      "wrapLatencyMs": 22.1,
+      "rankingLatencyMs": 4.1,
+      "setupLatencyMs": 45,
+      "parity": true,
+      "failures": [],
+      "passed": true
+    }
+  ],
+  "humanRehearsalStillRequired": true,
+  "humanChecklist": [
+    "Complete one normal-room rehearsal using manual pick entry under the real pick clock.",
+    "Complete one positional-run rehearsal and explain aloud why the top choice beats the best alternative.",
+    "Practice one rejected/ambiguous player entry and one reload recovery before draft day.",
+    "Confirm same-day keeper assignments and draft order before requesting the final freeze."
+  ],
+  "allAutomatedChecksPassed": true
+}

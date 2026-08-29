@@ -4263,6 +4263,76 @@ test("a filled QB slot suppresses second quarterbacks while required starters re
   assert.ok(ablatedQuarterback.score > firstQuarterback.score + 40);
 });
 
+test("bench-only players receive bench-share rather than starter-strength take-now value", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 72,
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, QB: 1, RB: 3, WR: 2, TE: 1 },
+      openSlots: ["WR", "W/R/T", "K"],
+    } : team),
+  };
+  const wrap = buildWrapSimulationSnapshot(state, candidates, { simulations: 16 });
+  const quarterback = rankDraftCandidates(state, candidates, wrap).find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "QB"
+  );
+  assert.ok(quarterback);
+  const rawTakeNowValue = Number(
+    (quarterback.explanation.valueNow - quarterback.explanation.valueLater).toFixed(2),
+  );
+  assert.equal(
+    quarterback.explanation.vona,
+    Number((rawTakeNowValue / state.league.benchSlots).toFixed(2)),
+  );
+});
+
+test("kicker waits until the Round-14 completion window", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const buildState = (currentPick: number): DraftState => ({
+    ...template,
+    currentPick,
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, QB: 1, RB: 3, WR: 4, TE: 1, K: 0 },
+      openSlots: ["K"],
+    } : team),
+  });
+  const roundTwelve = buildState(112);
+  const roundTwelveWrap = buildWrapSimulationSnapshot(roundTwelve, candidates, { simulations: 16 });
+  const roundTwelveProduction = rankDraftCandidates(roundTwelve, candidates, roundTwelveWrap);
+  const roundTwelveAblated = rankDraftCandidates(roundTwelve, candidates, roundTwelveWrap, {
+    policyMode: "construction-ablation",
+  });
+  const kicker = roundTwelveProduction.find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "K"
+  );
+  assert.ok(kicker);
+  const ablatedKicker = roundTwelveAblated.find((recommendation) => recommendation.playerId === kicker.playerId);
+  assert.ok(ablatedKicker);
+  assert.equal(Number((ablatedKicker.score - kicker.score).toFixed(2)), 61);
+  assert.notEqual(roundTwelveProduction[0]?.playerId, kicker.playerId);
+
+  const roundFourteen = buildState(132);
+  const roundFourteenWrap = buildWrapSimulationSnapshot(roundFourteen, candidates, { simulations: 16 });
+  const roundFourteenProduction = rankDraftCandidates(roundFourteen, candidates, roundFourteenWrap);
+  const roundFourteenAblated = rankDraftCandidates(roundFourteen, candidates, roundFourteenWrap, {
+    policyMode: "construction-ablation",
+  });
+  const roundFourteenKicker = roundFourteenProduction.find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "K"
+  );
+  assert.ok(roundFourteenKicker);
+  const roundFourteenAblatedKicker = roundFourteenAblated.find(
+    (recommendation) => recommendation.playerId === roundFourteenKicker.playerId,
+  );
+  assert.ok(roundFourteenAblatedKicker);
+  assert.equal(roundFourteenKicker.score, roundFourteenAblatedKicker.score);
+});
+
 test("a filled TE slot suppresses early TE2 while flex and core starters remain open", () => {
   const candidates = warRoomRehearsalFixture.candidates;
   const template = warRoomRehearsalFixture.draftState;
@@ -4280,6 +4350,144 @@ test("a filled TE slot suppresses early TE2 while flex and core starters remain 
   assert.ok(topTen.every((recommendation) =>
     candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] !== "TE"
   ));
+});
+
+test("TE2 is evaluated on merit after every core and flex starter is filled", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 109,
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, QB: 1, RB: 2, WR: 5, TE: 1 },
+      openSlots: ["K"],
+    } : team),
+  };
+  const wrap = buildWrapSimulationSnapshot(state, candidates.slice(0, 120), { simulations: 8 });
+  const production = rankDraftCandidates(state, candidates, wrap);
+  const ablated = rankDraftCandidates(state, candidates, wrap, { policyMode: "construction-ablation" });
+  const tightEnd = production.find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "TE"
+  );
+  assert.ok(tightEnd);
+  const ablatedTightEnd = ablated.find((recommendation) => recommendation.playerId === tightEnd.playerId);
+  assert.ok(ablatedTightEnd);
+  assert.equal(tightEnd.score, ablatedTightEnd.score);
+});
+
+test("TE3 is evaluated on merit up to TE-plus-flex lineup capacity after core completion", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 149,
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, QB: 2, RB: 3, WR: 5, TE: 2, K: 1 },
+      openSlots: [],
+    } : team),
+  };
+  const wrap = buildWrapSimulationSnapshot(state, candidates, { simulations: 8 });
+  const production = rankDraftCandidates(state, candidates, wrap);
+  const ablated = rankDraftCandidates(state, candidates, wrap, { policyMode: "construction-ablation" });
+  const tightEnd = production.find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "TE"
+  );
+  assert.ok(tightEnd);
+  const ablatedTightEnd = ablated.find((recommendation) => recommendation.playerId === tightEnd.playerId);
+  assert.ok(ablatedTightEnd);
+  assert.equal(tightEnd.score, ablatedTightEnd.score);
+});
+
+test("multi-starter demand waits until Round 4 and discounts players likely to survive the turn", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 29,
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, RB: 1, WR: 1 },
+      openSlots: ["QB", "WR", "WR", "RB", "TE", "W/R/T", "W/R/T", "K"],
+    } : team),
+  };
+  const wrap = buildWrapSimulationSnapshot(state, candidates, { simulations: 16 });
+  const production = rankDraftCandidates(state, candidates, wrap);
+  const ablated = rankDraftCandidates(state, candidates, wrap, { policyMode: "construction-ablation" });
+  const receiver = production.find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "WR" &&
+    recommendation.explanation.makeItBackProbability >= 0.7
+  );
+  assert.ok(receiver);
+  const ablatedReceiver = ablated.find((recommendation) => recommendation.playerId === receiver.playerId);
+  assert.ok(ablatedReceiver);
+  assert.equal(
+    Number((receiver.score - ablatedReceiver.score).toFixed(2)),
+    0,
+  );
+
+  const roundFourState: DraftState = { ...state, currentPick: 32 };
+  const roundFourWrap = buildWrapSimulationSnapshot(roundFourState, candidates, { simulations: 16 });
+  const roundFourProduction = rankDraftCandidates(roundFourState, candidates, roundFourWrap);
+  const roundFourAblated = rankDraftCandidates(roundFourState, candidates, roundFourWrap, {
+    policyMode: "construction-ablation",
+  });
+  const roundFourReceiver = roundFourProduction.find(
+    (recommendation) =>
+      candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "WR" &&
+      recommendation.explanation.makeItBackProbability > 0,
+  );
+  assert.ok(roundFourReceiver);
+  const roundFourAblatedReceiver = roundFourAblated.find(
+    (recommendation) => recommendation.playerId === roundFourReceiver.playerId,
+  );
+  assert.ok(roundFourAblatedReceiver);
+  const expectedDemandBonus = Number(
+    (66 * (1 - roundFourReceiver.explanation.makeItBackProbability)).toFixed(2),
+  );
+  assert.equal(
+    Number((roundFourReceiver.score - roundFourAblatedReceiver.score).toFixed(2)),
+    expectedDemandBonus,
+  );
+  assert.ok(expectedDemandBonus > 0);
+  assert.ok(expectedDemandBonus < 66);
+});
+
+test("a saturated flex position cannot outrank an empty exact starter without overwhelming value", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 69,
+    availablePlayerIds: candidates
+      .filter((candidate) => candidate.market.adp >= 50)
+      .map((candidate) => candidate.player.id),
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, RB: 4, WR: 2 },
+      openSlots: ["QB", "WR", "TE", "K"],
+    } : team),
+  };
+  const wrapPool = candidates.filter((candidate) => state.availablePlayerIds.includes(candidate.player.id)).slice(0, 100);
+  const wrap = buildWrapSimulationSnapshot(state, wrapPool, { simulations: 8 });
+  const production = rankDraftCandidates(state, candidates, wrap);
+  const ablated = rankDraftCandidates(state, candidates, wrap, { policyMode: "construction-ablation" });
+  const firstRunningBack = production.find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "RB"
+  );
+  const firstReceiver = production.find((recommendation) =>
+    candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] === "WR"
+  );
+  assert.ok(firstRunningBack);
+  assert.ok(firstReceiver);
+  const ablatedRunningBack = ablated.find((recommendation) => recommendation.playerId === firstRunningBack.playerId);
+  const ablatedReceiver = ablated.find((recommendation) => recommendation.playerId === firstReceiver.playerId);
+  assert.ok(ablatedRunningBack);
+  assert.ok(ablatedReceiver);
+  assert.ok(ablatedRunningBack.score > firstRunningBack.score + 20);
+  assert.ok(firstReceiver.score > ablatedReceiver.score);
+  assert.ok(production.indexOf(firstReceiver) < production.indexOf(firstRunningBack));
 });
 
 test("late roster-completion urgency promotes an unfilled starting quarterback", () => {
@@ -4303,5 +4511,65 @@ test("late roster-completion urgency promotes an unfilled starting quarterback",
   assert.equal(
     candidates.find((candidate) => candidate.player.id === top.playerId)?.player.positions[0],
     "QB",
+  );
+});
+
+test("round-seven QB urgency can pair a needed starter with a WR that survives the short turn", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 69,
+    availablePlayerIds: candidates
+      .filter((candidate) => candidate.market.adp >= 58)
+      .map((candidate) => candidate.player.id),
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, QB: 0, RB: 3, WR: 2, TE: 1 },
+      openSlots: ["QB", "WR", "W/R/T", "K"],
+    } : team),
+  };
+  const wrapPool = candidates.filter((candidate) => state.availablePlayerIds.includes(candidate.player.id)).slice(0, 100);
+  const wrap = buildWrapSimulationSnapshot(state, wrapPool, { simulations: 8 });
+  const production = rankDraftCandidates(state, candidates, wrap);
+  const top = production[0];
+  assert.ok(top);
+  assert.equal(
+    candidates.find((candidate) => candidate.player.id === top.playerId)?.player.positions[0],
+    "QB",
+  );
+  assert.ok(top.explanation.makeItBackProbability < 1);
+});
+
+test("take-now value credits the best expected same-position substitute at the next pick", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const state: DraftState = {
+    ...template,
+    currentPick: 109,
+    availablePlayerIds: candidates
+      .filter((candidate) => candidate.market.adp >= 90)
+      .map((candidate) => candidate.player.id),
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      positionCounts: { ...team.positionCounts, QB: 0, RB: 4, WR: 5, TE: 1 },
+      openSlots: ["QB", "K"],
+    } : team),
+  };
+  const wrapPool = candidates.filter((candidate) => state.availablePlayerIds.includes(candidate.player.id));
+  const wrap = buildWrapSimulationSnapshot(state, wrapPool, { simulations: 8 });
+  const recommendation = rankDraftCandidates(state, candidates, wrap).find((entry) =>
+    entry.explanation.makeItBackProbability < 0.8 &&
+    entry.explanation.valueNow > 0
+  );
+  assert.ok(recommendation);
+  const playerOnlyWaitValue = recommendation.explanation.valueNow * recommendation.explanation.makeItBackProbability;
+  assert.ok(
+    recommendation.explanation.valueLater > playerOnlyWaitValue,
+    "a credible same-position fallback should keep wait value above named-player survival value",
+  );
+  assert.equal(
+    recommendation.explanation.vona,
+    Number((recommendation.explanation.valueNow - recommendation.explanation.valueLater).toFixed(2)),
   );
 });

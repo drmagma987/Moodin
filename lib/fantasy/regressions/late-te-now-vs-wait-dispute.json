@@ -1,0 +1,32 @@
+{
+  "id": "late-te-now-vs-wait-dispute",
+  "status": "resolved-as-close-no-policy-change",
+  "source": "systematic exact-production audit",
+  "seed": "systematic:chaotic:1",
+  "currentPick": 109,
+  "managerTeamId": "team-9",
+  "rosterCounts": { "RB": 5, "WR": 4, "QB": 1 },
+  "openRequiredSlots": ["TE", "K"],
+  "productionChoice": { "playerId": "26148", "player": "Jonathon Brooks", "position": "RB" },
+  "constrainedAdpChoice": { "playerId": "25298", "player": "Tucker Kraft", "position": "TE" },
+  "constrainedModelChoice": { "playerId": "13981", "player": "Stefon Diggs", "position": "WR" },
+  "screenEvidence": {
+    "evaluationMode": "exact-production",
+    "pairedContinuations": 8,
+    "productionMedianRegret": 45.9,
+    "productionDownsideRegret": 64.2,
+    "adpMedianRegret": 0,
+    "adpDownsideRegret": 89.9,
+    "productionContinuation": "Jonathon Brooks at 109, Jake Ferguson at 112"
+  },
+  "reproduction": "Rebuild the canonical snapshot, then run FANTASY_SYSTEMATIC_OFFSET=22 FANTASY_SYSTEMATIC_LIMIT=1 npm run fantasy:systematic-audit.",
+  "escalatedEvidence": {
+    "pairedContinuations": 32,
+    "productionWinRate": 0.21,
+    "productionMedianRegret": 14.1,
+    "productionDownsideRegret": 60.4,
+    "regretGapVsBestAlternative": 14.1,
+    "classification": "effectively-tied"
+  },
+  "resolution": "The larger sample is within the 15-point close-call tolerance. No late-TE timing rule is justified."
+}

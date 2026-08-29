@@ -1,0 +1,31 @@
+{
+  "id": "late-bench-rb-vs-te-dispute",
+  "status": "resolved-as-close-no-policy-change",
+  "source": "systematic exact-production audit",
+  "seed": "systematic:rb-heavy:2",
+  "currentPick": 109,
+  "managerTeamId": "team-9",
+  "rosterCounts": { "RB": 2, "WR": 6, "TE": 1, "QB": 1 },
+  "openRequiredSlots": ["K"],
+  "productionChoice": { "playerId": "23891", "player": "Rachaad White", "position": "RB" },
+  "constrainedAdpChoice": { "playerId": "22978", "player": "Sam LaPorta", "position": "TE" },
+  "constrainedModelChoice": { "playerId": "22718", "player": "Jake Ferguson", "position": "TE" },
+  "screenEvidence": {
+    "evaluationMode": "exact-production",
+    "pairedContinuations": 8,
+    "productionMedianRegret": 17.1,
+    "productionDownsideRegret": 51.2,
+    "bestAlternativeMedianRegret": 0,
+    "bestAlternativeDownsideRegret": 0
+  },
+  "reproduction": "Rebuild the canonical snapshot, then run FANTASY_SYSTEMATIC_OFFSET=17 FANTASY_SYSTEMATIC_LIMIT=1 npm run fantasy:systematic-audit.",
+  "escalatedEvidence": {
+    "pairedContinuations": 32,
+    "productionWinRate": 0.18,
+    "productionMedianRegret": 3.2,
+    "productionDownsideRegret": 52,
+    "regretGapVsBestAlternative": 3.2,
+    "classification": "effectively-tied"
+  },
+  "resolution": "The larger sample is within the 15-point close-call tolerance. No policy change is justified."
+}

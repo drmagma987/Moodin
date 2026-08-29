@@ -474,13 +474,8 @@ export function DraftCommandCenter({
         summary: "Live wrap simulation initializes when the command center opens.",
       };
     }
-    // Only players plausibly available in the near draft window belong in the
-    // wrap model. Including all 438 kickers/deep reserves adds seconds of work
-    // without changing the next-turn probabilities.
-    return buildWrapSimulationSnapshot(draftState, sortedCandidates.slice(0, 120), {
-      simulations: 48,
-    });
-  }, [draftState, hydrated, sortedCandidates]);
+    return buildWrapSimulationSnapshot(draftState, candidates);
+  }, [candidates, draftState, hydrated]);
   const runSnapshots = useMemo(
     () => buildPositionRunSnapshots(draftState, candidates, wrap),
     [candidates, draftState, wrap],
@@ -512,8 +507,8 @@ export function DraftCommandCenter({
     [candidateById, myRosterTeam?.bench, myRosterTeam?.starters],
   );
   const rankedRecommendations = useMemo(
-    () => rankDraftCandidates(draftState, candidates, wrap),
-    [candidates, draftState, wrap],
+    () => rankDraftCandidates(draftState, candidates, wrap, { baseBoard: board }),
+    [board, candidates, draftState, wrap],
   );
   const liveRecommendations = rankedRecommendations.slice(0, 5);
   const recommendationRankById = useMemo(

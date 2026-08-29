@@ -1,0 +1,212 @@
+{
+  "generatedAt": "2026-08-29T04:29:07.646Z",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "evaluationMode": "exact-production",
+  "continuationPolicyMode": "production",
+  "policyCertificationVersion": "2026-08-28-v5",
+  "productionWrapSimulations": 16,
+  "pairedSeedPolicy": "identical state/pick/simulation seed across every forced choice",
+  "screenSamples": 8,
+  "closeOrDisputedSamples": 32,
+  "forcedCandidateLimit": 5,
+  "stateCount": 1,
+  "expectedStateCount": 1,
+  "complete": true,
+  "phaseCounts": {
+    "early": 0,
+    "middle": 0,
+    "late": 1,
+    "endgame": 0
+  },
+  "opponentBehaviors": [
+    "rb-heavy"
+  ],
+  "escalatedCloseOrDisputed": 1,
+  "pendingCloseEscalations": 0,
+  "effectivelyTied": 1,
+  "suspiciousCount": 0,
+  "elapsedMs": 230055,
+  "allPassed": true,
+  "states": [
+    {
+      "id": "replay:rb-heavy-1:92",
+      "seed": "certification:rb-heavy:1",
+      "roomType": "rb-heavy",
+      "phase": "late",
+      "pick": 92,
+      "round": 10,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 5,
+          "TE": 1,
+          "QB": 1,
+          "K": 1
+        },
+        "openRequiredSlots": [
+          "RB"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "19222",
+          "22936",
+          "19790",
+          "23046",
+          "22985",
+          "23106",
+          "26068"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "27131",
+        "player": "Kyle Monangai",
+        "position": "RB",
+        "winRate": 0.35,
+        "expectedStarterValue": 2283.9,
+        "floorStarterValue": 1738.4,
+        "ceilingStarterValue": 2910.8,
+        "medianRegret": 3.6,
+        "downsideRegret": 86.5,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 92,
+              "playerId": "27131",
+              "playerName": "Kyle Monangai",
+              "position": "RB"
+            },
+            {
+              "overallPick": 109,
+              "playerId": "23160",
+              "playerName": "Jaxson Dart",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.81
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "26009",
+        "player": "Carnell Tate",
+        "position": "WR",
+        "winRate": 0.04,
+        "expectedStarterValue": 2272.8,
+        "floorStarterValue": 1726.8,
+        "ceilingStarterValue": 2910.8,
+        "medianRegret": 4.8,
+        "downsideRegret": 89.6,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 92,
+              "playerId": "26009",
+              "playerName": "Carnell Tate",
+              "position": "WR"
+            },
+            {
+              "overallPick": 109,
+              "playerId": "27520",
+              "playerName": "Woody Marks",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "19278",
+        "player": "Michael Pittman Jr.",
+        "position": "WR",
+        "winRate": 0.48,
+        "expectedStarterValue": 2272.8,
+        "floorStarterValue": 1726.8,
+        "ceilingStarterValue": 2910.8,
+        "medianRegret": 0,
+        "downsideRegret": 89.6,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 92,
+              "playerId": "19278",
+              "playerName": "Michael Pittman Jr.",
+              "position": "WR"
+            },
+            {
+              "overallPick": 109,
+              "playerId": "27520",
+              "playerName": "Woody Marks",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "22980",
+          "player": "Tyrone Tracy Jr.",
+          "position": "RB",
+          "winRate": 0.09,
+          "expectedStarterValue": 2256.7,
+          "floorStarterValue": 1695.6,
+          "ceilingStarterValue": 2952,
+          "medianRegret": 36.6,
+          "downsideRegret": 72.2,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 92,
+                "playerId": "22980",
+                "playerName": "Tyrone Tracy Jr.",
+                "position": "RB"
+              },
+              {
+                "overallPick": 109,
+                "playerId": "23160",
+                "playerName": "Jaxson Dart",
+                "position": "QB"
+              }
+            ],
+            "probability": 0.84
+          }
+        },
+        {
+          "playerId": "27520",
+          "player": "Woody Marks",
+          "position": "RB",
+          "winRate": 0.03,
+          "expectedStarterValue": 2272.8,
+          "floorStarterValue": 1726.8,
+          "ceilingStarterValue": 2900.1,
+          "medianRegret": 15.2,
+          "downsideRegret": 100,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 92,
+                "playerId": "27520",
+                "playerName": "Woody Marks",
+                "position": "RB"
+              },
+              {
+                "overallPick": 109,
+                "playerId": "23160",
+                "playerName": "Jaxson Dart",
+                "position": "QB"
+              }
+            ],
+            "probability": 0.84
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 3.6,
+      "pass": true
+    }
+  ]
+}

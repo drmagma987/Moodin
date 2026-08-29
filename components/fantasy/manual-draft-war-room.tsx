@@ -13,6 +13,7 @@ import {
   buildPickWindowSnapshot,
   buildPositionRunSnapshots,
   buildReachToleranceSnapshot,
+  buildRedraftBoard,
   buildTierWipeScenarioSnapshots,
   buildTierPivotSnapshots,
   buildPositionMarketSnapshots,
@@ -209,6 +210,10 @@ export function ManualDraftWarRoom({
 
   const pickInfo = getSnakePickInfo(draftState.currentPick, draftState.league.teams);
   const teamOnClock = selectedTeamId || pickInfo.teamId;
+  const baseBoard = useMemo(
+    () => buildRedraftBoard(candidates, draftState.league),
+    [candidates, draftState.league],
+  );
 
   const wrapSimulation = useMemo(
     () => buildWrapSimulationSnapshot(draftState, candidates),
@@ -222,7 +227,9 @@ export function ManualDraftWarRoom({
     }),
     [draftState, candidates, wrapSimulation],
   );
-  const recommendations = rankDraftCandidates(draftState, candidates, wrapSimulation).slice(0, 3);
+  const recommendations = rankDraftCandidates(draftState, candidates, wrapSimulation, {
+    baseBoard,
+  }).slice(0, 3);
   const undervaluedPlays = buildUndervaluedPlaySnapshots(draftState, candidates, wrapSimulation);
   const decisionSnapshot = buildDraftDecisionSnapshot(draftState, candidates, wrapSimulation);
   const draftPlan = buildDraftPlanSnapshot(draftState, candidates, wrapSimulation);

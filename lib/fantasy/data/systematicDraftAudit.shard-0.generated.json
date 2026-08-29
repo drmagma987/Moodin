@@ -1,0 +1,1539 @@
+{
+  "generatedAt": "2026-08-29T12:44:54.733Z",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "evaluationMode": "exact-production",
+  "continuationPolicyMode": "production",
+  "policyCertificationVersion": "2026-08-28-v5",
+  "productionWrapSimulations": 16,
+  "pairedSeedPolicy": "identical state/pick/simulation seed across every forced choice",
+  "screenSamples": 8,
+  "closeOrDisputedSamples": 32,
+  "forcedCandidateLimit": 5,
+  "stateCount": 8,
+  "expectedStateCount": 8,
+  "complete": true,
+  "phaseCounts": {
+    "early": 8,
+    "middle": 0,
+    "late": 0,
+    "endgame": 0
+  },
+  "opponentBehaviors": [
+    "adp",
+    "early-qb",
+    "late-qb",
+    "early-te",
+    "rb-heavy",
+    "wr-heavy",
+    "runs",
+    "model"
+  ],
+  "escalatedCloseOrDisputed": 8,
+  "pendingCloseEscalations": 0,
+  "effectivelyTied": 8,
+  "suspiciousCount": 0,
+  "elapsedMs": 17837334,
+  "allPassed": true,
+  "states": [
+    {
+      "id": "early:adp:1",
+      "seed": "systematic:adp:1",
+      "roomType": "adp",
+      "phase": "early",
+      "pick": 29,
+      "round": 3,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "WR",
+          "RB",
+          "TE",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.34,
+        "expectedStarterValue": 2107.5,
+        "floorStarterValue": 1433,
+        "ceilingStarterValue": 2898.6,
+        "medianRegret": 3,
+        "downsideRegret": 68.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "23062",
+              "playerName": "Emeka Egbuka",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23021",
+        "player": "Kenneth Walker III",
+        "position": "RB",
+        "winRate": 0.38,
+        "expectedStarterValue": 2089.4,
+        "floorStarterValue": 1398.6,
+        "ceilingStarterValue": 2903.7,
+        "medianRegret": 4.6,
+        "downsideRegret": 89.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "23021",
+              "playerName": "Kenneth Walker III",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.63
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.34,
+        "expectedStarterValue": 2107.5,
+        "floorStarterValue": 1433,
+        "ceilingStarterValue": 2898.6,
+        "medianRegret": 3,
+        "downsideRegret": 68.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "23062",
+              "playerName": "Emeka Egbuka",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "22936",
+          "player": "Trey McBride",
+          "position": "TE",
+          "winRate": 0.25,
+          "expectedStarterValue": 2076,
+          "floorStarterValue": 1395.8,
+          "ceilingStarterValue": 2878.1,
+          "medianRegret": 40.5,
+          "downsideRegret": 102.3,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22982",
+                "playerName": "Breece Hall",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.94
+          }
+        },
+        {
+          "playerId": "17298",
+          "player": "Josh Allen",
+          "position": "QB",
+          "winRate": 0.03,
+          "expectedStarterValue": 2026.2,
+          "floorStarterValue": 1348.9,
+          "ceilingStarterValue": 2853.3,
+          "medianRegret": 93.1,
+          "downsideRegret": 134,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "17298",
+                "playerName": "Josh Allen",
+                "position": "QB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              }
+            ],
+            "probability": 0.94
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": -1.6,
+      "pass": true
+    },
+    {
+      "id": "early:early-qb:2",
+      "seed": "systematic:early-qb:2",
+      "roomType": "early-qb",
+      "phase": "early",
+      "pick": 29,
+      "round": 3,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "WR",
+          "RB",
+          "TE",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.75,
+        "expectedStarterValue": 2086.3,
+        "floorStarterValue": 1449.4,
+        "ceilingStarterValue": 2891.2,
+        "medianRegret": 0,
+        "downsideRegret": 3.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "23062",
+              "playerName": "Emeka Egbuka",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23021",
+        "player": "Kenneth Walker III",
+        "position": "RB",
+        "winRate": 0.22,
+        "expectedStarterValue": 2069,
+        "floorStarterValue": 1413.4,
+        "ceilingStarterValue": 2895,
+        "medianRegret": 7,
+        "downsideRegret": 18.6,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "23021",
+              "playerName": "Kenneth Walker III",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.72
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.75,
+        "expectedStarterValue": 2086.3,
+        "floorStarterValue": 1449.4,
+        "ceilingStarterValue": 2891.2,
+        "medianRegret": 0,
+        "downsideRegret": 3.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "23062",
+              "playerName": "Emeka Egbuka",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "23062",
+          "player": "Emeka Egbuka",
+          "position": "WR",
+          "winRate": 0.03,
+          "expectedStarterValue": 2045.4,
+          "floorStarterValue": 1425.5,
+          "ceilingStarterValue": 2847.2,
+          "medianRegret": 32,
+          "downsideRegret": 50.9,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "23062",
+                "playerName": "Emeka Egbuka",
+                "position": "WR"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              }
+            ],
+            "probability": 0.97
+          }
+        },
+        {
+          "playerId": "22936",
+          "player": "Trey McBride",
+          "position": "TE",
+          "winRate": 0,
+          "expectedStarterValue": 2045.4,
+          "floorStarterValue": 1425.5,
+          "ceilingStarterValue": 2847.2,
+          "medianRegret": 32,
+          "downsideRegret": 50.9,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "23062",
+                "playerName": "Emeka Egbuka",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.97
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": -7,
+      "pass": true
+    },
+    {
+      "id": "early:late-qb:1",
+      "seed": "systematic:late-qb:1",
+      "roomType": "late-qb",
+      "phase": "early",
+      "pick": 29,
+      "round": 3,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "WR",
+          "RB",
+          "TE",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.27,
+        "expectedStarterValue": 2092.8,
+        "floorStarterValue": 1411.6,
+        "ceilingStarterValue": 2895.4,
+        "medianRegret": 7.6,
+        "downsideRegret": 68.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "17298",
+              "playerName": "Josh Allen",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23021",
+        "player": "Kenneth Walker III",
+        "position": "RB",
+        "winRate": 0.28,
+        "expectedStarterValue": 2089.4,
+        "floorStarterValue": 1398.6,
+        "ceilingStarterValue": 2903,
+        "medianRegret": 11.1,
+        "downsideRegret": 81.1,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "23021",
+              "playerName": "Kenneth Walker III",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.59
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.27,
+        "expectedStarterValue": 2092.8,
+        "floorStarterValue": 1411.6,
+        "ceilingStarterValue": 2895.4,
+        "medianRegret": 7.6,
+        "downsideRegret": 68.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "17298",
+              "playerName": "Josh Allen",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.5
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "22936",
+          "player": "Trey McBride",
+          "position": "TE",
+          "winRate": 0.45,
+          "expectedStarterValue": 2076,
+          "floorStarterValue": 1395.8,
+          "ceilingStarterValue": 2877.3,
+          "medianRegret": 5.7,
+          "downsideRegret": 89.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22982",
+                "playerName": "Breece Hall",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.94
+          }
+        },
+        {
+          "playerId": "17298",
+          "player": "Josh Allen",
+          "position": "QB",
+          "winRate": 0,
+          "expectedStarterValue": 2049.5,
+          "floorStarterValue": 1349.1,
+          "ceilingStarterValue": 2877,
+          "medianRegret": 32.5,
+          "downsideRegret": 120.1,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "17298",
+                "playerName": "Josh Allen",
+                "position": "QB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22982",
+                "playerName": "Breece Hall",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.94
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 1.9,
+      "pass": true
+    },
+    {
+      "id": "early:early-te:2",
+      "seed": "systematic:early-te:2",
+      "roomType": "early-te",
+      "phase": "early",
+      "pick": 29,
+      "round": 3,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "WR",
+          "RB",
+          "TE",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.34,
+        "expectedStarterValue": 2107.5,
+        "floorStarterValue": 1433,
+        "ceilingStarterValue": 2898.2,
+        "medianRegret": 3.3,
+        "downsideRegret": 82.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "23062",
+              "playerName": "Emeka Egbuka",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.53
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23021",
+        "player": "Kenneth Walker III",
+        "position": "RB",
+        "winRate": 0.38,
+        "expectedStarterValue": 2120.4,
+        "floorStarterValue": 1440.3,
+        "ceilingStarterValue": 2917.4,
+        "medianRegret": 4.1,
+        "downsideRegret": 89.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "23021",
+              "playerName": "Kenneth Walker III",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "19222",
+              "playerName": "DeVonta Smith",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.56
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.34,
+        "expectedStarterValue": 2107.5,
+        "floorStarterValue": 1433,
+        "ceilingStarterValue": 2898.2,
+        "medianRegret": 3.3,
+        "downsideRegret": 82.7,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "23062",
+              "playerName": "Emeka Egbuka",
+              "position": "WR"
+            }
+          ],
+          "probability": 0.53
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "19222",
+          "player": "DeVonta Smith",
+          "position": "WR",
+          "winRate": 0.28,
+          "expectedStarterValue": 2106.9,
+          "floorStarterValue": 1437.6,
+          "ceilingStarterValue": 2891.7,
+          "medianRegret": 33,
+          "downsideRegret": 89.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "19222",
+                "playerName": "DeVonta Smith",
+                "position": "WR"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22982",
+                "playerName": "Breece Hall",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.97
+          }
+        },
+        {
+          "playerId": "17298",
+          "player": "Josh Allen",
+          "position": "QB",
+          "winRate": 0,
+          "expectedStarterValue": 2057.2,
+          "floorStarterValue": 1390.7,
+          "ceilingStarterValue": 2866.9,
+          "medianRegret": 85.8,
+          "downsideRegret": 121.9,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "17298",
+                "playerName": "Josh Allen",
+                "position": "QB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "19222",
+                "playerName": "DeVonta Smith",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.97
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": -0.8,
+      "pass": true
+    },
+    {
+      "id": "early:rb-heavy:1",
+      "seed": "systematic:rb-heavy:1",
+      "roomType": "rb-heavy",
+      "phase": "early",
+      "pick": 29,
+      "round": 3,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "WR",
+          "RB",
+          "TE",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "22963",
+        "player": "George Pickens",
+        "position": "WR",
+        "winRate": 0.47,
+        "expectedStarterValue": 2087.4,
+        "floorStarterValue": 1447.6,
+        "ceilingStarterValue": 2863.6,
+        "medianRegret": 0.1,
+        "downsideRegret": 33.6,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "22963",
+              "playerName": "George Pickens",
+              "position": "WR"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.63
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "22963",
+        "player": "George Pickens",
+        "position": "WR",
+        "winRate": 0.47,
+        "expectedStarterValue": 2087.4,
+        "floorStarterValue": 1447.6,
+        "ceilingStarterValue": 2863.6,
+        "medianRegret": 0.1,
+        "downsideRegret": 33.6,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "22963",
+              "playerName": "George Pickens",
+              "position": "WR"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.63
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "22963",
+        "player": "George Pickens",
+        "position": "WR",
+        "winRate": 0.47,
+        "expectedStarterValue": 2087.4,
+        "floorStarterValue": 1447.6,
+        "ceilingStarterValue": 2863.6,
+        "medianRegret": 0.1,
+        "downsideRegret": 33.6,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "22963",
+              "playerName": "George Pickens",
+              "position": "WR"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.63
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "22936",
+          "player": "Trey McBride",
+          "position": "TE",
+          "winRate": 0.38,
+          "expectedStarterValue": 2083.6,
+          "floorStarterValue": 1437.4,
+          "ceilingStarterValue": 2867.2,
+          "medianRegret": 0,
+          "downsideRegret": 9.3,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "19222",
+                "playerName": "DeVonta Smith",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.88
+          }
+        },
+        {
+          "playerId": "19222",
+          "player": "DeVonta Smith",
+          "position": "WR",
+          "winRate": 0.16,
+          "expectedStarterValue": 2083.6,
+          "floorStarterValue": 1437.4,
+          "ceilingStarterValue": 2867.2,
+          "medianRegret": 7.6,
+          "downsideRegret": 32.5,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "19222",
+                "playerName": "DeVonta Smith",
+                "position": "WR"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              }
+            ],
+            "probability": 0.59
+          }
+        },
+        {
+          "playerId": "17298",
+          "player": "Josh Allen",
+          "position": "QB",
+          "winRate": 0,
+          "expectedStarterValue": 2057.2,
+          "floorStarterValue": 1390.7,
+          "ceilingStarterValue": 2866.9,
+          "medianRegret": 30.7,
+          "downsideRegret": 52.2,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "17298",
+                "playerName": "Josh Allen",
+                "position": "QB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "19222",
+                "playerName": "DeVonta Smith",
+                "position": "WR"
+              }
+            ],
+            "probability": 0.88
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0.1,
+      "pass": true
+    },
+    {
+      "id": "early:wr-heavy:2",
+      "seed": "systematic:wr-heavy:2",
+      "roomType": "wr-heavy",
+      "phase": "early",
+      "pick": 29,
+      "round": 3,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "WR",
+          "RB",
+          "TE",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.28,
+        "expectedStarterValue": 2092.8,
+        "floorStarterValue": 1411.6,
+        "ceilingStarterValue": 2896.2,
+        "medianRegret": 4.8,
+        "downsideRegret": 22.4,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.69
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23021",
+        "player": "Kenneth Walker III",
+        "position": "RB",
+        "winRate": 0.22,
+        "expectedStarterValue": 2088.1,
+        "floorStarterValue": 1370.6,
+        "ceilingStarterValue": 2933.1,
+        "medianRegret": 9.3,
+        "downsideRegret": 28.2,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "23021",
+              "playerName": "Kenneth Walker III",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "15514",
+              "playerName": "Derrick Henry",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.53
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "25395",
+        "player": "Omarion Hampton",
+        "position": "RB",
+        "winRate": 0.28,
+        "expectedStarterValue": 2092.8,
+        "floorStarterValue": 1411.6,
+        "ceilingStarterValue": 2896.2,
+        "medianRegret": 4.8,
+        "downsideRegret": 22.4,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "25395",
+              "playerName": "Omarion Hampton",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.69
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "15514",
+          "player": "Derrick Henry",
+          "position": "RB",
+          "winRate": 0.25,
+          "expectedStarterValue": 2096.8,
+          "floorStarterValue": 1401.9,
+          "ceilingStarterValue": 2915.7,
+          "medianRegret": 0,
+          "downsideRegret": 8.3,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "15514",
+                "playerName": "Derrick Henry",
+                "position": "RB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              }
+            ],
+            "probability": 0.97
+          }
+        },
+        {
+          "playerId": "22936",
+          "player": "Trey McBride",
+          "position": "TE",
+          "winRate": 0.25,
+          "expectedStarterValue": 2096.8,
+          "floorStarterValue": 1401.9,
+          "ceilingStarterValue": 2915.7,
+          "medianRegret": 0,
+          "downsideRegret": 12.6,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "22936",
+                "playerName": "Trey McBride",
+                "position": "TE"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "15514",
+                "playerName": "Derrick Henry",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "17298",
+          "player": "Josh Allen",
+          "position": "QB",
+          "winRate": 0,
+          "expectedStarterValue": 2070.3,
+          "floorStarterValue": 1355.2,
+          "ceilingStarterValue": 2915.5,
+          "medianRegret": 26.8,
+          "downsideRegret": 47.3,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "17298",
+                "playerName": "Josh Allen",
+                "position": "QB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "15514",
+                "playerName": "Derrick Henry",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 4.8,
+      "pass": true
+    },
+    {
+      "id": "early:runs:1",
+      "seed": "systematic:runs:1",
+      "roomType": "runs",
+      "phase": "early",
+      "pick": 29,
+      "round": 3,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "WR",
+          "RB",
+          "TE",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "17240",
+        "player": "Saquon Barkley",
+        "position": "RB",
+        "winRate": 0.5,
+        "expectedStarterValue": 2104.5,
+        "floorStarterValue": 1427,
+        "ceilingStarterValue": 2920.6,
+        "medianRegret": 0,
+        "downsideRegret": 73.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "17240",
+              "playerName": "Saquon Barkley",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22982",
+              "playerName": "Breece Hall",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.97
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "17240",
+        "player": "Saquon Barkley",
+        "position": "RB",
+        "winRate": 0.5,
+        "expectedStarterValue": 2104.5,
+        "floorStarterValue": 1427,
+        "ceilingStarterValue": 2920.6,
+        "medianRegret": 0,
+        "downsideRegret": 73.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "17240",
+              "playerName": "Saquon Barkley",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22982",
+              "playerName": "Breece Hall",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.97
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "17240",
+        "player": "Saquon Barkley",
+        "position": "RB",
+        "winRate": 0.5,
+        "expectedStarterValue": 2104.5,
+        "floorStarterValue": 1427,
+        "ceilingStarterValue": 2920.6,
+        "medianRegret": 0,
+        "downsideRegret": 73.8,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "17240",
+              "playerName": "Saquon Barkley",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22982",
+              "playerName": "Breece Hall",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.97
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "23062",
+          "player": "Emeka Egbuka",
+          "position": "WR",
+          "winRate": 0.5,
+          "expectedStarterValue": 2107.2,
+          "floorStarterValue": 1452.9,
+          "ceilingStarterValue": 2901.2,
+          "medianRegret": 0,
+          "downsideRegret": 78.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "23062",
+                "playerName": "Emeka Egbuka",
+                "position": "WR"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "25395",
+                "playerName": "Omarion Hampton",
+                "position": "RB"
+              }
+            ],
+            "probability": 1
+          }
+        },
+        {
+          "playerId": "25395",
+          "player": "Omarion Hampton",
+          "position": "RB",
+          "winRate": 0,
+          "expectedStarterValue": 2069.6,
+          "floorStarterValue": 1389.4,
+          "ceilingStarterValue": 2888.6,
+          "medianRegret": 37.2,
+          "downsideRegret": 107.2,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "25395",
+                "playerName": "Omarion Hampton",
+                "position": "RB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22982",
+                "playerName": "Breece Hall",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.97
+          }
+        },
+        {
+          "playerId": "23021",
+          "player": "Kenneth Walker III",
+          "position": "RB",
+          "winRate": 0,
+          "expectedStarterValue": 2066.2,
+          "floorStarterValue": 1376.4,
+          "ceilingStarterValue": 2896.2,
+          "medianRegret": 48.9,
+          "downsideRegret": 104.9,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "23021",
+                "playerName": "Kenneth Walker III",
+                "position": "RB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "22982",
+                "playerName": "Breece Hall",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.97
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": 0,
+      "pass": true
+    },
+    {
+      "id": "early:model:2",
+      "seed": "systematic:model:2",
+      "roomType": "model",
+      "phase": "early",
+      "pick": 29,
+      "round": 3,
+      "rosterBefore": {
+        "counts": {
+          "RB": 1,
+          "WR": 1
+        },
+        "openRequiredSlots": [
+          "QB",
+          "WR",
+          "WR",
+          "RB",
+          "TE",
+          "W/R/T",
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "22936",
+        "player": "Trey McBride",
+        "position": "TE",
+        "winRate": 0.58,
+        "expectedStarterValue": 2096.8,
+        "floorStarterValue": 1401.9,
+        "ceilingStarterValue": 2915,
+        "medianRegret": 0,
+        "downsideRegret": 67.3,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "15514",
+              "playerName": "Derrick Henry",
+              "position": "RB"
+            }
+          ],
+          "probability": 0.69
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "23021",
+        "player": "Kenneth Walker III",
+        "position": "RB",
+        "winRate": 0.16,
+        "expectedStarterValue": 2089.4,
+        "floorStarterValue": 1398.6,
+        "ceilingStarterValue": 2903,
+        "medianRegret": 9.3,
+        "downsideRegret": 32.9,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "23021",
+              "playerName": "Kenneth Walker III",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.53
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "23021",
+        "player": "Kenneth Walker III",
+        "position": "RB",
+        "winRate": 0.16,
+        "expectedStarterValue": 2089.4,
+        "floorStarterValue": 1398.6,
+        "ceilingStarterValue": 2903,
+        "medianRegret": 9.3,
+        "downsideRegret": 32.9,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 29,
+              "playerId": "23021",
+              "playerName": "Kenneth Walker III",
+              "position": "RB"
+            },
+            {
+              "overallPick": 32,
+              "playerId": "22936",
+              "playerName": "Trey McBride",
+              "position": "TE"
+            }
+          ],
+          "probability": 0.53
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "15514",
+          "player": "Derrick Henry",
+          "position": "RB",
+          "winRate": 0.27,
+          "expectedStarterValue": 2096.8,
+          "floorStarterValue": 1401.9,
+          "ceilingStarterValue": 2915,
+          "medianRegret": 3.9,
+          "downsideRegret": 36.3,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "15514",
+                "playerName": "Derrick Henry",
+                "position": "RB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "17298",
+                "playerName": "Josh Allen",
+                "position": "QB"
+              }
+            ],
+            "probability": 0.5
+          }
+        },
+        {
+          "playerId": "17298",
+          "player": "Josh Allen",
+          "position": "QB",
+          "winRate": 0,
+          "expectedStarterValue": 2070.3,
+          "floorStarterValue": 1355.2,
+          "ceilingStarterValue": 2914.7,
+          "medianRegret": 25.4,
+          "downsideRegret": 47.5,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 29,
+                "playerId": "17298",
+                "playerName": "Josh Allen",
+                "position": "QB"
+              },
+              {
+                "overallPick": 32,
+                "playerId": "15514",
+                "playerName": "Derrick Henry",
+                "position": "RB"
+              }
+            ],
+            "probability": 0.88
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": -3.9,
+      "pass": true
+    }
+  ]
+}

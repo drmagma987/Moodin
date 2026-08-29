@@ -1,0 +1,239 @@
+{
+  "generatedAt": "2026-08-29T04:20:56.831Z",
+  "leagueConfigFingerprint": "fnv1a-6863848b",
+  "evaluationMode": "exact-production",
+  "continuationPolicyMode": "production",
+  "policyCertificationVersion": "2026-08-28-v5",
+  "productionWrapSimulations": 16,
+  "pairedSeedPolicy": "identical state/pick/simulation seed across every forced choice",
+  "screenSamples": 8,
+  "closeOrDisputedSamples": 32,
+  "forcedCandidateLimit": 5,
+  "stateCount": 1,
+  "expectedStateCount": 1,
+  "complete": true,
+  "phaseCounts": {
+    "early": 0,
+    "middle": 0,
+    "late": 1,
+    "endgame": 0
+  },
+  "opponentBehaviors": [
+    "late-qb"
+  ],
+  "escalatedCloseOrDisputed": 1,
+  "pendingCloseEscalations": 0,
+  "effectivelyTied": 1,
+  "suspiciousCount": 0,
+  "elapsedMs": 1836830,
+  "allPassed": true,
+  "states": [
+    {
+      "id": "replay:late-qb-1:89",
+      "seed": "certification:late-qb:1",
+      "roomType": "late-qb",
+      "phase": "late",
+      "pick": 89,
+      "round": 9,
+      "rosterBefore": {
+        "counts": {
+          "RB": 3,
+          "WR": 3,
+          "QB": 1,
+          "TE": 1
+        },
+        "openRequiredSlots": [
+          "W/R/T",
+          "K"
+        ],
+        "starters": [
+          "22968",
+          "19799",
+          "25395",
+          "23021",
+          "17298",
+          "26434",
+          "22985",
+          "18598"
+        ],
+        "bench": []
+      },
+      "production": {
+        "playerId": "23107",
+        "player": "Jordan Addison",
+        "position": "WR",
+        "winRate": 0.7,
+        "expectedStarterValue": 2333.1,
+        "floorStarterValue": 1779.4,
+        "ceilingStarterValue": 2983.6,
+        "medianRegret": 0,
+        "downsideRegret": 1.2,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 89,
+              "playerId": "23107",
+              "playerName": "Jordan Addison",
+              "position": "WR"
+            },
+            {
+              "overallPick": 92,
+              "playerId": "15600",
+              "playerName": "Dak Prescott",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.59
+        }
+      },
+      "constrainedAdpBaseline": {
+        "playerId": "19245",
+        "player": "J.K. Dobbins",
+        "position": "RB",
+        "winRate": 0.04,
+        "expectedStarterValue": 2305,
+        "floorStarterValue": 1750.6,
+        "ceilingStarterValue": 2983.6,
+        "medianRegret": 27.5,
+        "downsideRegret": 42.5,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 89,
+              "playerId": "19245",
+              "playerName": "J.K. Dobbins",
+              "position": "RB"
+            },
+            {
+              "overallPick": 92,
+              "playerId": "15600",
+              "playerName": "Dak Prescott",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.59
+        }
+      },
+      "constrainedModelBoardBaseline": {
+        "playerId": "23107",
+        "player": "Jordan Addison",
+        "position": "WR",
+        "winRate": 0.7,
+        "expectedStarterValue": 2333.1,
+        "floorStarterValue": 1779.4,
+        "ceilingStarterValue": 2983.6,
+        "medianRegret": 0,
+        "downsideRegret": 1.2,
+        "commonContinuation": {
+          "picks": [
+            {
+              "overallPick": 89,
+              "playerId": "23107",
+              "playerName": "Jordan Addison",
+              "position": "WR"
+            },
+            {
+              "overallPick": 92,
+              "playerId": "15600",
+              "playerName": "Dak Prescott",
+              "position": "QB"
+            }
+          ],
+          "probability": 0.59
+        }
+      },
+      "seriousAlternatives": [
+        {
+          "playerId": "23123",
+          "player": "Quentin Johnston",
+          "position": "WR",
+          "winRate": 0.17,
+          "expectedStarterValue": 2330.1,
+          "floorStarterValue": 1783.3,
+          "ceilingStarterValue": 2983.6,
+          "medianRegret": 2.1,
+          "downsideRegret": 9.4,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 89,
+                "playerId": "23123",
+                "playerName": "Quentin Johnston",
+                "position": "WR"
+              },
+              {
+                "overallPick": 92,
+                "playerId": "15600",
+                "playerName": "Dak Prescott",
+                "position": "QB"
+              }
+            ],
+            "probability": 0.56
+          }
+        },
+        {
+          "playerId": "23019",
+          "player": "Xavier Worthy",
+          "position": "WR",
+          "winRate": 0.04,
+          "expectedStarterValue": 2321.9,
+          "floorStarterValue": 1769,
+          "ceilingStarterValue": 2983.6,
+          "medianRegret": 11.3,
+          "downsideRegret": 12,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 89,
+                "playerId": "23019",
+                "playerName": "Xavier Worthy",
+                "position": "WR"
+              },
+              {
+                "overallPick": 92,
+                "playerId": "15600",
+                "playerName": "Dak Prescott",
+                "position": "QB"
+              }
+            ],
+            "probability": 0.63
+          }
+        },
+        {
+          "playerId": "26148",
+          "player": "Jonathon Brooks",
+          "position": "RB",
+          "winRate": 0.04,
+          "expectedStarterValue": 2318.5,
+          "floorStarterValue": 1755.8,
+          "ceilingStarterValue": 2983.6,
+          "medianRegret": 9.3,
+          "downsideRegret": 30,
+          "commonContinuation": {
+            "picks": [
+              {
+                "overallPick": 89,
+                "playerId": "26148",
+                "playerName": "Jonathon Brooks",
+                "position": "RB"
+              },
+              {
+                "overallPick": 92,
+                "playerId": "15600",
+                "playerName": "Dak Prescott",
+                "position": "QB"
+              }
+            ],
+            "probability": 0.53
+          }
+        }
+      ],
+      "exactSampleSize": 32,
+      "needsEscalation": false,
+      "uncertainty": "effectively-tied",
+      "classification": "defensible/close",
+      "regretGapVsBestAlternative": -2.1,
+      "pass": true
+    }
+  ]
+}

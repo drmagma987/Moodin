@@ -35,6 +35,8 @@ import { assertLeagueMatchesSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTr
 
 const FLEX_ELIGIBLE: PlayerPosition[] = ["RB", "WR", "TE"];
 const BOARD_POSITIONS: PlayerPosition[] = ["RB", "WR", "TE", "QB", "K"];
+export const PRODUCTION_WRAP_SIMULATIONS = 16;
+export const DRAFT_POLICY_CERTIFICATION_VERSION = "2026-08-28-v5";
 
 export type RedraftBoardEntry = {
   playerId: string;
@@ -288,13 +290,42 @@ function rosterConstructionPenalty(
   if (position === "QB" && currentCount >= 1) {
     if (currentCount >= 2) return 120;
     if (team.openSlots.some((slot) => ["RB", "WR", "TE", "W/R/T"].includes(slot))) return 72;
-    return round <= 12 ? 22 : 7;
+    return 0;
   }
 
   if (position === "TE" && currentCount >= 1) {
-    if (currentCount >= 2) return 110;
-    if (team.openSlots.some((slot) => ["RB", "WR", "W/R/T"].includes(slot))) return 64;
-    return round <= 12 ? 16 : 5;
+    const coreFlexOpen = team.openSlots.some((slot) => ["RB", "WR", "W/R/T"].includes(slot));
+    if (coreFlexOpen) return currentCount >= 2 ? 110 : 64;
+    const lineupCapacity = (countRequiredSlots(state.league).TE ?? 0) + flexSlotCount(state.league);
+    if (currentCount >= lineupCapacity) return 110;
+    return 0;
+  }
+
+  if (position === "K" && currentCount === 0 && round < 14) {
+    // A required kicker slot is not a reason to spend a mid-round pick while
+    // the roster still has bench capacity. Preserve those picks for injury and
+    // breakout optionality, then let the explicit Round-14 completion ramp act.
+    return 45 + (14 - round) * 8;
+  }
+
+  if (FLEX_ELIGIBLE.includes(position)) {
+    const required = countRequiredSlots(state.league);
+    const lineupCapacity = (required[position] ?? 0) + flexSlotCount(state.league);
+    const anotherExactFlexStarterIsOpen = FLEX_ELIGIBLE.some(
+      (otherPosition) => otherPosition !== position && team.openSlots.includes(otherPosition),
+    );
+    if (
+      anotherExactFlexStarterIsOpen &&
+      !team.openSlots.includes(position) &&
+      !team.openSlots.includes("W/R/T") &&
+      currentCount >= lineupCapacity
+    ) {
+      // Once this position has consumed every exact and flex path, another
+      // player is bench-only while a different required starter is empty.
+      // Paired construction-ablation evidence at Pick 69 measured an 81-point
+      // median-regret loss when this marginal-lineup cost was omitted.
+      return 42 + Math.max(0, round - 6) * 4 + Math.max(0, currentCount - lineupCapacity) * 10;
+    }
   }
 
   if (position === "K" && currentCount >= 1) return 220;
@@ -309,7 +340,12 @@ function rosterCompletionBonus(
 ) {
   if (!team || !team.openSlots.includes(position)) return 0;
   const round = getSnakePickInfo(state.currentPick, state.league.teams).round;
-  if (position === "QB" && round >= 10) return 84 + (round - 10) * 10;
+  if (position === "QB" && round >= 7) {
+    // A hard Round-10 cliff waited too long when a starting QB at market cost
+    // could be paired with a high-survival WR at the short turn. Exact paired
+    // continuations support a smooth urgency ramp beginning in Round 7.
+    return 38 + (round - 7) * 15;
+  }
   if (position === "TE" && round >= 10) return 34 + (round - 10) * 6;
   if ((position === "RB" || position === "WR") && round >= 13) return 60 + (round - 13) * 30;
   if (position === "K" && round >= 14) return 55 + (round - 14) * 20;
@@ -380,9 +416,10 @@ function scoreSimulatedPick(
   candidate: DraftCandidate,
   availablePool: DraftCandidate[],
   league: LeagueConfig,
+  replacementBaselines: Map<PlayerPosition, number>,
 ) {
   const position = primaryPosition(candidate);
-  const replacement = valueOverReplacement(candidate, availablePool, league);
+  const replacement = valueOverReplacement(candidate, availablePool, league, replacementBaselines);
   const expectedPick = expectedMarketPick(candidate);
   const marketPull = (220 - Math.min(expectedPick, 220)) / 220;
   const need = positionNeedWeight(team, position, league);
@@ -423,10 +460,11 @@ function selectSimulatedPick(
   league: LeagueConfig,
   random: () => number,
 ) {
+  const replacementBaselines = replacementBaselinesByPosition(availablePool, league);
   const scored = availablePool
     .map((candidate) => ({
       candidate,
-      score: scoreSimulatedPick(team, candidate, availablePool, league),
+      score: scoreSimulatedPick(team, candidate, availablePool, league, replacementBaselines),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 10);
@@ -512,6 +550,42 @@ function valueOverReplacement(
     valueOverReplacement: Number((candidate.projection.range.p50 - replacementValue).toFixed(2)),
     replacementBaseline: Number(replacementValue.toFixed(2)),
   };
+}
+
+function expectedPositionValueAtNextPick(
+  position: PlayerPosition,
+  availableCandidates: DraftCandidate[],
+  state: DraftState,
+  wrapSimulation: WrapSimulationSnapshot | undefined,
+  replacementBaselines: Map<PlayerPosition, number>,
+) {
+  const options = availableCandidates
+    .filter((candidate) => primaryPosition(candidate) === position)
+    .map((candidate) => ({
+      candidate,
+      value: valueOverReplacement(
+        candidate,
+        availableCandidates,
+        state.league,
+        replacementBaselines,
+      ).valueOverReplacement,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Estimate the expected best surviving option, not merely the chance that
+  // one named player survives. Treating a player's loss as zero positional
+  // value badly overstates VONA when a close substitute is likely to reach the
+  // next pick. The sequential form approximates the maximum of the surviving
+  // same-position values while keeping the live wrap model authoritative.
+  let probabilityAllBetterOptionsAreGone = 1;
+  let expectedValue = 0;
+  for (const option of options) {
+    const survival = estimateMakeItBackProbability(option.candidate, state, wrapSimulation);
+    expectedValue += probabilityAllBetterOptionsAreGone * survival * option.value;
+    probabilityAllBetterOptionsAreGone *= 1 - survival;
+    if (probabilityAllBetterOptionsAreGone < 0.001) break;
+  }
+  return Number(expectedValue.toFixed(2));
 }
 
 export function buildRedraftBoard(
@@ -730,7 +804,7 @@ export function buildWrapSimulationSnapshot(
   const available = getAvailableCandidates(state, pool);
   const upcomingPicks = getLivePicksBeforeNextTurn(state).overallPicks;
   const picksSimulated = upcomingPicks.length;
-  const simulations = options?.simulations ?? 160;
+  const simulations = options?.simulations ?? PRODUCTION_WRAP_SIMULATIONS;
 
   if (available.length === 0 || picksSimulated <= 0) {
     return {
@@ -1140,6 +1214,18 @@ export function rankDraftCandidates(
       entry,
     ] as const),
   );
+  const expectedPositionValueLater = new Map(
+    BOARD_POSITIONS.map((position) => [
+      position,
+      expectedPositionValueAtNextPick(
+        position,
+        availableCandidates,
+        state,
+        wrapSimulation,
+        availableReplacementBaselines,
+      ),
+    ] as const),
+  );
 
   return availableCandidates
     .map((candidate) => {
@@ -1158,12 +1244,19 @@ export function rankDraftCandidates(
         availableReplacementBaselines,
       );
       const valueNow = replacement.valueOverReplacement;
-      const valueLater = Number((valueNow * makeItBack).toFixed(2));
+      const valueLater = Math.min(valueNow, expectedPositionValueLater.get(position) ?? 0);
       const upsideDelta = Number(
         (candidate.projection.range.p90 - candidate.projection.range.p50).toFixed(2),
       );
       const scarcity = scarcityBonus(position, candidate.market.tier, state.league);
-      const vona = Number((valueNow - valueLater).toFixed(2));
+      const hasOpenStarterPath = myTeam
+        ? myTeam.openSlots.includes(position) ||
+          (FLEX_ELIGIBLE.includes(position) && myTeam.openSlots.includes("W/R/T"))
+        : true;
+      const vonaMultiplier = hasOpenStarterPath
+        ? 1
+        : 1 / Math.max(1, state.league.benchSlots);
+      const vona = Number(((valueNow - valueLater) * vonaMultiplier).toFixed(2));
       const valueGapVsMarket = marketValueGap(candidate);
       const pprLift =
         position === "WR"
@@ -1191,9 +1284,17 @@ export function rankDraftCandidates(
       const remainingExactStarters = myTeam
         ? Math.max(0, (countRequiredSlots(state.league)[position] ?? 0) - (myTeam.positionCounts[position] ?? 0))
         : 0;
+      const currentRound = getSnakePickInfo(state.currentPick, state.league.teams).round;
       const multiStarterDemandBonus = options?.policyMode === "construction-ablation"
         ? 0
-        : Math.max(0, remainingExactStarters - 1) * 22;
+        : currentRound >= 4 && FLEX_ELIGIBLE.includes(position) && remainingExactStarters > 0
+          ? Number(
+              (
+                (22 + Math.max(0, remainingExactStarters - 1) * 44) *
+                (1 - makeItBack)
+              ).toFixed(2),
+            )
+          : 0;
       const constructionPenalty = options?.policyMode === "construction-ablation"
         ? 0
         : rosterConstructionPenalty(myTeam, position, state);
@@ -1302,7 +1403,7 @@ export function rankDraftCandidates(
             `${candidate.player.fullName} sits at our board rank ${boardEntry.boardRank} versus market rank ${boardEntry.marketRank}, a ${boardEntry.boardEdge >= 0 ? "+" : ""}${boardEntry.boardEdge}-slot gap.`,
             `${position} value is measured against the first projected non-starter after this league's required lineup and flex spots are allocated.`,
             `The next-round positional pocket adds ${boardEntry.positionalLeverage.score.toFixed(1)} points of leverage (${boardEntry.positionalLeverage.medianTierEdge.toFixed(1)} median-point tier edge).`,
-            `${Math.round(makeItBack * 100)}% make-it-back odds create ${vona.toFixed(1)} VONA in a ${countRequiredSlots(state.league).WR ?? 0}-WR, ${flexSlotCount(state.league)}-flex format.`,
+            `${Math.round(makeItBack * 100)}% chance this player makes it back; the best expected ${position} option at the next pick is worth ${valueLater.toFixed(1)}, leaving ${vona.toFixed(1)} points of take-now value.`,
             turnContext.summary,
             constructionPenalty > 0
               ? `${position} is already filled on Vaughn's roster, so this option carries a ${constructionPenalty.toFixed(0)}-point roster-construction penalty.`
@@ -1350,7 +1451,7 @@ export function rankDraftCandidates(
           convictionScore: dossier?.convictionScore ?? 50,
           freshnessScore: refresh?.freshnessScore ?? 18,
           valueCase: `${candidate.player.fullName} is a market-value target because our board has him ${Math.abs(boardEntry.boardEdge)} slot${Math.abs(boardEntry.boardEdge) === 1 ? "" : "s"} ${boardEntry.boardEdge >= 0 ? "ahead of" : "behind"} market cost while still keeping ${valueNow.toFixed(1)} points of replacement edge.`,
-          structuralCase: `${candidate.player.fullName} matches current roster pressure through lineup-derived replacement value, ${Math.round(makeItBack * 100)}% make-it-back odds, ${vona.toFixed(1)} VONA, and a ${Math.round(
+          structuralCase: `${candidate.player.fullName} matches current roster pressure through lineup-derived replacement value, a ${Math.round(makeItBack * 100)}% chance he makes it back, ${vona.toFixed(1)} points of take-now value after accounting for expected ${position} substitutes, and a ${Math.round(
             (runSnapshot?.tierSurvivalProbability ?? 0.8) * 100,
           )}% chance this tier survives the wrap.`,
         },
@@ -1441,11 +1542,18 @@ function conditionalLineupScore(
   key: "p10" | "p50" | "p90",
   replacementBaselines?: Map<PlayerPosition, number>,
   sampledOutcomeIndex?: number,
+  pairedOutcomePlayerIds?: Set<string>,
 ) {
   const projectedValue = (candidate: DraftCandidate) => {
     if (sampledOutcomeIndex === undefined) return candidate.projection.range[key];
+    // Paired counterfactuals need common random numbers for the forced choices.
+    // Seeding those players by identity makes Choice A and Choice B receive
+    // different luck, inflating regret variance instead of isolating the pick.
+    const outcomeKey = pairedOutcomePlayerIds?.has(candidate.player.id)
+      ? "forced-choice"
+      : candidate.player.id;
     const outcome = createSeededRandom(
-      hashString(`conditional-outcome:${sampledOutcomeIndex}:${candidate.player.id}`),
+      hashString(`conditional-outcome:${sampledOutcomeIndex}:${outcomeKey}`),
     )();
     return outcome < 0.5
       ? candidate.projection.range.p10 +
@@ -1632,7 +1740,9 @@ export function buildConditionalDraftPathBoard(
   const horizonPicks = Math.max(2, options?.horizonPicks ?? 3);
   const policyMode = options?.policyMode ?? "production";
   const evaluationMode = options?.evaluationMode ?? "quick-preview";
-  const wrapSimulationsPerPick = Math.max(4, options?.wrapSimulationsPerPick ?? 8);
+  const wrapSimulationsPerPick = evaluationMode === "exact-production"
+    ? PRODUCTION_WRAP_SIMULATIONS
+    : Math.max(4, options?.wrapSimulationsPerPick ?? 8);
   const futurePicks = personalPickSequence(state, horizonPicks);
   const onClock = getSnakePickInfo(state.currentPick, state.league.teams).teamId;
   if (onClock !== state.myTeamId || futurePicks[0] !== state.currentPick) {
@@ -1693,6 +1803,7 @@ export function buildConditionalDraftPathBoard(
   const initialCandidates = recommendationIds
     .map((playerId) => candidateById.get(playerId))
     .filter((candidate): candidate is DraftCandidate => Boolean(candidate));
+  const pairedOutcomePlayerIds = new Set(initialCandidates.map((candidate) => candidate.player.id));
   const myTeam = state.teams.find((team) => team.teamId === state.myTeamId);
   const initialRosterIds = [...new Set([...(myTeam?.starters ?? []), ...(myTeam?.bench ?? [])])];
   const scoresByPlayer = new Map<string, Array<{ floor: number; median: number; ceiling: number }>>();
@@ -1787,6 +1898,7 @@ export function buildConditionalDraftPathBoard(
           "p50",
           replacementBaselines.get("p50"),
           simulationIndex,
+          pairedOutcomePlayerIds,
         ),
       );
       const sequenceKey = pathPicks.map((pick) => pick.playerId).join("|");
