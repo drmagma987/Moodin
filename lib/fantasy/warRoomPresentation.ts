@@ -16,6 +16,7 @@ export type WarRoomDraftCall =
 export type WarRoomRecommendationExplanation = {
   driver: "Unpassable value" | "Position demand" | "Alternatives thinning" | "Good market price" | "Reliable workload" | "Best available fit";
   whyNow: string;
+  supportingWhy: string;
   chanceBack: string;
   price: string;
   comparison: string | null;
@@ -55,6 +56,9 @@ export function explainWarRoomRecommendation(input: {
   const comparison = positionalComparison
     ? `The next comparable ${position} is ${positionalComparison.player.fullName}.`
     : null;
+  const comparisonPointGap = positionalComparison
+    ? Math.max(0, candidate.projection.range.p50 - positionalComparison.projection.range.p50)
+    : 0;
 
   let driver: WarRoomRecommendationExplanation["driver"] = "Best available fit";
   let whyNow = `${candidate.player.fullName} offers the strongest combination of projected production, roster fit, and current price.`;
@@ -82,6 +86,13 @@ export function explainWarRoomRecommendation(input: {
   return {
     driver,
     whyNow,
+    supportingWhy: positionalComparison
+      ? comparisonPointGap >= 1
+        ? `The next comparable ${position}, ${positionalComparison.player.fullName}, projects ${comparisonPointGap.toFixed(0)} fewer median points.`
+        : `${positionalComparison.player.fullName} is the next comparable ${position}, so this is the relevant alternative if you wait.`
+      : candidate.market.yahooXRank != null || candidate.market.yahooRank != null
+        ? `Model rank #${recommendation.explanation.ourBoardRank} versus Yahoo #${candidate.market.yahooXRank ?? candidate.market.yahooRank} shows the room-price gap.`
+        : `His projected range runs from ${candidate.projection.range.p10.toFixed(0)} to ${candidate.projection.range.p90.toFixed(0)} points.`,
     chanceBack: `${chanceBack}% chance available at your next pick`,
     price: `Overall model board #${recommendation.explanation.ourBoardRank} · ADP ${candidate.market.adp}`,
     comparison,

@@ -945,3 +945,8 @@ If checks cannot be run, say so clearly.
   - Rehearse moves the current roster and live position pressure into the right rail, hides the retired top-remaining-tier block, and retains a scrollable full pick history
   - Rehearse now receives the browser-adjusted personal ranking order and exposes the same Recommended, Model, Yahoo XRank, Yahoo ADP, Aggregate, and Personal board sorts
 - Verified the parity pass with 125/125 fantasy tests, TypeScript, lint (existing bachelor-party font warning only), and a successful production build.
+- Added personal-board draft-slot guides and a portable rankings export:
+  - the editable board now inserts visible separators at each of Vaughn's snake-draft selections, including the Round 3 break between personal ranks 28 and 29
+  - the browser export now downloads a CSV containing the complete personal order, player identity, model/Yahoo/aggregate market context, draft-slot markers, and source fingerprints
+  - the second quick-hit note for each top-five option now identifies the next comparable player and projected drop, or gives an exact market/range reference when no comparison is available
+  - War Room and Rehearse use the same shared two-bullet recommendation explanation

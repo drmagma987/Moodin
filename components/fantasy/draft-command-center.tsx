@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -459,6 +459,17 @@ export function DraftCommandCenter({
     () => new Map(effectivePersonalBoardOrder.map((playerId, index) => [playerId, index + 1] as const)),
     [effectivePersonalBoardOrder],
   );
+  const myDraftRankBreaks = useMemo(() => {
+    const breaks = new Map<number, { round: number; overallPick: number }>();
+    const totalRounds = draftState.league.rosterSlots.filter((slot) => slot !== "IR").length;
+    for (let overallPick = 1; overallPick <= totalRounds * draftState.league.teams; overallPick += 1) {
+      const info = getSnakePickInfo(overallPick, draftState.league.teams);
+      if (info.teamId === draftState.myTeamId) {
+        breaks.set(overallPick, { round: info.round, overallPick });
+      }
+    }
+    return breaks;
+  }, [draftState.league.rosterSlots, draftState.league.teams, draftState.myTeamId]);
   const personalBoardRows = useMemo(() => {
     const lowered = personalBoardQuery.trim().toLowerCase();
     return effectivePersonalBoardOrder
@@ -843,22 +854,34 @@ export function DraftCommandCenter({
         position: candidate ? primaryPosition(candidate) : null,
         modelRank: boardEntry?.boardRank ?? null,
         yahooXRank: candidate?.market.yahooXRank ?? candidate?.market.yahooRank ?? null,
+        yahooAdp: candidate?.market.yahooAdp ?? null,
+        aggregateRank: candidate?.market.aggregateRank ?? null,
+        rankSpread: candidate?.market.rankSpread ?? null,
+        draftSlot: myDraftRankBreaks.has(index + 1) ? index + 1 : null,
+        draftRound: myDraftRankBreaks.get(index + 1)?.round ?? null,
       };
     });
-    const payload = {
-      format: "moodin-fantasy-personal-rankings",
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      leagueConfigVersion: leagueSourceOfTruth.version,
-      leagueConfigFingerprint: leagueSourceOfTruthFingerprint,
-      boardFingerprint: currentRefresh.boardFingerprint,
-      playerCount: rankings.length,
-      rankings,
+    const headers = ["Personal Rank", "Draft Slot", "Draft Round", "Player ID", "Player", "Team", "Position", "Model Rank", "Yahoo XRank", "Yahoo ADP", "Aggregate Rank", "Rank Spread"];
+    const escapeCsv = (value: string | number | null) => {
+      const text = value == null ? "" : String(value);
+      return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
     };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    const rows = rankings.map((ranking) => [ranking.rank, ranking.draftSlot, ranking.draftRound, ranking.playerId, ranking.fullName, ranking.team, ranking.position, ranking.modelRank, ranking.yahooXRank, ranking.yahooAdp, ranking.aggregateRank, ranking.rankSpread]);
+    const metadata: Array<Array<string | number | null>> = [
+      ["Moodin Fantasy Personal Rankings"],
+      ["Exported At", new Date().toISOString()],
+      ["League Config", leagueSourceOfTruth.version],
+      ["League Fingerprint", leagueSourceOfTruthFingerprint],
+      ["Board Fingerprint", currentRefresh.boardFingerprint],
+      [],
+    ];
+    const payload = [...metadata, headers, ...rows]
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\r\n");
+    const url = URL.createObjectURL(new Blob([`\uFEFF${payload}`], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `moodin-fantasy-rankings-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.download = `moodin-fantasy-rankings-${new Date().toISOString().slice(0, 10)}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -1407,7 +1430,7 @@ export function DraftCommandCenter({
                     const comparison = recommendation.explanation.positionalComparisonPlayerId ? candidateById.get(recommendation.explanation.positionalComparisonPlayerId) : null;
                     const presentation = explainWarRoomRecommendation({ candidate, recommendation, signal, runSnapshot: runSnapshotByPosition.get(primaryPosition(candidate)), positionalComparison: comparison });
                     const call = warRoomDraftCall(liveCall.action, signal);
-                    const whyBullets = `${presentation.driver}: ${presentation.whyNow}`.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, 2);
+                    const whyBullets = [`${presentation.driver}: ${presentation.whyNow}`, presentation.supportingWhy];
                     return <div key={candidate.player.id} className="relative overflow-hidden rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-2 pr-5"><span className="text-[10px] font-black uppercase text-slate-500">#{index + 1}</span><span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black", warRoomCallClasses[call])}>{call}</span></div><div className="mt-2 flex items-baseline gap-2"><p className="truncate font-black">{candidate.player.fullName}</p><span className="shrink-0 text-[11px] text-slate-500">{primaryPosition(candidate)}</span></div><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-amber-200">Why</p><ul className="mt-1 space-y-1 text-xs leading-4 text-slate-300">{whyBullets.map((bullet) => <li key={bullet} className="flex gap-1.5"><span className="text-amber-200">•</span><span>{bullet}</span></li>)}</ul><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">Available next pick</p><p className="mt-1 text-xs font-bold text-white">{presentation.chanceBack}</p>{isMyTurn ? <Button className="mt-2" size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>Drafted by Vaughn</Button> : null}{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
                   })}
                 </div>
@@ -1433,7 +1456,7 @@ export function DraftCommandCenter({
                     <h3 className="mt-1 text-xl font-black">Reorder the board around your preferences.</h3>
                     <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Drag rows on desktop or use the arrow controls on mobile. Export this ordered file from Vercel when you are done so it can be applied to your localhost draft board.</p>
                   </div>
-                  <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={downloadRankingsExport}>Export rankings</Button><Button variant="outline" size="sm" onClick={resetPersonalBoard}>Reset to model order</Button></div>
+                  <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={downloadRankingsExport}>Export CSV</Button><Button variant="outline" size="sm" onClick={resetPersonalBoard}>Reset to model order</Button></div>
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
                   <label className="relative">
@@ -1459,9 +1482,11 @@ export function DraftCommandCenter({
                       const yahooRank = candidate.market.yahooXRank ?? candidate.market.yahooRank ?? null;
                       const difference = modelRank != null && yahooRank != null ? yahooRank - modelRank : null;
                       const drafted = !availableIds.has(candidate.player.id);
+                      const draftBreak = myDraftRankBreaks.get(preferredRank);
                       return (
+                        <Fragment key={candidate.player.id}>
+                        {draftBreak ? <div className="border-y border-cyan-300/25 bg-cyan-300/[0.07] px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100"><span>Your draft slot #{draftBreak.overallPick}</span><span className="ml-2 text-cyan-300/60">Round {draftBreak.round} · players above may be gone</span></div> : null}
                         <div
-                          key={candidate.player.id}
                           draggable
                           onDragStart={() => setDraggedPlayerId(candidate.player.id)}
                           onDragEnd={() => setDraggedPlayerId(null)}
@@ -1488,6 +1513,7 @@ export function DraftCommandCenter({
                             <button aria-label={`Move ${candidate.player.fullName} down ten spots`} title="Down 10" onClick={() => movePersonalBoardPlayer(candidate.player.id, 10)} className="rounded-lg border border-white/10 px-2 py-2 text-[10px] font-black text-slate-400 hover:text-white">10</button>
                           </span>
                         </div>
+                        </Fragment>
                       );
                     })}
                     {personalBoardRows.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No players match these filters.</p> : null}

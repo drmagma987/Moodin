@@ -2118,6 +2118,8 @@ test("war-room presentation translates model signals into plain draft decisions"
   });
   assert.match(presentation.chanceBack, /^\d+% chance available at your next pick$/);
   assert.match(presentation.price, /Overall model board #\d+ · ADP/);
+  assert.ok(presentation.supportingWhy.length > 20);
+  assert.notEqual(presentation.supportingWhy, presentation.whyNow);
   assert.doesNotMatch(`${presentation.whyNow} ${presentation.comparison ?? ""}`, /\bVORP?\b|tier cliff|knife-edge/i);
   assert.equal(warRoomDraftCall("Target", signal), "Good Value");
   assert.equal(warRoomDraftCall("Fair", signal), "Fair Value");
@@ -2522,6 +2524,10 @@ test("league setup resolves ordered teams, canonical keepers, and snake-round co
   assert.equal(result.state?.currentPick, 1);
   assert.deepEqual(result.state?.drafted.map((pick) => pick.overallPick).sort((a, b) => a - b), [2, 9]);
   assert.equal(result.state?.drafted.every((pick) => pick.eventType === "keeper"), true);
+  assert.deepEqual(
+    [9, 12, 29, 32].map((overallPick) => getSnakePickInfo(overallPick, 10).teamId),
+    ["team-9", "team-9", "team-9", "team-9"],
+  );
 });
 
 test("live draft skips consumed keeper picks and undo never removes a keeper", () => {

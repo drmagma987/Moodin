@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { buildPositionMarketSnapshots, buildPositionRunSnapshots, buildRedraftBoard, buildWrapSimulationSnapshot, rankDraftCandidates, type RedraftBoardEntry } from "@/lib/fantasy/draft";
 import { buildDraftTurnContext, getSnakePickInfo } from "@/lib/fantasy/draftState";
+import { buildDraftBoardSignal } from "@/lib/fantasy/draftSignals";
+import { explainWarRoomRecommendation } from "@/lib/fantasy/warRoomPresentation";
 import {
   appendDraftSessionPick,
   replayDraftSession,
@@ -724,7 +726,23 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
                   if (!candidate) return null;
                   const recommendationRank = recommendationRankById.get(candidate.player.id) ?? index + 1;
                   const chanceBack = Math.round(recommendation.explanation.makeItBackProbability * 100);
-                  const whyBullets = recommendation.explanation.summary.slice(0, 2);
+                  const boardEntry = boardById.get(candidate.player.id);
+                  const signal = boardEntry
+                    ? buildDraftBoardSignal(candidate, boardEntry, favoriteIdSet.has(candidate.player.id))
+                    : null;
+                  const comparison = recommendation.explanation.positionalComparisonPlayerId
+                    ? candidateById.get(recommendation.explanation.positionalComparisonPlayerId)
+                    : null;
+                  const presentation = signal ? explainWarRoomRecommendation({
+                    candidate,
+                    recommendation,
+                    signal,
+                    runSnapshot: runSnapshotByPosition.get(primaryPosition(candidate)),
+                    positionalComparison: comparison,
+                  }) : null;
+                  const whyBullets = presentation
+                    ? [`${presentation.driver}: ${presentation.whyNow}`, presentation.supportingWhy]
+                    : recommendation.explanation.summary.slice(0, 2);
                   return <article key={candidate.player.id} className="relative overflow-hidden rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-2 pr-5"><span className="text-[10px] font-black uppercase text-slate-500">#{index + 1}</span><span className="text-[11px] text-slate-500">{primaryPosition(candidate)}</span></div><p className="mt-2 truncate font-black">{candidate.player.fullName}</p><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-amber-200">Why</p><ul className="mt-1 space-y-1 text-xs leading-4 text-slate-300">{whyBullets.map((bullet) => <li key={bullet} className="flex gap-1.5"><span className="text-amber-200">•</span><span>{bullet}</span></li>)}</ul><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">Available next pick</p><p className="mt-1 text-xs font-bold text-white">{chanceBack}% chance</p>{isMyTurn ? <Button className="mt-2" size="sm" variant="outline" onClick={() => makeManagerPick(candidate, Math.max(0, recommendationRank - 1))}>Draft player</Button> : null}{favoriteIdSet.has(candidate.player.id) ? <VjEarmark compact /> : null}</article>;
                 })}
               </div>
