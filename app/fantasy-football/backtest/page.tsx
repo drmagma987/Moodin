@@ -1,5 +1,5 @@
 import Link from "next/link";
-import reportJson from "@/lib/fantasy/data/historicalBacktestReport.generated.json";
+import reportJson from "@/lib/fantasy/data/historicalBacktestReport.generated.json" with { type: "json" };
 import {
   assertHistoricalBacktestReport,
   type HistoricalBacktestReport,

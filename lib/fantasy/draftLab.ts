@@ -43,6 +43,7 @@ import {
   fetchSeasonMarketFeed,
 } from "@/lib/fantasy/seasonMarket";
 import { applyYahooBaselineToDraftCandidates, yahooCurrentPprBaselineMeta } from "@/lib/fantasy/yahooRanks";
+import { applyApprovedRankingRefresh } from "@/lib/fantasy/approvedRankingRefresh";
 import {
   applyAdvancedResearchSnapshots,
   buildAutomaticAdvancedResearchInputs,
@@ -656,8 +657,12 @@ export async function getDraftLabDataset(mode: DraftBoardMode = "working"): Prom
       calibrationEvidence,
     );
     const manualRefresh = readManualRefreshSignalsFromEnv(calibratedCandidates);
-    const refreshed = applyRefreshSignals(calibratedCandidates, manualRefresh.signals);
-    const refreshedBaseline = applyRefreshSignals(baselineCandidates, manualRefresh.signals);
+    const automaticRefreshed = applyRefreshSignals(calibratedCandidates, manualRefresh.signals);
+    const approvedRefreshed = applyApprovedRankingRefresh(automaticRefreshed.candidates);
+    const refreshed = { ...automaticRefreshed, ...approvedRefreshed };
+    const automaticRefreshedBaseline = applyRefreshSignals(baselineCandidates, manualRefresh.signals);
+    const approvedRefreshedBaseline = applyApprovedRankingRefresh(automaticRefreshedBaseline.candidates);
+    const refreshedBaseline = { ...automaticRefreshedBaseline, ...approvedRefreshedBaseline };
     const preferredTargetConfig = parseApprovedPreferredTargetsFromEnv();
     const preferredTargetsApplied = applyPreferredTargets(
       refreshed.candidates,
@@ -715,8 +720,8 @@ export async function getDraftLabDataset(mode: DraftBoardMode = "working"): Prom
         checkedAt: new Date().toISOString(),
         message:
           yahooBlended.appliedCount > 0
-            ? `Retained Yahoo's captured top-${yahooCurrentPprBaselineMeta.coverage} list as an independent sanity check for ${yahooBlended.appliedCount} early-board players; it does not mutate ECR or ADP.`
-            : "No Yahoo v0 baseline players matched the current candidate pool.",
+            ? `Imported the workbook market reference for ${yahooBlended.appliedCount} players (${yahooCurrentPprBaselineMeta.coverage} Yahoo XRanks). XRank drives room visibility and availability only; Yahoo ADP, aggregate rank, source ranks, and Rank Spread remain separate comparison evidence.`
+            : "No workbook market-reference players matched the current candidate pool.",
       },
       {
         provider: "nflverse",
@@ -860,8 +865,8 @@ export async function getDraftLabDataset(mode: DraftBoardMode = "working"): Prom
         "Managers may keep 0-3 players. Unused keeper slots become live picks, so the model treats unknown slots as conservative market/need selections until actual keeper identities are supplied.",
         "Positional premiums are projection-derived: replacement value, flex access, next-round tier separation, downside protection, VONA, and conditional legal-lineup scoring all contribute; no player receives an automatic elite-TE or elite-QB bonus.",
         yahooBlended.appliedCount > 0
-          ? `Yahoo v0 comparison baseline is active for ${yahooBlended.appliedCount} players from the captured top-${yahooCurrentPprBaselineMeta.coverage} early-board list.`
-          : "Yahoo v0 comparison baseline was not applied because no current candidates matched the captured Yahoo top-25 early-board list.",
+          ? `Workbook market evidence is active for ${yahooBlended.appliedCount} players, including ${yahooCurrentPprBaselineMeta.coverage} Yahoo XRanks. XRank changes availability modeling, never projection or value-over-replacement.`
+          : "Workbook market evidence was not applied because no current candidates matched the captured Source Data sheet.",
         seasonMarketApplied.appliedCount > 0
           ? `Season-long Vegas-derived stat projections are active for ${seasonMarketApplied.appliedCount} players at a conservative 25% weight; deeper source rows are excluded from the blend.`
           : "Season-long Vegas-derived projections were unavailable, so the board retained its existing projection stack.",

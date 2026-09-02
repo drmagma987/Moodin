@@ -106,6 +106,11 @@ import {
   revertDraftSessionEvent,
 } from "@/lib/fantasy/draftSession";
 import { assertDraftRoomFreeze, freezeDraftRoom } from "@/lib/fantasy/draftOperations";
+import {
+  DRAFT_DAY_LATENCY_BUDGETS,
+  evaluateArtifactFreshness,
+  evaluateDraftDayLatency,
+} from "@/lib/fantasy/draftDayPreflight";
 import { parseScreenshotDraftText } from "@/lib/fantasy/screenshotDraftRecovery";
 import { buildPostDraftActionQueue } from "@/lib/fantasy/postDraftActions";
 import { recordDraftDecision } from "@/lib/fantasy/draftDecisionJournal";
@@ -407,6 +412,7 @@ import { applyMilestoneGameProjection } from "@/lib/fantasy/milestoneProjection"
 import { advancedUsageValidation } from "@/lib/fantasy/data/advancedUsageValidation.generated";
 import { rookieWrValidation } from "@/lib/fantasy/data/rookieWrValidation.generated";
 import { applyYahooBaselineToDraftCandidates } from "@/lib/fantasy/yahooRanks";
+import { applyApprovedRankingRefresh, approvedRankingRefresh } from "@/lib/fantasy/approvedRankingRefresh";
 import { buildFfOpportunitySeasonStatsFromCsv } from "@/lib/fantasy/ffOpportunity";
 import {
   activeNflSeasonForDate,
@@ -1786,7 +1792,7 @@ test("public FantasyPros fallback builds a full-board candidate set from embedde
   );
 });
 
-test("Yahoo v0 baseline stays an independent sanity check instead of mutating ECR", () => {
+test("workbook market reference stays independent instead of mutating ECR or model projection", () => {
   const candidates = cloneFixtureCandidates();
   const bijan = candidates.find((candidate) => candidate.player.fullName === "Bijan Robinson");
   const mhj = candidates.find((candidate) => candidate.player.fullName === "Marvin Harrison Jr.");
@@ -1805,8 +1811,30 @@ test("Yahoo v0 baseline stays an independent sanity check instead of mutating EC
 
   assert.equal(result.appliedCount >= 1, true);
   assert.equal(blendedBijan?.market.ecr, 4);
-  assert.equal(blendedBijan?.market.yahooRank, 1);
+  assert.equal(blendedBijan?.market.yahooXRank, 2);
+  assert.equal(blendedBijan?.market.yahooAdp, 3);
+  assert.equal(blendedBijan?.market.aggregateRank, 1.6666666666666667);
+  assert.equal(blendedBijan?.market.sourceRanks?.fieldYates, 1);
+  assert.equal(blendedBijan?.market.rankSpread, 1);
+  assert.equal(blendedBijan?.market.yahooXRankMinusAggregate, 0.33333333333333326);
   assert.equal(unchangedMhj?.market.ecr, 14);
+});
+
+test("approved September refresh applies 14 bounded residuals and keeps 12 notes annotation-only", () => {
+  const candidates = structuredClone(warRoomRehearsalFixture.candidates);
+  const connerBefore = candidates.find((candidate) => candidate.player.fullName === "James Conner");
+  const jacobsBefore = candidates.find((candidate) => candidate.player.fullName === "Josh Jacobs");
+  assert.ok(connerBefore);
+  assert.ok(jacobsBefore);
+  const result = applyApprovedRankingRefresh(candidates);
+  const connerAfter = result.candidates.find((candidate) => candidate.player.fullName === "James Conner");
+  const jacobsAfter = result.candidates.find((candidate) => candidate.player.fullName === "Josh Jacobs");
+  assert.equal(approvedRankingRefresh.length, 26);
+  assert.equal(result.annotationsApplied, 26);
+  assert.equal(result.numericalAdjustmentsApplied, 14);
+  assert.equal(Number((connerAfter!.projection.range.p50 - connerBefore.projection.range.p50).toFixed(2)), -4.34);
+  assert.equal(jacobsAfter!.projection.range.p50, jacobsBefore.projection.range.p50);
+  assert.match(jacobsAfter!.signals?.refresh?.summary ?? "", /Annotation only/);
 });
 
 test("Fantasy Football Calculator parser supplies verified overall PPR ADP", () => {
@@ -2373,7 +2401,6 @@ test("nflverse identity enrichment safely attaches usage IDs and age without cha
 test("league setup resolves ordered teams, canonical keepers, and snake-round costs", () => {
   const teams = Array.from({ length: 10 }, (_, index) => `Club ${index + 1}`).join("\n");
   const result = resolveLeagueSetup({
-    teamNames: teams,
     draftOrder: teams,
     myTeamName: "Club 9",
     myDraftSlot: "9",
@@ -4016,6 +4043,44 @@ test("room freeze binds keeper identity and refuses post-freeze keeper changes",
   assert.throws(() => assertDraftRoomFreeze(freeze, keeperState), /Keeper configuration changed/);
 });
 
+test("draft-day preflight keeps latency budgets conservative without becoming timing brittle", () => {
+  assert.deepEqual(
+    evaluateDraftDayLatency({
+      recommendationMs: DRAFT_DAY_LATENCY_BUDGETS.recommendationMs,
+      rankingMs: DRAFT_DAY_LATENCY_BUDGETS.rankingMs,
+    }),
+    { passed: true, failures: [] },
+  );
+  const slowRecommendation = evaluateDraftDayLatency({
+    recommendationMs: DRAFT_DAY_LATENCY_BUDGETS.recommendationMs + 0.1,
+    rankingMs: 10,
+  });
+  assert.equal(slowRecommendation.passed, false);
+  assert.match(slowRecommendation.failures[0] ?? "", /recommendation exceeded/);
+  const slowRanking = evaluateDraftDayLatency({
+    recommendationMs: 20,
+    rankingMs: DRAFT_DAY_LATENCY_BUDGETS.rankingMs + 0.1,
+  });
+  assert.equal(slowRanking.passed, false);
+  assert.match(slowRanking.failures[0] ?? "", /ranking exceeded/);
+});
+
+test("draft-day preflight distinguishes same-day artifacts in the league timezone", () => {
+  const sameDay = evaluateArtifactFreshness({
+    capturedAt: "2026-08-29T04:05:00.000Z",
+    now: new Date("2026-08-30T03:55:00.000Z"),
+  });
+  assert.equal(sameDay.sameCalendarDay, true);
+  assert.equal(sameDay.ageHours, 23.8);
+
+  const nextDay = evaluateArtifactFreshness({
+    capturedAt: "2026-08-29T04:05:00.000Z",
+    now: new Date("2026-08-30T04:05:00.000Z"),
+  });
+  assert.equal(nextDay.sameCalendarDay, false);
+  assert.equal(nextDay.ageHours, 24);
+});
+
 test("decision journal and post-draft queue retain actionable context", () => {
   const initial = createInitialDraftState(fixtureCandidates);
   const recommendations = rankDraftCandidates(initial, fixtureCandidates).slice(0, 3);
@@ -4374,6 +4439,51 @@ test("TE2 is evaluated on merit after every core and flex starter is filled", ()
   const ablatedTightEnd = ablated.find((recommendation) => recommendation.playerId === tightEnd.playerId);
   assert.ok(ablatedTightEnd);
   assert.equal(tightEnd.score, ablatedTightEnd.score);
+});
+
+test("a roster already holding Jalen Hurts does not casually recommend Trevor Lawrence", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const hurts = candidates.find((candidate) => candidate.player.fullName === "Jalen Hurts");
+  const lawrence = candidates.find((candidate) => candidate.player.fullName === "Trevor Lawrence");
+  assert.ok(hurts);
+  assert.ok(lawrence);
+  const state: DraftState = {
+    ...template,
+    currentPick: 79,
+    availablePlayerIds: template.availablePlayerIds.filter((playerId) => playerId !== hurts.player.id),
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      starters: [...team.starters, hurts.player.id],
+      positionCounts: { ...team.positionCounts, QB: 1, RB: 1, WR: 1, TE: 0 },
+      openSlots: ["RB", "WR", "WR", "TE", "W/R/T", "W/R/T", "K"],
+    } : team),
+  };
+  const wrap = buildWrapSimulationSnapshot(state, candidates.slice(0, 130), { simulations: 8 });
+  const recommendations = rankDraftCandidates(state, candidates, wrap);
+  const lawrenceRank = recommendations.findIndex((recommendation) => recommendation.playerId === lawrence.player.id);
+  assert.ok(lawrenceRank < 0 || lawrenceRank >= 10, `Trevor Lawrence appeared at recommendation ${lawrenceRank + 1}`);
+});
+
+test("two tight ends suppress another TE three picks later while starters and flex depth remain", () => {
+  const candidates = warRoomRehearsalFixture.candidates;
+  const template = warRoomRehearsalFixture.draftState;
+  const tightEnds = candidates.filter((candidate) => candidate.player.positions[0] === "TE").slice(0, 2);
+  assert.equal(tightEnds.length, 2);
+  const state: DraftState = {
+    ...template,
+    currentPick: 52,
+    availablePlayerIds: template.availablePlayerIds.filter((playerId) => !tightEnds.some((candidate) => candidate.player.id === playerId)),
+    teams: template.teams.map((team) => team.teamId === template.myTeamId ? {
+      ...team,
+      starters: [...team.starters, ...tightEnds.map((candidate) => candidate.player.id)],
+      positionCounts: { ...team.positionCounts, TE: 2, RB: 1, WR: 1 },
+      openSlots: ["QB", "RB", "WR", "WR", "W/R/T", "W/R/T", "K"],
+    } : team),
+  };
+  const wrap = buildWrapSimulationSnapshot(state, candidates.slice(0, 130), { simulations: 8 });
+  const topTen = rankDraftCandidates(state, candidates, wrap).slice(0, 10);
+  assert.ok(topTen.every((recommendation) => candidates.find((candidate) => candidate.player.id === recommendation.playerId)?.player.positions[0] !== "TE"));
 });
 
 test("TE3 is evaluated on merit up to TE-plus-flex lineup capacity after core completion", () => {

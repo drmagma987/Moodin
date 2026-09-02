@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T12:46:22.681Z",
+  "generatedAt": "2026-08-29T20:23:50.601Z",
   "status": "candidate-freeze-requires-human-confirmation",
   "warning": "This receipt proves artifact identity and engine readiness, but is not the final draft-day freeze. Re-run with FANTASY_FINAL_FREEZE=1 only after reviewing same-day injuries, keepers, and draft order.",
   "leagueConfigFingerprint": "fnv1a-6863848b",
@@ -8,7 +8,7 @@
   "boardFingerprint": "fnv1a-5ef07ac7",
   "freeze": {
     "schemaVersion": 1,
-    "frozenAt": "2026-08-29T12:46:22.425Z",
+    "frozenAt": "2026-08-29T20:23:50.348Z",
     "leagueConfigVersion": "2026.08.20-v2",
     "leagueConfigFingerprint": "fnv1a-6863848b",
     "keeperFingerprint": "fnv1a-abf0fa67",
@@ -55,10 +55,10 @@
           "score": 139.38
         }
       ],
-      "recommendationLatencyMs": 36.6,
-      "wrapLatencyMs": 28.8,
-      "rankingLatencyMs": 7.8,
-      "setupLatencyMs": 63,
+      "recommendationLatencyMs": 35.8,
+      "wrapLatencyMs": 27.7,
+      "rankingLatencyMs": 8.1,
+      "setupLatencyMs": 62.2,
       "parity": true,
       "failures": [],
       "passed": true
@@ -90,10 +90,10 @@
           "score": 154.06
         }
       ],
-      "recommendationLatencyMs": 28.7,
-      "wrapLatencyMs": 22.8,
-      "rankingLatencyMs": 5.9,
-      "setupLatencyMs": 51,
+      "recommendationLatencyMs": 28.2,
+      "wrapLatencyMs": 22.5,
+      "rankingLatencyMs": 5.7,
+      "setupLatencyMs": 50.2,
       "parity": true,
       "failures": [],
       "passed": true
@@ -125,10 +125,10 @@
           "score": 136.52
         }
       ],
-      "recommendationLatencyMs": 27.7,
-      "wrapLatencyMs": 22.3,
-      "rankingLatencyMs": 5.4,
-      "setupLatencyMs": 49,
+      "recommendationLatencyMs": 27.1,
+      "wrapLatencyMs": 21.8,
+      "rankingLatencyMs": 5.3,
+      "setupLatencyMs": 48.1,
       "parity": true,
       "failures": [],
       "passed": true
@@ -160,10 +160,10 @@
           "score": 134.14
         }
       ],
-      "recommendationLatencyMs": 26.5,
-      "wrapLatencyMs": 22.3,
-      "rankingLatencyMs": 4.2,
-      "setupLatencyMs": 47,
+      "recommendationLatencyMs": 25.9,
+      "wrapLatencyMs": 21.8,
+      "rankingLatencyMs": 4.1,
+      "setupLatencyMs": 46.2,
       "parity": true,
       "failures": [],
       "passed": true
@@ -195,10 +195,10 @@
           "score": 139.38
         }
       ],
-      "recommendationLatencyMs": 26.3,
-      "wrapLatencyMs": 22.1,
-      "rankingLatencyMs": 4.1,
-      "setupLatencyMs": 45,
+      "recommendationLatencyMs": 26,
+      "wrapLatencyMs": 21.8,
+      "rankingLatencyMs": 4.2,
+      "setupLatencyMs": 44.6,
       "parity": true,
       "failures": [],
       "passed": true

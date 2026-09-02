@@ -511,7 +511,7 @@ function estimateMakeItBackProbability(
 ) {
   const threatenedPlayer = getThreatenedPlayerSnapshot(wrapSimulation, candidate.player.id);
   if (threatenedPlayer) {
-    return Number((1 - threatenedPlayer.lossProbability).toFixed(2));
+    return widenProbability(candidate, 1 - threatenedPlayer.lossProbability);
   }
 
   const position = primaryPosition(candidate);
@@ -519,8 +519,8 @@ function estimateMakeItBackProbability(
     .reduce((sum, team) => sum + positionNeedWeight(team, position, state.league), 0);
 
   const marketPressure =
-    (220 - Math.min(candidate.market.adp, 220)) / 220 +
-    (220 - Math.min(candidate.market.ecr, 220)) / 220;
+    ((220 - Math.min(yahooRoomVisibilityRank(candidate), 220)) / 220) * 1.6 +
+    ((220 - Math.min(candidate.market.ecr, 220)) / 220) * 0.4;
 
   const scarcity = scarcityBonus(position, candidate.market.tier, state.league);
   const raw =
@@ -529,7 +529,7 @@ function estimateMakeItBackProbability(
     marketPressure * 0.24 -
     scarcity * 0.09 -
     Math.max(0, state.league.teams - 10) * 0.01;
-  return Number(Math.max(0.03, Math.min(0.95, raw)).toFixed(2));
+  return widenProbability(candidate, raw);
 }
 
 function valueOverReplacement(
@@ -762,8 +762,35 @@ function marketValueGap(candidate: DraftCandidate) {
   return Number((Math.max(0, expectedRank - actualRank) / 12).toFixed(2));
 }
 
-function expectedMarketPick(candidate: DraftCandidate) {
+function yahooRoomVisibilityRank(candidate: DraftCandidate) {
+  const yahooXRank = candidate.market.yahooXRank ?? candidate.market.yahooRank;
+  if (typeof yahooXRank === "number" && yahooXRank > 0) return yahooXRank;
+  if (typeof candidate.market.yahooAdp === "number" && candidate.market.yahooAdp > 0) {
+    return candidate.market.yahooAdp;
+  }
   return (candidate.market.adp + candidate.market.ecr) / 2;
+}
+
+function expectedMarketPick(candidate: DraftCandidate) {
+  return yahooRoomVisibilityRank(candidate);
+}
+
+function probabilityUncertainty(candidate: DraftCandidate) {
+  return Math.min(0.22, Math.max(0, (candidate.market.rankSpread ?? 0) / 400));
+}
+
+function widenProbability(candidate: DraftCandidate, probability: number) {
+  const uncertainty = probabilityUncertainty(candidate);
+  const midpointAdjusted = probability * (1 - uncertainty) + 0.5 * uncertainty;
+  return Number(Math.max(0.03, Math.min(0.97, midpointAdjusted)).toFixed(2));
+}
+
+function probabilityBand(candidate: DraftCandidate, probability: number) {
+  const uncertainty = probabilityUncertainty(candidate);
+  return {
+    low: Number(Math.max(0.01, probability - uncertainty).toFixed(2)),
+    high: Number(Math.min(0.99, probability + uncertainty).toFixed(2)),
+  };
 }
 
 function upcomingTeamsBeforeNextTurn(state: DraftState) {
@@ -1036,7 +1063,7 @@ export function buildPositionRunSnapshots(
           }, 0)
         ).toFixed(2),
       );
-      const tierSurvivalProbability = Number(
+      const rawTierSurvivalProbability = Number(
         clamp(
           simulationPosition
             ? simulationPosition.distribution
@@ -1048,6 +1075,20 @@ export function buildPositionRunSnapshots(
           simulationPosition ? 0 : 0.05,
           simulationPosition ? 1 : 0.97,
         ).toFixed(2),
+      );
+      const averageRankSpread = tierPlayers.reduce(
+        (sum, candidate) => sum + (candidate.market.rankSpread ?? 0),
+        0,
+      ) / Math.max(1, tierPlayers.length);
+      const tierUncertainty = Math.min(0.2, averageRankSpread / 400);
+      const tierSurvivalProbability = Number(
+        (rawTierSurvivalProbability * (1 - tierUncertainty) + 0.5 * tierUncertainty).toFixed(2),
+      );
+      const tierSurvivalProbabilityLow = Number(
+        Math.max(0.01, tierSurvivalProbability - tierUncertainty).toFixed(2),
+      );
+      const tierSurvivalProbabilityHigh = Number(
+        Math.min(0.99, tierSurvivalProbability + tierUncertainty).toFixed(2),
       );
       const runRisk =
         tierSurvivalProbability <= 0.34 ||
@@ -1084,6 +1125,9 @@ export function buildPositionRunSnapshots(
         expectedSelectionsBeforeNextTurn,
         tierPlayerCount: tierPlayers.length,
         tierSurvivalProbability,
+        tierSurvivalProbabilityLow,
+        tierSurvivalProbabilityHigh,
+        marketUncertainty: averageRankSpread >= 50 ? "wide" : "normal",
         cliffDrop,
         headline,
         summary,
@@ -1237,6 +1281,7 @@ export function rankDraftCandidates(
       const position = primaryPosition(candidate);
       const runSnapshot = runSnapshotByPosition.get(position);
       const makeItBack = estimateMakeItBackProbability(candidate, state, wrapSimulation);
+      const makeItBackBand = probabilityBand(candidate, makeItBack);
       const replacement = valueOverReplacement(
         candidate,
         availableCandidates,
@@ -1427,6 +1472,8 @@ export function rankDraftCandidates(
           ceilingTierEdge: boardEntry.positionalLeverage.ceilingTierEdge,
           positionalComparisonPlayerId: boardEntry.positionalLeverage.comparisonPlayerId,
           makeItBackProbability: makeItBack,
+          makeItBackProbabilityLow: makeItBackBand.low,
+          makeItBackProbabilityHigh: makeItBackBand.high,
           valueNow,
           valueLater,
           vona,
@@ -1445,6 +1492,8 @@ export function rankDraftCandidates(
           structuralScore,
           valueGapVsMarket,
           tierSurvivalProbability: runSnapshot?.tierSurvivalProbability ?? 0.8,
+          tierSurvivalProbabilityLow: runSnapshot?.tierSurvivalProbabilityLow,
+          tierSurvivalProbabilityHigh: runSnapshot?.tierSurvivalProbabilityHigh,
           expectedPositionSelections: runSnapshot?.expectedSelectionsBeforeNextTurn ?? 0,
           runRisk: runSnapshot?.runRisk ?? "low",
           fragilityScore: robustness?.fragilityScore ?? 42,

@@ -322,18 +322,22 @@ function loseLife(gs: GS, onGameOver: (score: number) => void) {
   if (gs.lives === 0) onGameOver(gs.score);
 }
 
+function getDisplayedBagMultiplier(gs: GS) {
+  return gs.bagMeter + (gs.bachelor && !gs.bill ? 1 : 0);
+}
+
 function onCatch(gs: GS, o: FallingObj, onGameOver: (score: number) => void, fx: GameFx) {
-  const mult = gs.bill ? 3 : gs.bachelor ? 2 : 1;
+  const mult = getDisplayedBagMultiplier(gs);
   const modeAlreadyActive = gs.bill || gs.bachelor;
 
   switch (o.catchType) {
     case "catch":
-      gs.score += Math.round(10 * mult * gs.bagMeter);
+      gs.score += Math.round(10 * mult);
       gs.bagMeter = Math.min(4, gs.bagMeter + 0.2);
       fx.onCatchSuccess(modeAlreadyActive);
       break;
     case "heal":
-      gs.score += Math.round(20 * mult * gs.bagMeter);
+      gs.score += Math.round(20 * mult);
       gs.bagMeter = Math.min(4, gs.bagMeter + 0.25);
       if (gs.lives < MAX_LIVES) {
         gs.lives += 1;
@@ -348,7 +352,7 @@ function onCatch(gs: GS, o: FallingObj, onGameOver: (score: number) => void, fx:
     case "mushroom":
       gs.bachelor = true;
       gs.bachelorTimer = BACHELOR_DURATION;
-      gs.score += Math.round(50 * gs.bagMeter);
+      gs.score += Math.round(50 * getDisplayedBagMultiplier(gs));
       fx.onBachelorModeTriggered();
       break;
     case "bill_trigger":
@@ -564,13 +568,14 @@ function drawHUD(ctx: CanvasRenderingContext2D, gs: GS) {
   ctx.fillText(String(gs.score), 14, 38);
 
   // BR multiplier
-  ctx.font = "bold 11px sans-serif";
+  ctx.font = "bold 10px sans-serif";
   ctx.fillStyle = "#64748b";
-  ctx.fillText("BR MULT", 14, 66);
+  ctx.fillText("BR MULTIPLIER", 14, 66);
   ctx.font = `bold ${compact ? 18 : 20}px sans-serif`;
   ctx.fillStyle = gs.bagMeter >= 3 ? "#22c55e" : "#94a3b8";
-  const bmDisplay = Number.isInteger(gs.bagMeter) ? `${gs.bagMeter}x` : `${gs.bagMeter.toFixed(1)}x`;
-  ctx.fillText(bmDisplay, compact ? 88 : 110, 66);
+  const displayedMultiplier = getDisplayedBagMultiplier(gs);
+  const bmDisplay = Number.isInteger(displayedMultiplier) ? `${displayedMultiplier}x` : `${displayedMultiplier.toFixed(1)}x`;
+  ctx.fillText(bmDisplay, compact ? 126 : 158, 66);
 
   // Lives on a dedicated right lane to avoid crowding the center mode label.
   ctx.font = "bold 10px sans-serif";
@@ -868,7 +873,8 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       setLeaderboardStatus("posted");
     } catch (error) {
       console.error("[BachelorPartyBlitz] Leaderboard submit failed.", error);
-      setLeaderboardError("Could not post right now. Try again.");
+      const message = error instanceof Error ? error.message : String(error);
+      setLeaderboardError(`Could not post right now. ${message}`);
       setLeaderboardStatus("error");
     }
   }, [finalScore, leaderboardStatus, playerName]);
@@ -2429,14 +2435,14 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
       {/* ── END SCREEN (game over + personal best) ──────────────────────────── */}
       {screen === "end" && (
         <div className="absolute inset-0 z-30 overflow-hidden bg-black/96 px-4 py-4 sm:px-6 sm:py-6">
-          <div className="mx-auto flex h-full w-full max-w-sm flex-col gap-3 sm:gap-4">
+          <div className="mx-auto flex h-full w-full max-w-sm flex-col gap-2.5 sm:gap-3">
             <div className="min-h-0 flex-1 overflow-y-auto pr-1 pb-1">
-              <div className="flex flex-col items-center space-y-3 text-center sm:space-y-4">
-                <p className="text-5xl sm:text-6xl">💀</p>
-                <p className="text-[1.7rem] font-black uppercase text-white sm:text-3xl">GAME OVER</p>
+              <div className="flex flex-col items-center space-y-2.5 text-center sm:space-y-3">
+                <p className="text-4xl sm:text-5xl">💀</p>
+                <p className="text-[1.4rem] font-black uppercase text-white sm:text-[1.75rem]">GAME OVER</p>
 
-                <div className="space-y-2">
-                  <div className="mx-auto h-[11.5rem] w-full max-w-[11.5rem] overflow-hidden rounded-3xl border-4 border-slate-700 bg-slate-900 shadow-[0_18px_50px_rgba(0,0,0,0.45)] sm:h-[13rem] sm:max-w-[13rem]">
+                <div className="space-y-1.5">
+                  <div className="mx-auto h-[8.4rem] w-full max-w-[8.4rem] overflow-hidden rounded-[1.35rem] border-4 border-slate-700 bg-slate-900 shadow-[0_18px_50px_rgba(0,0,0,0.45)] sm:h-[10rem] sm:max-w-[10rem]">
                     <Image
                       src="/bachelor-party-blitz/end-quote-photo.jpg"
                       alt="End screen quote"
@@ -2445,24 +2451,24 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                       className="h-full w-full object-cover object-top"
                     />
                   </div>
-                  <p className="px-2 text-sm font-semibold italic leading-snug text-[#f97316] sm:px-4 sm:text-base">
+                  <p className="px-2 text-[0.8rem] font-semibold italic leading-snug text-[#f97316] sm:px-4 sm:text-[0.92rem]">
                     &ldquo;{endQuoteOrder[0]}&rdquo;
                   </p>
                 </div>
 
-                <div className="w-full space-y-2 rounded-2xl border-2 border-slate-700 bg-slate-900 p-4">
+                <div className="w-full space-y-1.5 rounded-2xl border-2 border-slate-700 bg-slate-900 px-4 py-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[0.72rem] font-bold uppercase tracking-[0.2em] text-slate-400 sm:text-sm">
                       Your Score
                     </span>
-                    <span className="text-3xl font-black text-white sm:text-4xl">{finalScore}</span>
+                    <span className="text-[1.85rem] font-black text-white sm:text-[2.3rem]">{finalScore}</span>
                   </div>
                   <div className="h-px bg-slate-700" />
                   <div className="flex items-center justify-between">
                     <span className="text-[0.72rem] font-bold uppercase tracking-[0.2em] text-slate-400 sm:text-sm">
                       Personal Best
                     </span>
-                    <span className={`text-xl font-black sm:text-2xl ${isNewBest ? "text-yellow-400" : "text-slate-300"}`}>
+                    <span className={`text-[1.6rem] font-black sm:text-[1.95rem] ${isNewBest ? "text-yellow-400" : "text-slate-300"}`}>
                       {personalBest}
                     </span>
                   </div>
@@ -2473,7 +2479,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   )}
                 </div>
 
-                <div className="w-full space-y-1.5">
+                <div className="w-full space-y-1">
                   <p className="text-[0.68rem] uppercase tracking-[0.24em] text-slate-500 sm:text-xs">Your Name</p>
                   <input
                     type="text"
@@ -2493,7 +2499,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                   type="button"
                   onClick={handleLeaderboardPost}
                   disabled={leaderboardStatus === "submitting" || leaderboardStatus === "posted"}
-                  className={`w-full rounded-2xl border-4 py-3.5 text-sm font-black uppercase tracking-[0.16em] text-white sm:py-4 sm:text-lg ${
+                  className={`w-full rounded-2xl border-4 py-2 text-[0.84rem] font-black uppercase tracking-[0.14em] text-white sm:py-2.5 sm:text-[0.98rem] ${
                     leaderboardStatus === "posted"
                       ? "border-emerald-300 bg-emerald-700/70 text-emerald-100"
                       : leaderboardStatus === "submitting"
@@ -2509,13 +2515,13 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                       : "POST AND CHECK LEADERBOARD"}
                 </button>
 
-                <p className="text-xs leading-relaxed text-slate-400 sm:text-sm">
+                <p className="text-[0.66rem] leading-relaxed text-slate-400 sm:text-[0.74rem]">
                   Compare with your friends to see who scored highest! 👑
                 </p>
               </div>
             </div>
 
-            <div className="shrink-0 space-y-3 rounded-[1.75rem] border border-slate-700/80 bg-slate-950/96 p-3 shadow-[0_16px_50px_rgba(0,0,0,0.38)] sm:p-4">
+            <div className="shrink-0 space-y-2 rounded-[1.4rem] border border-slate-700/80 bg-slate-950/96 p-2.5 shadow-[0_16px_50px_rgba(0,0,0,0.38)] sm:p-3">
               {leaderboardError && (
                 <p className="w-full rounded-2xl border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-red-200">
                   {leaderboardError}
@@ -2532,7 +2538,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
                       Top {leaderboardEntries.length}
                     </p>
                   </div>
-                  <div className="max-h-52 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950/80">
+                  <div className="max-h-44 overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950/80">
                     <div className="divide-y divide-slate-800">
                       {leaderboardEntries.map((entry, index) => {
                         const isCurrentName = entry.name === playerName.trim().toUpperCase();
@@ -2564,7 +2570,7 @@ export function BachelorPartyGame({ debugBill = false }: BachelorPartyGameProps)
 
               <button
                 onClick={playAgain}
-                className="w-full rounded-2xl border-4 border-white bg-[#064789] py-3.5 text-lg font-black uppercase tracking-[0.2em] text-white active:bg-[#073a70] sm:py-5 sm:text-2xl"
+                className="w-full rounded-2xl border-4 border-white bg-[#064789] py-2 text-[0.95rem] font-black uppercase tracking-[0.2em] text-white active:bg-[#073a70] sm:py-3 sm:text-[1.25rem]"
                 style={{ touchAction: "auto" }}
               >
                 PLAY AGAIN

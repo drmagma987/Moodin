@@ -4,6 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   ChevronDown,
   ClipboardList,
@@ -13,7 +15,6 @@ import {
   Settings2,
   ShieldCheck,
   Star,
-  Target,
   Undo2,
   Users,
   Zap,
@@ -21,7 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { buildConditionalDraftPathBoard, buildPositionRunSnapshots, buildRedraftBoard, buildWrapSimulationSnapshot, rankDraftCandidates } from "@/lib/fantasy/draft";
+import { buildPositionRunSnapshots, buildRedraftBoard, buildWrapSimulationSnapshot, rankDraftCandidates } from "@/lib/fantasy/draft";
 import { buildDraftTurnContext, getSnakePickInfo, reconcileSavedDraftState } from "@/lib/fantasy/draftState";
 import { buildDraftBoardSignal, buildDraftQuickScoreBoard, buildLiveDraftCall, preDraftActionLabel, type DraftActionLabel, type DraftBoardSignal, type LiveDraftActionLabel } from "@/lib/fantasy/draftSignals";
 import { buildMiddleRoundValuePocket } from "@/lib/fantasy/valuePocket";
@@ -29,7 +30,7 @@ import { buildAdvancedResearchShadowBoard } from "@/lib/fantasy/advancedResearch
 import { scoreProjectionSnapshot } from "@/lib/fantasy/scoring";
 import { applyRefreshSignals } from "@/lib/fantasy/refresh";
 import type { DraftDataQualitySnapshot } from "@/lib/fantasy/draftDataQuality";
-import type { ConditionalDraftPathBoard, DraftBoardMode, DraftCandidate, DraftState, FantasyNewsIngestionReport, PlayerPosition, RefreshSignal, WrapSimulationSnapshot } from "@/lib/fantasy/types";
+import type { DraftBoardMode, DraftCandidate, DraftState, FantasyNewsIngestionReport, PlayerPosition, RefreshSignal, WrapSimulationSnapshot } from "@/lib/fantasy/types";
 import { cn } from "@/lib/utils";
 import { resolveLeagueSetup } from "@/lib/fantasy/leagueSetup";
 import { parseYahooDraftEvents, reconcileYahooDraftSnapshot } from "@/lib/fantasy/yahooDraft";
@@ -54,7 +55,7 @@ import { explainWarRoomRecommendation, warRoomDraftCall, type WarRoomDraftCall }
 type Workspace = "predraft" | "draft" | "rehearsal" | "setup";
 type BoardView = "all" | "favorites" | "targets" | "values" | "shadow";
 type FavoritePriority = "must" | "like" | "late";
-type DraftBoardSort = "recommended" | "adp" | "model";
+type DraftBoardSort = "recommended" | "model" | "yahoo-xrank" | "yahoo-adp" | "aggregate" | "personal";
 
 type Favorite = {
   playerId: string;
@@ -75,7 +76,6 @@ type ManualNewsSubmission = {
 };
 
 type LeagueIntake = {
-  teamNames: string;
   myTeamName: string;
   myDraftSlot: string;
   draftOrder: string;
@@ -104,6 +104,7 @@ const FREEZE_KEY = "fantasy-command-center-room-freeze-v1";
 const REFRESH_CHECKPOINT_KEY = "fantasy-command-center-refresh-checkpoint-v1";
 const SETUP_KEY = "fantasy-command-center-league-setup-v3";
 const MANUAL_NEWS_KEY = "fantasy-command-center-manual-news-v1";
+const PERSONAL_BOARD_KEY = "fantasy-command-center-personal-board-v1";
 const POSITIONS: Array<"ALL" | PlayerPosition> = ["ALL", "QB", "RB", "WR", "TE", "K", "DST"];
 
 const priorityMeta: Record<FavoritePriority, { label: string; short: string; color: string }> = {
@@ -124,6 +125,17 @@ function readJson<T>(key: string, fallback: T): T {
 
 function primaryPosition(candidate: DraftCandidate) {
   return candidate.player.positions[0] ?? "WR";
+}
+
+function normalizePersonalBoardOrder(saved: string[], modelOrder: string[]) {
+  const validIds = new Set(modelOrder);
+  const seen = new Set<string>();
+  const retained = saved.filter((playerId) => {
+    if (!validIds.has(playerId) || seen.has(playerId)) return false;
+    seen.add(playerId);
+    return true;
+  });
+  return [...retained, ...modelOrder.filter((playerId) => !seen.has(playerId))];
 }
 
 const actionClasses: Record<DraftActionLabel | LiveDraftActionLabel, string> = {
@@ -235,7 +247,7 @@ export function DraftCommandCenter({
         .map((candidate) => ({ playerId: candidate.player.id, priority: "like", note: "" })),
     [candidates],
   );
-  const [workspace, setWorkspace] = useState<Workspace>("predraft");
+  const [workspace, setWorkspace] = useState<Workspace>("draft");
   const [boardView, setBoardView] = useState<BoardView>("all");
   const [position, setPosition] = useState<"ALL" | PlayerPosition>("ALL");
   const [query, setQuery] = useState("");
@@ -256,10 +268,13 @@ export function DraftCommandCenter({
   const [draftBoardPosition, setDraftBoardPosition] = useState<"ALL" | PlayerPosition>("ALL");
   const [draftBoardVjOnly, setDraftBoardVjOnly] = useState(false);
   const [draftBoardShowCount, setDraftBoardShowCount] = useState(40);
-  const [conditionalPaths, setConditionalPaths] = useState<ConditionalDraftPathBoard | null>(null);
-  const [conditionalPathsLoading, setConditionalPathsLoading] = useState(false);
+  const [personalBoardOrder, setPersonalBoardOrder] = useState<string[]>([]);
+  const [personalBoardQuery, setPersonalBoardQuery] = useState("");
+  const [personalBoardPosition, setPersonalBoardPosition] = useState<"ALL" | PlayerPosition>("ALL");
+  const [personalBoardShowCount, setPersonalBoardShowCount] = useState(40);
+  const [draggedPlayerId, setDraggedPlayerId] = useState<string | null>(null);
+  const [quickPickQuery, setQuickPickQuery] = useState("");
   const [setup, setSetup] = useState<LeagueIntake>({
-    teamNames: "",
     myTeamName: "",
     myDraftSlot: String(leagueSourceOfTruth.draft.mySlot),
     draftOrder: "",
@@ -335,6 +350,13 @@ export function DraftCommandCenter({
       ...readJson(SETUP_KEY, setup),
       myDraftSlot: String(leagueSourceOfTruth.draft.mySlot),
     });
+    const initialModelOrder = buildRedraftBoard(candidates, initialDraftState.league)
+      .sort((a, b) => a.boardRank - b.boardRank)
+      .map((entry) => entry.playerId);
+    setPersonalBoardOrder(normalizePersonalBoardOrder(
+      readJson<string[]>(PERSONAL_BOARD_KEY, []),
+      initialModelOrder,
+    ));
     setHydrated(true);
     // Loading browser-only working state once is intentional.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -376,6 +398,11 @@ export function DraftCommandCenter({
     window.localStorage.setItem(SETUP_KEY, JSON.stringify(setup));
   }, [setup, hydrated]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(PERSONAL_BOARD_KEY, JSON.stringify(personalBoardOrder));
+  }, [hydrated, personalBoardOrder]);
+
   const board = useMemo(() => buildRedraftBoard(candidates, draftState.league), [candidates, draftState.league]);
   const currentRefresh = useMemo(
     () => buildDraftRefreshCheckpoint(candidates, board, artifactCapturedAt),
@@ -409,7 +436,7 @@ export function DraftCommandCenter({
     [boardById, candidates, favoriteById],
   );
   const availableIds = useMemo(() => new Set(draftState.availablePlayerIds), [draftState.availablePlayerIds]);
-  const teamNames = useMemo(() => parseTeamNames(setup.draftOrder || setup.teamNames), [setup.draftOrder, setup.teamNames]);
+  const teamNames = useMemo(() => parseTeamNames(setup.draftOrder), [setup.draftOrder]);
   const setupResolution = useMemo(
     () => resolveLeagueSetup(setup, candidates, draftState.league),
     [candidates, draftState.league, setup],
@@ -419,6 +446,48 @@ export function DraftCommandCenter({
     () => [...candidates].sort((a, b) => (boardById.get(a.player.id)?.boardRank ?? 999) - (boardById.get(b.player.id)?.boardRank ?? 999)),
     [boardById, candidates],
   );
+
+  const modelPlayerOrder = useMemo(
+    () => sortedCandidates.map((candidate) => candidate.player.id),
+    [sortedCandidates],
+  );
+  const effectivePersonalBoardOrder = useMemo(
+    () => normalizePersonalBoardOrder(personalBoardOrder, modelPlayerOrder),
+    [modelPlayerOrder, personalBoardOrder],
+  );
+  const personalRankById = useMemo(
+    () => new Map(effectivePersonalBoardOrder.map((playerId, index) => [playerId, index + 1] as const)),
+    [effectivePersonalBoardOrder],
+  );
+  const personalBoardRows = useMemo(() => {
+    const lowered = personalBoardQuery.trim().toLowerCase();
+    return effectivePersonalBoardOrder
+      .map((playerId) => candidateById.get(playerId))
+      .filter((candidate): candidate is DraftCandidate => Boolean(candidate))
+      .filter((candidate) => personalBoardPosition === "ALL" || candidate.player.positions.includes(personalBoardPosition))
+      .filter((candidate) => !lowered || [candidate.player.fullName, candidate.player.team, ...candidate.player.positions]
+        .some((value) => value.toLowerCase().includes(lowered)));
+  }, [candidateById, effectivePersonalBoardOrder, personalBoardPosition, personalBoardQuery]);
+  const yahooRankCoverage = useMemo(
+    () => candidates.filter((candidate) => candidate.market.yahooRank != null).length,
+    [candidates],
+  );
+  const quickPickResults = useMemo(() => {
+    const lowered = quickPickQuery.trim().toLowerCase();
+    if (!lowered) return [];
+    return candidates
+      .filter((candidate) => availableIds.has(candidate.player.id))
+      .filter((candidate) => [candidate.player.fullName, candidate.player.team, ...candidate.player.positions]
+        .some((value) => value.toLowerCase().includes(lowered)))
+      .sort((a, b) => {
+        const aName = a.player.fullName.toLowerCase();
+        const bName = b.player.fullName.toLowerCase();
+        const aStarts = aName.startsWith(lowered) ? 0 : 1;
+        const bStarts = bName.startsWith(lowered) ? 0 : 1;
+        return aStarts - bStarts || (personalRankById.get(a.player.id) ?? 999) - (personalRankById.get(b.player.id) ?? 999);
+      })
+      .slice(0, 6);
+  }, [availableIds, candidates, personalRankById, quickPickQuery]);
 
   const filteredCandidates = useMemo(() => {
     const lowered = query.trim().toLowerCase();
@@ -511,6 +580,10 @@ export function DraftCommandCenter({
     [board, candidates, draftState, wrap],
   );
   const liveRecommendations = rankedRecommendations.slice(0, 5);
+  const teamsBeforeNextTurn = useMemo(() => new Set(turnContext.interveningTeamIds), [turnContext.interveningTeamIds]);
+  const orderedOpponentTeams = useMemo(() => [...draftState.teams]
+    .filter((team) => team.teamId !== draftState.myTeamId)
+    .sort((a, b) => Number(teamsBeforeNextTurn.has(b.teamId)) - Number(teamsBeforeNextTurn.has(a.teamId))), [draftState.myTeamId, draftState.teams, teamsBeforeNextTurn]);
   const recommendationRankById = useMemo(
     () => new Map(rankedRecommendations.map((recommendation, index) => [recommendation.playerId, index + 1] as const)),
     [rankedRecommendations],
@@ -547,9 +620,7 @@ export function DraftCommandCenter({
   );
   const remainingDraftBoard = useMemo(() => {
     const lowered = draftQuery.trim().toLowerCase();
-    const topIds = new Set(liveRecommendations.map((recommendation) => recommendation.playerId));
     const rows = rankedRecommendations
-      .filter((recommendation) => !topIds.has(recommendation.playerId))
       .map((recommendation) => ({ recommendation, candidate: candidateById.get(recommendation.playerId) }))
       .filter((row): row is typeof row & { candidate: DraftCandidate } => Boolean(row.candidate))
       .filter(({ candidate }) => draftBoardPosition === "ALL" || candidate.player.positions.includes(draftBoardPosition))
@@ -557,35 +628,14 @@ export function DraftCommandCenter({
       .filter(({ candidate }) => !lowered || [candidate.player.fullName, candidate.player.team, ...candidate.player.positions]
         .some((value) => value.toLowerCase().includes(lowered)));
     return [...rows].sort((a, b) => {
-      if (draftBoardSort === "adp") return (a.candidate.market.adp ?? 999) - (b.candidate.market.adp ?? 999);
       if (draftBoardSort === "model") return (boardById.get(a.candidate.player.id)?.boardRank ?? 999) - (boardById.get(b.candidate.player.id)?.boardRank ?? 999);
+      if (draftBoardSort === "yahoo-xrank") return (a.candidate.market.yahooXRank ?? a.candidate.market.yahooRank ?? 999) - (b.candidate.market.yahooXRank ?? b.candidate.market.yahooRank ?? 999);
+      if (draftBoardSort === "yahoo-adp") return (a.candidate.market.yahooAdp ?? 999) - (b.candidate.market.yahooAdp ?? 999);
+      if (draftBoardSort === "aggregate") return (a.candidate.market.aggregateRank ?? 999) - (b.candidate.market.aggregateRank ?? 999);
+      if (draftBoardSort === "personal") return (personalRankById.get(a.candidate.player.id) ?? 999) - (personalRankById.get(b.candidate.player.id) ?? 999);
       return (recommendationRankById.get(a.candidate.player.id) ?? 999) - (recommendationRankById.get(b.candidate.player.id) ?? 999);
     });
-  }, [boardById, candidateById, draftBoardPosition, draftBoardSort, draftBoardVjOnly, draftQuery, favoriteById, liveRecommendations, rankedRecommendations, recommendationRankById]);
-  const activeConditionalPaths = conditionalPaths?.currentPick === draftState.currentPick ? conditionalPaths : null;
-  const heroRecommendation = liveRecommendations[0] ?? null;
-  const heroCandidate = heroRecommendation ? candidateById.get(heroRecommendation.playerId) ?? null : null;
-  const heroSignal = heroCandidate ? boardSignalById.get(heroCandidate.player.id) ?? null : null;
-  const heroLiveCall = heroCandidate ? liveCallById.get(heroCandidate.player.id) ?? null : null;
-  const heroComparisonCandidate = heroRecommendation?.explanation.positionalComparisonPlayerId
-    ? candidateById.get(heroRecommendation.explanation.positionalComparisonPlayerId) ?? null
-    : null;
-  const heroPresentation = heroCandidate && heroRecommendation && heroSignal
-    ? explainWarRoomRecommendation({
-        candidate: heroCandidate,
-        recommendation: heroRecommendation,
-        signal: heroSignal,
-        runSnapshot: runSnapshotByPosition.get(primaryPosition(heroCandidate)),
-        positionalComparison: heroComparisonCandidate,
-        turnContext,
-      })
-    : null;
-  const heroDraftCall = heroLiveCall && heroSignal ? warRoomDraftCall(heroLiveCall.action, heroSignal) : null;
-  const heroPath = heroCandidate
-    ? activeConditionalPaths?.outcomes.find((outcome) => outcome.initialPlayerId === heroCandidate.player.id) ?? null
-    : null;
-  const alternativePath = activeConditionalPaths?.outcomes.find((outcome) => outcome.initialPlayerId !== heroCandidate?.player.id) ?? null;
-  const heroContinuation = heroPath?.commonSequences[0]?.picks.slice(1) ?? [];
+  }, [boardById, candidateById, draftBoardPosition, draftBoardSort, draftBoardVjOnly, draftQuery, favoriteById, personalRankById, rankedRecommendations, recommendationRankById]);
 
   function setFavorite(candidate: DraftCandidate, priority: FavoritePriority) {
     setFavorites((current) => {
@@ -605,24 +655,6 @@ export function DraftCommandCenter({
     setFavorites((current) => current.map((favorite) => favorite.playerId === playerId ? { ...favorite, note } : favorite));
   }
 
-  function compareTakeNowVsWait() {
-    if (!isMyTurn || conditionalPathsLoading) return;
-    setConditionalPathsLoading(true);
-    const stateAtStart = draftState;
-    window.setTimeout(() => {
-      try {
-        setConditionalPaths(buildConditionalDraftPathBoard(stateAtStart, candidates, wrap, {
-          simulations: 40,
-          candidateLimit: 5,
-          horizonPicks: 3,
-        }));
-      } catch (error) {
-        setSyncMessages([error instanceof Error ? error.message : "The take-now comparison could not be generated."]);
-      } finally {
-        setConditionalPathsLoading(false);
-      }
-    }, 0);
-  }
 
   function recordPick(candidate: DraftCandidate) {
     try {
@@ -643,9 +675,41 @@ export function DraftCommandCenter({
       setDraftState(result.state);
       setSyncMessages(result.receipts);
       setDraftQuery("");
+      setQuickPickQuery("");
     } catch (error) {
       setSyncMessages([error instanceof Error ? error.message : "The pick was refused."]);
     }
+  }
+
+  function movePersonalBoardPlayer(playerId: string, offset: number) {
+    setPersonalBoardOrder(() => {
+      const next = [...effectivePersonalBoardOrder];
+      const currentIndex = next.indexOf(playerId);
+      if (currentIndex < 0) return next;
+      const targetIndex = Math.max(0, Math.min(next.length - 1, currentIndex + offset));
+      if (targetIndex === currentIndex) return next;
+      next.splice(currentIndex, 1);
+      next.splice(targetIndex, 0, playerId);
+      return next;
+    });
+  }
+
+  function movePersonalBoardPlayerBefore(playerId: string, targetPlayerId: string) {
+    if (playerId === targetPlayerId) return;
+    setPersonalBoardOrder(() => {
+      const next = [...effectivePersonalBoardOrder];
+      const sourceIndex = next.indexOf(playerId);
+      const targetIndex = next.indexOf(targetPlayerId);
+      if (sourceIndex < 0 || targetIndex < 0) return next;
+      next.splice(sourceIndex, 1);
+      next.splice(sourceIndex < targetIndex ? targetIndex - 1 : targetIndex, 0, playerId);
+      return next;
+    });
+  }
+
+  function resetPersonalBoard() {
+    setPersonalBoardOrder(modelPlayerOrder);
+    setPersonalBoardShowCount(40);
   }
 
   function applyResolvedSetup() {
@@ -756,6 +820,7 @@ export function DraftCommandCenter({
       acceptedRefresh,
       decisionJournal,
       favorites,
+      personalBoardOrder: effectivePersonalBoardOrder,
     }, null, 2);
     const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
     const anchor = document.createElement("a");
@@ -774,6 +839,7 @@ export function DraftCommandCenter({
         acceptedRefresh?: DraftRefreshCheckpoint | null;
         decisionJournal?: DraftDecisionJournalEntry[];
         favorites?: Favorite[];
+        personalBoardOrder?: string[];
       };
       if (![1, 2].includes(parsed.version ?? 0) || !parsed.session) throw new Error("Backup schema is missing or unsupported.");
       const state = replayDraftSession(parsed.session, candidates, initialDraftState);
@@ -791,6 +857,9 @@ export function DraftCommandCenter({
       setAcceptedRefresh(parsed.acceptedRefresh ?? null);
       setDecisionJournal(Array.isArray(parsed.decisionJournal) ? parsed.decisionJournal : []);
       if (restoredFavorites) setFavorites(restoredFavorites);
+      if (Array.isArray(parsed.personalBoardOrder)) {
+        setPersonalBoardOrder(normalizePersonalBoardOrder(parsed.personalBoardOrder, modelPlayerOrder));
+      }
       setBackupText("");
       setSyncMessages([`Restored audited session at Pick ${state.currentPick}${restoredFavorites ? ` with ${restoredFavorites.length} VJ targets` : ""}.`]);
     } catch (error) {
@@ -856,7 +925,7 @@ export function DraftCommandCenter({
     return teamNames[index] ? `${teamNames[index]} · ${teamId}` : teamId;
   }
 
-  const setupCompleteCount = [teamNames.length >= draftState.league.teams, Boolean(setup.draftOrder.trim()), Boolean(setup.keepers.trim()), Boolean(setup.myTeamName.trim())].filter(Boolean).length;
+  const setupCompleteCount = [teamNames.length >= draftState.league.teams, Boolean(setup.keepers.trim()), Boolean(setup.myTeamName.trim() || setup.myDraftSlot.trim())].filter(Boolean).length;
   const livePickCount = draftState.drafted.filter((pick) => pick.eventType !== "keeper").length;
   const isDraftPreview = livePickCount === 0;
 
@@ -924,10 +993,9 @@ export function DraftCommandCenter({
             </div>
           </div>
 
-          <nav className="mt-5 hidden grid-cols-4 gap-1 rounded-2xl bg-black/25 p-1 lg:grid" aria-label="Fantasy workspace">
+          <nav className="mt-5 hidden grid-cols-3 gap-1 rounded-2xl bg-black/25 p-1 lg:grid" aria-label="Fantasy workspace">
             {([
-              ["predraft", "Pre-draft", Target],
-              ["draft", "Draft room", Clock3],
+              ["draft", "War Room", Clock3],
               ["rehearsal", "Rehearse", Zap],
               ["setup", "League setup", Settings2],
             ] as const).map(([id, label, Icon]) => (
@@ -972,7 +1040,7 @@ export function DraftCommandCenter({
           ) : null}
         </section>
 
-        <section className="mt-3 rounded-[24px] border border-violet-300/20 bg-violet-300/[0.06] p-4">
+        {workspace === "predraft" ? <section className="mt-3 rounded-[24px] border border-violet-300/20 bg-violet-300/[0.06] p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200">Sleeper quick intake</p>
@@ -1017,7 +1085,7 @@ export function DraftCommandCenter({
               ) : <p className="font-bold">{manualNewsResult.error}</p>}
             </div>
           ) : null}
-        </section>
+        </section> : null}
 
         {workspace === "predraft" ? (
           <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -1248,39 +1316,57 @@ export function DraftCommandCenter({
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-cyan-300/25 bg-[#0a1727]/92 p-4 sm:p-5">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">Top five recommendations</p><h3 className="mt-1 text-xl font-black">{isMyTurn ? "Your best picks right now" : "Projected for your next pick"}</h3></div>
-                  <p className="text-xs text-slate-500">Recalculates after every recorded selection</p>
+              <section className="rounded-[28px] border border-emerald-300/25 bg-[#0a1727]/92 p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Quick pick entry</p>
+                    <h3 className="mt-1 text-xl font-black">Type the player. The team is automatic.</h3>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">Snake position and the official draft order determine the pick owner; you never need to select a team manually.</p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.08] px-4 py-3 text-right">
+                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-emerald-200">Pick {draftState.currentPick} records for</p>
+                    <p className="mt-1 font-black text-white">{teamLabel(pickInfo.teamId)}</p>
+                  </div>
                 </div>
-
-                {isMyTurn ? <div className={cn("mt-4 rounded-2xl border p-4", turnContext.mode === "long-gap" ? "border-rose-300/25 bg-rose-300/[0.07]" : turnContext.mode === "pair-building" ? "border-emerald-300/25 bg-emerald-300/[0.07]" : "border-white/10 bg-black/20")}><p className={cn("text-xs font-black uppercase tracking-[0.16em]", turnContext.mode === "long-gap" ? "text-rose-200" : turnContext.mode === "pair-building" ? "text-emerald-200" : "text-slate-300")}>{turnContext.label}</p><p className="mt-2 text-sm leading-6 text-slate-300">{turnContext.summary}</p></div> : null}
-
-                {heroCandidate && heroRecommendation && heroSignal && heroPresentation && heroDraftCall ? (
-                  <div className="relative mt-4 overflow-hidden rounded-[24px] border border-cyan-300/40 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(8,20,35,0.96)_62%)] p-5 sm:p-6">
-                    {favoriteById.has(heroCandidate.player.id) ? <VjEarmark /> : null}
-                    <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
-                      <div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">#1 recommendation</p><h4 className="mt-2 text-2xl font-black sm:text-3xl">{heroCandidate.player.fullName}</h4><p className="mt-1 text-sm text-slate-400">{primaryPosition(heroCandidate)} · {heroCandidate.player.team} · {heroPresentation.price}</p></div>
-                      <span className={cn("rounded-xl border px-3 py-2 text-xs font-black", warRoomCallClasses[heroDraftCall])}>{heroDraftCall}</span>
-                    </div>
-                    <p className="mt-4 text-lg font-black text-white">{heroPresentation.chanceBack}</p>
-                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">Why he is #1 · {heroPresentation.driver}</p>
-                      <p className="mt-2 text-sm leading-6 text-slate-200">{heroPresentation.whyNow}</p>
-                      {heroPresentation.comparison ? <p className="mt-2 text-xs leading-5 text-slate-400">{heroPresentation.comparison}</p> : null}
-                    </div>
-                    {isMyTurn ? <Button className="mt-4" disabled={!roomFreeze} onClick={() => recordPick(heroCandidate)}>{roomFreeze ? "Drafted by Vaughn" : "Freeze room to record"}</Button> : null}
-
-                    <div className="mt-4 border-t border-white/10 pt-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-black">{turnContext.mode === "pair-building" ? "Build the two-pick package" : turnContext.mode === "long-gap" ? "Protect the long-gap exit pick" : "Take now vs. wait"}</p><p className="mt-1 text-xs text-slate-500">{turnContext.mode === "pair-building" ? "Compare which opening choice creates the strongest paired selection at your next pick." : turnContext.mode === "long-gap" ? "Compare the current choice against what is realistically left after the room picks through." : "Compare the likely multi-pick rosters created by each choice."}</p></div>{isMyTurn && !activeConditionalPaths ? <Button size="sm" variant="outline" onClick={compareTakeNowVsWait} disabled={conditionalPathsLoading}>{conditionalPathsLoading ? "Comparing paths…" : turnContext.mode === "pair-building" ? "Compare packages" : "Compare paths"}</Button> : null}</div>
-                      {!isMyTurn ? <p className="mt-3 text-xs leading-5 text-slate-400">The full path comparison becomes available when Vaughn is on the clock. Current return estimate: {heroPresentation.chanceBack.toLowerCase()}.</p> : null}
-                      {heroPath && alternativePath ? <div className="mt-3 grid gap-3 sm:grid-cols-2"><div className="rounded-2xl bg-emerald-300/[0.07] p-3"><p className="text-xs font-black text-emerald-100">Take {heroCandidate.player.fullName} now</p><p className="mt-2 text-xs leading-5 text-slate-300">Most common later picks: {heroContinuation.length > 0 ? heroContinuation.map((pick) => pick.playerName).join(" → ") : "no later selection in range"}.</p></div><div className="rounded-2xl bg-white/[0.05] p-3"><p className="text-xs font-black text-slate-200">Strongest case against: {alternativePath.initialPlayerName}</p><p className="mt-2 text-xs leading-5 text-slate-300">{heroCandidate.player.fullName} has a {Math.round(heroRecommendation.explanation.makeItBackProbability * 100)}% chance to reach your next pick. Passing now creates {alternativePath.medianRegret.toFixed(1)} median and {alternativePath.downsideRegret.toFixed(1)} downside season-value regret in this preview.</p></div><div className="sm:col-span-2 rounded-2xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300"><p><span className="font-black text-white">Quick paired preview:</span> {heroCandidate.player.fullName} wins {Math.round(heroPath.winRate * 100)}% of paired continuations and projects {Math.abs(heroPath.medianLineupPoints - alternativePath.medianLineupPoints).toFixed(1)} season-value points {heroPath.medianLineupPoints >= alternativePath.medianLineupPoints ? "ahead of" : "behind"} {alternativePath.initialPlayerName}.</p><p className="mt-1 font-bold text-amber-100">{Math.abs(heroPath.medianLineupPoints - alternativePath.medianLineupPoints) < 4 && Math.abs(heroPath.winRate - alternativePath.winRate) <= 0.1 ? "These choices are effectively tied; choose based on preference." : `The strongest quantitative argument against the recommendation is ${alternativePath.initialPlayerName}'s ${Math.round(alternativePath.winRate * 100)}% paired win rate.`}</p><p className="mt-1 text-slate-500">This is a responsive approximation, not exact-production certification evidence.</p></div></div> : null}
-                    </div>
+                <label className="relative mt-4 block">
+                  <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-500" />
+                  <Input
+                    value={quickPickQuery}
+                    onChange={(event) => setQuickPickQuery(event.target.value)}
+                    placeholder="Type the drafted player's name…"
+                    className="pl-10"
+                    autoComplete="off"
+                  />
+                </label>
+                {quickPickQuery.trim() ? (
+                  <div className="mt-2 divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                    {quickPickResults.map((candidate) => (
+                      <div key={candidate.player.id} className="flex items-center gap-3 p-3">
+                        <span className="w-10 shrink-0 text-center text-sm font-black text-slate-500">#{personalRankById.get(candidate.player.id) ?? "—"}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-black">{candidate.player.fullName}</span>
+                          <span className="text-xs text-slate-500">{primaryPosition(candidate)} · {candidate.player.team} · Model #{boardById.get(candidate.player.id)?.boardRank ?? "—"}</span>
+                        </span>
+                        <Button size="sm" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>
+                          {roomFreeze ? `Record for ${teamLabel(pickInfo.teamId)}` : "Freeze room first"}
+                        </Button>
+                      </div>
+                    ))}
+                    {quickPickResults.length === 0 ? <p className="p-4 text-sm text-slate-500">No available player matches that name.</p> : null}
                   </div>
                 ) : null}
+              </section>
 
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {liveRecommendations.slice(1, 5).map((recommendation, index) => {
+              <section className="rounded-[28px] border border-cyan-300/25 bg-[#0a1727]/92 p-4 sm:p-5">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">On the clock</p><h3 className="mt-1 text-xl font-black">{isMyTurn ? "Best pick, with the next few exits" : "Best options for your next pick"}</h3></div>
+                  <p className="text-xs text-slate-500">One compact recommendation view · updates after every pick</p>
+                </div>
+
+                {isMyTurn ? <div className={cn("mt-3 rounded-2xl border px-3 py-2", turnContext.mode === "long-gap" ? "border-rose-300/25 bg-rose-300/[0.07]" : turnContext.mode === "pair-building" ? "border-emerald-300/25 bg-emerald-300/[0.07]" : "border-white/10 bg-black/20")}><p className={cn("text-[10px] font-black uppercase tracking-[0.16em]", turnContext.mode === "long-gap" ? "text-rose-200" : turnContext.mode === "pair-building" ? "text-emerald-200" : "text-slate-300")}>{turnContext.label}</p><p className="mt-1 text-xs leading-5 text-slate-300">{turnContext.summary}</p></div> : null}
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                  {liveRecommendations.map((recommendation, index) => {
                     const candidate = candidateById.get(recommendation.playerId);
                     const signal = candidate ? boardSignalById.get(candidate.player.id) : null;
                     const liveCall = candidate ? liveCallById.get(candidate.player.id) : null;
@@ -1288,25 +1374,113 @@ export function DraftCommandCenter({
                     const comparison = recommendation.explanation.positionalComparisonPlayerId ? candidateById.get(recommendation.explanation.positionalComparisonPlayerId) : null;
                     const presentation = explainWarRoomRecommendation({ candidate, recommendation, signal, runSnapshot: runSnapshotByPosition.get(primaryPosition(candidate)), positionalComparison: comparison });
                     const call = warRoomDraftCall(liveCall.action, signal);
-                    return <div key={candidate.player.id} className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4"><div className="flex items-start justify-between gap-2 pr-5"><span className="text-[10px] font-black uppercase text-slate-500">#{index + 2}</span><span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black", warRoomCallClasses[call])}>{call}</span></div><p className="mt-3 font-black">{candidate.player.fullName}</p><p className="mt-1 text-xs text-slate-500">{primaryPosition(candidate)} · ADP {candidate.market.adp}</p><p className="mt-3 text-xs font-bold text-white">{presentation.chanceBack}</p><p className="mt-2 text-xs leading-5 text-slate-400">{presentation.driver}: {presentation.whyNow}</p>{isMyTurn ? <Button className="mt-3" size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>Drafted by Vaughn</Button> : null}{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
+                    return <div key={candidate.player.id} className="relative overflow-hidden rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-2 pr-5"><span className="text-[10px] font-black uppercase text-slate-500">#{index + 1}</span><span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black", warRoomCallClasses[call])}>{call}</span></div><div className="mt-2 flex items-baseline gap-2"><p className="truncate font-black">{candidate.player.fullName}</p><span className="shrink-0 text-[11px] text-slate-500">{primaryPosition(candidate)}</span></div><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-amber-200">Why</p><p className="mt-1 text-xs leading-5 text-slate-300">{presentation.driver}: {presentation.whyNow}</p><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">Available next pick</p><p className="mt-1 text-xs font-bold text-white">{presentation.chanceBack}</p>{isMyTurn ? <Button className="mt-2" size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>Drafted by Vaughn</Button> : null}{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
                   })}
                 </div>
               </section>
 
+              <section className="rounded-[28px] border border-violet-300/20 bg-[#0a1727]/92 p-4 sm:p-5">
+                <div><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200">Full-room roster construction</p><h3 className="mt-1 text-xl font-black">Immediate opponents first, with players and real gaps</h3><p className="mt-2 text-xs text-slate-400">Teams highlighted in amber pick before Vaughn&apos;s next selection.</p></div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {orderedOpponentTeams.map((team) => {
+                    const before = teamsBeforeNextTurn.has(team.teamId);
+                    const rosterIds = [...team.starters, ...team.bench];
+                    const starterNeeds = (["QB", "RB", "WR", "TE"] as PlayerPosition[]).filter((pos) => team.openSlots.includes(pos));
+                    const flexNeeds = team.openSlots.filter((slot) => slot === "W/R/T").length;
+                    return <article key={team.teamId} className={cn("rounded-2xl border p-3", before ? "border-amber-300/30 bg-amber-300/[0.07]" : "border-white/10 bg-black/20")}><div className="flex items-start justify-between gap-2"><div><p className="font-black">{teamLabel(team.teamId)}</p><p className="text-[10px] text-slate-500">{rosterIds.length} drafted</p></div>{before ? <span className="rounded-lg border border-amber-300/25 px-2 py-1 text-[9px] font-black text-amber-100">PICKS BEFORE YOU</span> : null}</div><div className="mt-3 flex flex-wrap gap-1.5">{rosterIds.length > 0 ? rosterIds.map((playerId) => { const player = candidateById.get(playerId); return <span key={playerId} className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-bold">{player?.player.fullName ?? playerId} · {player ? primaryPosition(player) : "?"}</span>; }) : <span className="text-xs text-slate-500">No players recorded.</span>}</div><p className="mt-3 text-xs text-slate-300"><span className="font-black text-violet-100">Needs:</span> {starterNeeds.length > 0 ? starterNeeds.join(", ") + " starters" : "required starters filled"}{flexNeeds > 0 ? ` · ${flexNeeds} FLEX` : ""}</p></article>;
+                  })}
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-amber-300/25 bg-[#0a1727]/92 p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Your draft order</p>
+                    <h3 className="mt-1 text-xl font-black">Reorder the board around your preferences.</h3>
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Drag rows on desktop or use the arrow controls on mobile. Your order saves on this device and remains separate from the model that powers the top-five recommendations.</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={resetPersonalBoard}>Reset to model order</Button>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <label className="relative">
+                    <Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-500" />
+                    <Input value={personalBoardQuery} onChange={(event) => { setPersonalBoardQuery(event.target.value); setPersonalBoardShowCount(40); }} placeholder="Find a player to move…" className="pl-10" />
+                  </label>
+                  <div className="flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/60 p-1">
+                    {POSITIONS.map((item) => <button key={item} onClick={() => { setPersonalBoardPosition(item); setPersonalBoardShowCount(40); }} className={cn("min-w-10 rounded-xl px-2 py-2 text-xs font-black", personalBoardPosition === item ? "bg-white text-slate-950" : "text-slate-400")}>{item}</button>)}
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] leading-5 text-slate-500">
+                  <p><span className="font-black text-slate-300">Difference = Yahoo XRank − model rank.</span> Positive means Yahoo lets the player go later; negative means Yahoo ranks him earlier.</p>
+                  <p>{yahooRankCoverage} of {candidates.length} players currently have a Yahoo XRank; missing values stay visible as —.</p>
+                </div>
+                <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+                  <div className="hidden grid-cols-[64px_minmax(180px,1fr)_60px_64px_72px_72px_86px_150px] gap-2 bg-black/30 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-slate-500 lg:grid">
+                    <span>Your rank</span><span>Player</span><span>Model</span><span>Yahoo</span><span>Y−M</span><span>Aggregate</span><span>Disagreement</span><span className="text-right">Move</span>
+                  </div>
+                  <div className="divide-y divide-white/[0.07]">
+                    {personalBoardRows.slice(0, personalBoardShowCount).map((candidate) => {
+                      const preferredRank = personalRankById.get(candidate.player.id) ?? 999;
+                      const modelRank = boardById.get(candidate.player.id)?.boardRank ?? null;
+                      const yahooRank = candidate.market.yahooXRank ?? candidate.market.yahooRank ?? null;
+                      const difference = modelRank != null && yahooRank != null ? yahooRank - modelRank : null;
+                      const drafted = !availableIds.has(candidate.player.id);
+                      return (
+                        <div
+                          key={candidate.player.id}
+                          draggable
+                          onDragStart={() => setDraggedPlayerId(candidate.player.id)}
+                          onDragEnd={() => setDraggedPlayerId(null)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={() => {
+                            if (draggedPlayerId) movePersonalBoardPlayerBefore(draggedPlayerId, candidate.player.id);
+                            setDraggedPlayerId(null);
+                          }}
+                          className={cn("grid gap-2 bg-[#091524] p-3 transition lg:grid-cols-[64px_minmax(180px,1fr)_60px_64px_72px_72px_86px_150px] lg:items-center", draggedPlayerId === candidate.player.id && "opacity-45", drafted && "bg-slate-950/70 text-slate-500")}
+                        >
+                          <span className="text-lg font-black text-amber-100"><span className="mr-2 text-[9px] uppercase text-slate-600 sm:hidden">Your rank</span>#{preferredRank}</span>
+                          <span className="min-w-0"><span className="block truncate font-black">{candidate.player.fullName}{drafted ? " · Drafted" : ""}</span><span className="text-xs text-slate-500">{primaryPosition(candidate)} · {candidate.player.team} · Yahoo ADP {candidate.market.yahooAdp ?? "—"}</span></span>
+                          <span className="text-sm font-black text-slate-300"><span className="mr-2 text-[9px] uppercase text-slate-600 sm:hidden">Model</span>{modelRank ? `#${modelRank}` : "—"}</span>
+                          <span className="text-sm font-black text-slate-300"><span className="mr-2 text-[9px] uppercase text-slate-600 sm:hidden">Yahoo</span>{yahooRank ? `#${yahooRank}` : "—"}</span>
+                          <span className={cn("text-xs font-black", difference == null ? "text-slate-600" : difference > 0 ? "text-cyan-200" : difference < 0 ? "text-amber-200" : "text-slate-300")}>
+                            <span className="mr-2 text-[9px] uppercase text-slate-600 sm:hidden">Difference</span>{difference == null ? "—" : `${difference > 0 ? "+" : ""}${difference}`}
+                          </span>
+                          <span className="text-xs font-black text-slate-300"><span className="mr-2 text-[9px] uppercase text-slate-600 lg:hidden">Aggregate</span>{candidate.market.aggregateRank != null ? `#${candidate.market.aggregateRank.toFixed(1)}` : "—"}</span>
+                          <span className={cn("text-[10px] font-black", (candidate.market.rankSpread ?? 0) >= 50 ? "text-rose-200" : (candidate.market.rankSpread ?? 0) >= 30 ? "text-amber-200" : "text-slate-400")}><span className="mr-2 text-[9px] uppercase text-slate-600 lg:hidden">Disagreement</span>{candidate.market.rankSpread == null ? "—" : candidate.market.rankSpread >= 50 ? `Wide · ${candidate.market.rankSpread}` : `Spread ${candidate.market.rankSpread}`}</span>
+                          <span className="flex justify-end gap-1">
+                            <button aria-label={`Move ${candidate.player.fullName} up ten spots`} title="Up 10" onClick={() => movePersonalBoardPlayer(candidate.player.id, -10)} className="rounded-lg border border-white/10 px-2 py-2 text-[10px] font-black text-slate-400 hover:text-white">10</button>
+                            <button aria-label={`Move ${candidate.player.fullName} up one spot`} title="Up 1" onClick={() => movePersonalBoardPlayer(candidate.player.id, -1)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:text-white"><ArrowUp className="h-3.5 w-3.5" /></button>
+                            <button aria-label={`Move ${candidate.player.fullName} down one spot`} title="Down 1" onClick={() => movePersonalBoardPlayer(candidate.player.id, 1)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:text-white"><ArrowDown className="h-3.5 w-3.5" /></button>
+                            <button aria-label={`Move ${candidate.player.fullName} down ten spots`} title="Down 10" onClick={() => movePersonalBoardPlayer(candidate.player.id, 10)} className="rounded-lg border border-white/10 px-2 py-2 text-[10px] font-black text-slate-400 hover:text-white">10</button>
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {personalBoardRows.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No players match these filters.</p> : null}
+                  </div>
+                </div>
+                {personalBoardRows.length > personalBoardShowCount ? <Button variant="outline" className="mt-3 w-full" onClick={() => setPersonalBoardShowCount((count) => count + 40)}>Show more players</Button> : null}
+              </section>
+
               <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4 sm:p-5">
                 <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">All remaining players</p><h3 className="mt-1 text-xl font-black">Ranked for the current room</h3></div><span className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-black text-slate-300">Recording for {teamLabel(pickInfo.teamId)}</span></div>
-                <div className="mt-4 flex flex-wrap gap-2">{([['recommended', 'Recommended now'], ['adp', 'ADP'], ['model', 'Model board']] as const).map(([id, label]) => <button key={id} onClick={() => { setDraftBoardSort(id); setDraftBoardShowCount(40); }} className={cn("rounded-full border px-3 py-2 text-xs font-black", draftBoardSort === id ? "border-cyan-300 bg-cyan-300/12 text-cyan-100" : "border-white/10 text-slate-400")}>{label}</button>)}<button onClick={() => { setDraftBoardVjOnly((current) => !current); setDraftBoardShowCount(40); }} className={cn("rounded-full border px-3 py-2 text-xs font-black", draftBoardVjOnly ? "border-amber-300 bg-amber-300/12 text-amber-100" : "border-white/10 text-slate-400")}>VJ targets</button></div>
+                <div className="mt-4 flex flex-wrap gap-2">{([['recommended', 'Recommended'], ['model', 'Model'], ['yahoo-xrank', 'Yahoo XRank'], ['yahoo-adp', 'Yahoo ADP'], ['aggregate', 'Aggregate'], ['personal', 'Personal']] as const).map(([id, label]) => <button key={id} onClick={() => { setDraftBoardSort(id); setDraftBoardShowCount(40); }} className={cn("rounded-full border px-3 py-2 text-xs font-black", draftBoardSort === id ? "border-cyan-300 bg-cyan-300/12 text-cyan-100" : "border-white/10 text-slate-400")}>{label}</button>)}<button onClick={() => { setDraftBoardVjOnly((current) => !current); setDraftBoardShowCount(40); }} className={cn("rounded-full border px-3 py-2 text-xs font-black", draftBoardVjOnly ? "border-amber-300 bg-amber-300/12 text-amber-100" : "border-white/10 text-slate-400")}>VJ targets</button></div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"><label className="relative"><Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-500" /><Input value={draftQuery} onChange={(event) => { setDraftQuery(event.target.value); setDraftBoardShowCount(40); }} placeholder="Search remaining players…" className="pl-10" /></label><div className="flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/60 p-1">{POSITIONS.map((item) => <button key={item} onClick={() => { setDraftBoardPosition(item); setDraftBoardShowCount(40); }} className={cn("min-w-10 rounded-xl px-2 py-2 text-xs font-black", draftBoardPosition === item ? "bg-white text-slate-950" : "text-slate-400")}>{item}</button>)}</div></div>
-                {draftBoardSort === "adp" ? <p className="mt-3 text-xs text-slate-500">Market order is active. The live model recommendation number remains visible for comparison.</p> : null}
+                {draftBoardSort !== "recommended" ? <p className="mt-3 text-xs text-slate-500">Comparison order is active. The live recommendation number remains visible and no comparison field overwrites model value.</p> : null}
                 <div className="mt-4 divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/10">
                   {remainingDraftBoard.slice(0, draftBoardShowCount).map(({ candidate, recommendation }) => {
                     const signal = boardSignalById.get(candidate.player.id);
                     const liveCall = liveCallById.get(candidate.player.id);
                     if (!signal || !liveCall) return null;
-                    const comparison = recommendation.explanation.positionalComparisonPlayerId ? candidateById.get(recommendation.explanation.positionalComparisonPlayerId) : null;
-                    const presentation = explainWarRoomRecommendation({ candidate, recommendation, signal, runSnapshot: runSnapshotByPosition.get(primaryPosition(candidate)), positionalComparison: comparison });
-                    const call = warRoomDraftCall(liveCall.action, signal);
-                    return <div key={candidate.player.id} className="relative grid gap-3 bg-[#091524] p-3 pr-10 sm:grid-cols-[52px_minmax(180px,1fr)_110px_minmax(180px,1.2fr)_auto] sm:items-center"><span className="text-slate-400"><span className="block text-[9px] font-black uppercase text-slate-600">Now</span><span className="text-lg font-black">#{recommendationRankById.get(candidate.player.id)}</span></span><span className="min-w-0"><span className="block truncate font-black">{candidate.player.fullName}</span><span className="text-xs text-slate-500">{primaryPosition(candidate)} · {candidate.player.team} · ADP {candidate.market.adp}</span></span><span className={cn("w-fit rounded-lg border px-2 py-1 text-[10px] font-black", warRoomCallClasses[call])}>{call}</span><span className="text-xs leading-5 text-slate-400"><span className="font-bold text-slate-200">{presentation.driver}:</span> {presentation.whyNow}</span><Button size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>{roomFreeze ? `Record for ${isMyTurn ? "Vaughn" : teamLabel(pickInfo.teamId)}` : "Room locked"}</Button>{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
+                    const yahooXRank = candidate.market.yahooXRank ?? candidate.market.yahooRank;
+                    const marketFall = yahooXRank == null ? 0 : draftState.currentPick - yahooXRank;
+                    const exceptional = marketFall >= 8 && recommendation.explanation.boardEdge >= 6;
+                    const uncertainty = (candidate.market.rankSpread ?? 0) >= 50;
+                    const label = exceptional ? "Exceptional value" : uncertainty ? "Wide market range" : recommendation.explanation.makeItBackProbability <= 0.35 ? "Take-now pressure" : "Track availability";
+                    const labelClass = exceptional ? "border-emerald-300/35 bg-emerald-300/[0.08] text-emerald-100" : uncertainty ? "border-rose-300/30 bg-rose-300/[0.07] text-rose-100" : "border-cyan-300/25 bg-cyan-300/[0.06] text-cyan-100";
+                    const low = Math.round((recommendation.explanation.makeItBackProbabilityLow ?? recommendation.explanation.makeItBackProbability) * 100);
+                    const high = Math.round((recommendation.explanation.makeItBackProbabilityHigh ?? recommendation.explanation.makeItBackProbability) * 100);
+                    return <div key={candidate.player.id} className={cn("relative grid gap-3 bg-[#091524] p-3 pr-10 sm:grid-cols-[52px_minmax(190px,1fr)_130px_minmax(200px,1.2fr)_auto] sm:items-center", exceptional && "bg-emerald-300/[0.04]")}><span className="text-slate-400"><span className="block text-[9px] font-black uppercase text-slate-600">Now</span><span className="text-lg font-black">#{recommendationRankById.get(candidate.player.id)}</span></span><span className="min-w-0"><span className="block truncate font-black">{candidate.player.fullName}</span><span className="text-xs text-slate-500">{primaryPosition(candidate)} · Model #{recommendation.explanation.ourBoardRank} · Yahoo #{yahooXRank ?? "—"} · Aggregate {candidate.market.aggregateRank?.toFixed(1) ?? "—"}</span></span><span className={cn("w-fit rounded-lg border px-2 py-1 text-[10px] font-black", labelClass)}>{label}</span><span className="text-xs leading-5 text-slate-400">Model-versus-Yahoo gap {yahooXRank == null ? "—" : `${yahooXRank - recommendation.explanation.ourBoardRank > 0 ? "+" : ""}${yahooXRank - recommendation.explanation.ourBoardRank}`}. Make-it-back {low === high ? `${low}%` : `${low}–${high}%`}; tier survival {Math.round(recommendation.explanation.tierSurvivalProbability * 100)}%.{uncertainty ? ` Rank Spread ${candidate.market.rankSpread} widens the range.` : ""}</span><Button size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>{roomFreeze ? `Record for ${isMyTurn ? "Vaughn" : teamLabel(pickInfo.teamId)}` : "Room locked"}</Button>{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
                   })}
                   {remainingDraftBoard.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No remaining players match these filters.</p> : null}
                 </div>
@@ -1367,11 +1541,10 @@ export function DraftCommandCenter({
         {workspace === "setup" ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
             <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-5 sm:p-6">
-              <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">League intake</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">Bring the room into focus.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">A day or two before the draft, add the official team names, order, and keepers here. The board can then account for who picks around you and which players are already gone.</p></div><div className="shrink-0 rounded-2xl bg-black/25 px-4 py-3 text-center"><p className="text-2xl font-black text-cyan-300">{setupCompleteCount}/4</p><p className="text-[10px] uppercase text-slate-500">ready</p></div></div>
+              <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">League intake</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">Bring the room into focus.</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Paste the official ordered team list once, identify Vaughn by team name or slot, and enter league-wide keepers. The order becomes both the team-name list and the team-ID map.</p></div><div className="shrink-0 rounded-2xl bg-black/25 px-4 py-3 text-center"><p className="text-2xl font-black text-cyan-300">{setupCompleteCount}/3</p><p className="text-[10px] uppercase text-slate-500">ready</p></div></div>
               <div className="mt-6 grid gap-5 sm:grid-cols-2">
-                <label className="block"><span className="text-sm font-black">Your team name</span><span className="mt-1 block text-xs text-slate-500">Used to identify your roster in the draft room.</span><Input className="mt-2" value={setup.myTeamName} onChange={(event) => setSetup((current) => ({ ...current, myTeamName: event.target.value }))} placeholder="My team" /></label>
-                <label className="block"><span className="text-sm font-black">Your draft slot</span><span className="mt-1 block text-xs text-slate-500">Canonical slot {leagueSourceOfTruth.draft.mySlot}; change the source of truth first if the league changes it.</span><Input className="mt-2" inputMode="numeric" value={setup.myDraftSlot} onChange={(event) => setSetup((current) => ({ ...current, myDraftSlot: event.target.value }))} placeholder={String(leagueSourceOfTruth.draft.mySlot)} /></label>
-                <label className="block sm:col-span-2"><span className="text-sm font-black">Team names</span><span className="mt-1 block text-xs text-slate-500">One per line. These labels replace generic team IDs in the draft room.</span><Textarea className="mt-2 min-h-36" value={setup.teamNames} onChange={(event) => setSetup((current) => ({ ...current, teamNames: event.target.value }))} placeholder={"Team 1\nTeam 2\nTeam 3\n…"} /></label>
+                <label className="block"><span className="text-sm font-black">Vaughn&apos;s team name</span><span className="mt-1 block text-xs text-slate-500">Optional when the canonical draft slot is already correct.</span><Input className="mt-2" value={setup.myTeamName} onChange={(event) => setSetup((current) => ({ ...current, myTeamName: event.target.value }))} placeholder="My team" /></label>
+                <label className="block"><span className="text-sm font-black">Vaughn&apos;s draft slot</span><span className="mt-1 block text-xs text-slate-500">Canonical slot {leagueSourceOfTruth.draft.mySlot}; team name and slot must agree when both are entered.</span><Input className="mt-2" inputMode="numeric" value={setup.myDraftSlot} onChange={(event) => setSetup((current) => ({ ...current, myDraftSlot: event.target.value }))} placeholder={String(leagueSourceOfTruth.draft.mySlot)} /></label>
                 <label className="block sm:col-span-2"><span className="text-sm font-black">Official draft order</span><span className="mt-1 block text-xs text-slate-500">Paste the ordered list exactly as provided by the league.</span><Textarea className="mt-2 min-h-36" value={setup.draftOrder} onChange={(event) => setSetup((current) => ({ ...current, draftOrder: event.target.value }))} placeholder={"1. Team name\n2. Team name\n3. Team name\n…"} /></label>
                 <label className="block sm:col-span-2"><span className="text-sm font-black">All keepers</span><span className="mt-1 block text-xs text-slate-500">One line per keeper; include team and round cost when known.</span><Textarea className="mt-2 min-h-44" value={setup.keepers} onChange={(event) => setSetup((current) => ({ ...current, keepers: event.target.value }))} placeholder={"Team name — Player — Round 4\nTeam name — Player — Round 7"} /></label>
               </div>
@@ -1388,7 +1561,7 @@ export function DraftCommandCenter({
               </div>
             </section>
             <aside className="space-y-4">
-              <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Draft-day checklist</p><div className="mt-4 space-y-3">{[[teamNames.length >= draftState.league.teams, "All team names"], [Boolean(setup.draftOrder.trim()), "Official draft order"], [Boolean(setup.keepers.trim()), "League-wide keepers"], [Boolean(setup.myTeamName.trim()), "Your team identified"]].map(([done, label]) => <div key={String(label)} className="flex items-center gap-3 text-sm"><span className={cn("flex h-6 w-6 items-center justify-center rounded-full border", done ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-white/10 text-slate-600")}>{done ? <Check className="h-3.5 w-3.5" /> : null}</span><span className={done ? "text-slate-200" : "text-slate-500"}>{label}</span></div>)}</div></section>
+              <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Draft-day checklist</p><div className="mt-4 space-y-3">{[[teamNames.length >= draftState.league.teams, "Official ordered team list"], [Boolean(setup.keepers.trim()), "League-wide keepers"], [Boolean(setup.myTeamName.trim() || setup.myDraftSlot.trim()), "Vaughn identified"]].map(([done, label]) => <div key={String(label)} className="flex items-center gap-3 text-sm"><span className={cn("flex h-6 w-6 items-center justify-center rounded-full border", done ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-200" : "border-white/10 text-slate-600")}>{done ? <Check className="h-3.5 w-3.5" /> : null}</span><span className={done ? "text-slate-200" : "text-slate-500"}>{label}</span></div>)}</div></section>
               <section className="rounded-[28px] border border-cyan-300/20 bg-cyan-300/[0.07] p-5"><Users className="h-5 w-5 text-cyan-300" /><h3 className="mt-3 font-black">What this unlocks</h3><ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300"><li>Exact pick-owner windows</li><li>Keeper-adjusted availability</li><li>Real names on the clock</li><li>Your exact roster and turn timing</li></ul></section>
               <section className="rounded-[28px] border border-violet-300/20 bg-[#0a1727]/92 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200">Refresh control</p><h3 className="mt-2 font-black">Review before freeze</h3><p className="mt-2 text-xs leading-5 text-slate-400">Current board {currentRefresh.boardFingerprint} · captured {currentRefresh.capturedAt}</p>{acceptedRefresh ? <><p className={cn("mt-2 text-xs font-bold", refreshDiff.changed ? "text-amber-200" : "text-emerald-200")}>{refreshDiff.changed ? `${refreshDiff.added.length} added · ${refreshDiff.removed.length} removed · ${refreshDiff.movers.length} meaningful movers` : "Matches the last accepted board."}</p>{refreshDiff.movers.slice(0, 5).map((mover) => <p key={mover.playerId} className="mt-1 text-xs text-slate-400">{mover.fullName}: #{mover.previousRank} → #{mover.boardRank}</p>)}</> : <p className="mt-2 text-xs text-amber-200">No previously accepted refresh exists on this device. The first freeze establishes the rollback reference.</p>}</section>
               <details className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-5"><summary className="flex cursor-pointer list-none items-center justify-between text-sm font-black"><span className="flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Current data status</span><ChevronDown className="h-4 w-4" /></summary><p className="mt-3 text-xs leading-5 text-slate-400">{sourceMessage}</p><p className="mt-2 text-xs leading-5 text-slate-500">{boardSummary}</p></details>
@@ -1398,7 +1571,7 @@ export function DraftCommandCenter({
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#071321]/95 p-2 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">{([["predraft", "Board", Target], ["draft", "Draft", Clock3], ["rehearsal", "Practice", Zap], ["setup", "Setup", Settings2]] as const).map(([id, label, Icon]) => <button key={id} onClick={() => setWorkspace(id)} className={cn("flex flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-black", workspace === id ? "bg-cyan-400 text-slate-950" : "text-slate-500")}><Icon className="h-4 w-4" />{label}</button>)}</div>
+        <div className="mx-auto grid max-w-lg grid-cols-3 gap-1">{([["draft", "War Room", Clock3], ["rehearsal", "Practice", Zap], ["setup", "Setup", Settings2]] as const).map(([id, label, Icon]) => <button key={id} onClick={() => setWorkspace(id)} className={cn("flex flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-black", workspace === id ? "bg-cyan-400 text-slate-950" : "text-slate-500")}><Icon className="h-4 w-4" />{label}</button>)}</div>
       </div>
     </main>
   );

@@ -43,3 +43,17 @@ next-env.d.ts
 # One-time fantasy research cache; only normalized evidence snapshots are committed.
 tmp/fantasy-context/
 tmp/pdfs/
+
+# Transient fantasy certification worker state. Current merged/sharded v5
+# evidence is committed separately; discovery reports remain local history.
+/lib/fantasy/data/certificationBackground.generated.log
+/lib/fantasy/data/certificationBackground.pid.json
+/lib/fantasy/data/certificationBackground.status.generated.json
+/lib/fantasy/data/systematicDraftAudit.ablation-*.generated.json
+/lib/fantasy/data/systematicDraftAudit.close-*.generated.json
+/lib/fantasy/data/systematicDraftAudit.dispute-*.generated.json
+/lib/fantasy/data/systematicDraftAudit.escalation-*.generated.json
+/lib/fantasy/data/systematicDraftAudit.postfix-*.generated.json
+/lib/fantasy/data/systematicDraftAudit.regression-middle-*.generated.json
+/lib/fantasy/data/systematicDraftAudit.regression-prod-*.generated.json
+/lib/fantasy/data/systematicDraftAudit.regression-v[234]-*.generated.json

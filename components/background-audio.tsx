@@ -13,6 +13,7 @@ export function BackgroundAudio() {
     return window.localStorage.getItem("moodinMusicMuted") !== "false";
   });
   const onGamePage = pathname === "/bachelor-party-blitz";
+  const onFantasyPage = pathname.startsWith("/fantasy-football");
   const onIntroScreen = pathname === "/";
 
   useEffect(() => {
@@ -21,7 +22,7 @@ export function BackgroundAudio() {
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || onGamePage) return;
+    if (!audio || onGamePage || onFantasyPage) return;
 
     audio.muted = muted;
     audio.volume = 0.45;
@@ -31,9 +32,9 @@ export function BackgroundAudio() {
     void audio.play().catch(() => {
       // Playback can still be blocked until the user interacts again.
     });
-  }, [muted, onGamePage]);
+  }, [muted, onFantasyPage, onGamePage]);
 
-  if (onGamePage) return null;
+  if (onGamePage || onFantasyPage) return null;
 
   return (
     <>

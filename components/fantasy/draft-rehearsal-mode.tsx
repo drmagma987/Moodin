@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, Bot, CheckCircle2, Clock3, Play, RefreshCw, Search, ShieldAlert, SkipForward } from "lucide-react";
+import { Activity, AlertTriangle, Bot, CheckCircle2, Clock3, Pencil, Play, RefreshCw, Search, ShieldAlert, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { buildPositionRunSnapshots, buildRedraftBoard, buildWrapSimulationSnapshot, rankDraftCandidates } from "@/lib/fantasy/draft";
+import { buildPositionMarketSnapshots, buildPositionRunSnapshots, buildRedraftBoard, buildWrapSimulationSnapshot, rankDraftCandidates, type RedraftBoardEntry } from "@/lib/fantasy/draft";
 import { buildDraftTurnContext, getSnakePickInfo } from "@/lib/fantasy/draftState";
-import { buildDraftBoardSignal, buildDraftQuickScoreBoard, buildLiveDraftCall } from "@/lib/fantasy/draftSignals";
 import {
   appendDraftSessionPick,
   replayDraftSession,
@@ -26,7 +25,6 @@ import {
   type DraftRehearsalMetrics,
   type DraftRehearsalScenarioId,
 } from "@/lib/fantasy/draftRehearsal";
-import { explainWarRoomRecommendation, warRoomDraftCall, type WarRoomDraftCall } from "@/lib/fantasy/warRoomPresentation";
 import type { DraftCandidate, DraftState, PlayerPosition } from "@/lib/fantasy/types";
 import { cn } from "@/lib/utils";
 
@@ -48,18 +46,14 @@ type StoredRehearsal = {
 };
 
 const REHEARSAL_KEY = "fantasy-draft-rehearsal-v1";
+const REHEARSAL_TIER_KEY = "fantasy-draft-rehearsal-tier-overrides-v1";
 const DEFAULT_SEED = "vaughn-slot-9-rehearsal";
 const BOARD_POSITIONS: Array<"ALL" | PlayerPosition> = ["ALL", "QB", "RB", "WR", "TE", "K", "DST"];
+const MARKET_POSITIONS: PlayerPosition[] = ["QB", "RB", "WR", "TE"];
+
+type TierOverrides = Record<string, number>;
 
 type RehearsalBoardSort = "recommended" | "adp" | "model";
-
-const warRoomCallClasses: Record<WarRoomDraftCall, string> = {
-  "Smash Now": "border-emerald-300/50 bg-emerald-300/18 text-emerald-50",
-  "Good Value": "border-cyan-300/35 bg-cyan-300/12 text-cyan-100",
-  "Fair Value": "border-white/10 bg-white/[0.05] text-slate-300",
-  "Too Early": "border-amber-300/35 bg-amber-300/12 text-amber-100",
-  Pass: "border-rose-300/35 bg-rose-300/12 text-rose-100",
-};
 
 function VjEarmark({ compact = false }: { compact?: boolean }) {
   return <span aria-label="Vaughn personal target" title="Vaughn personal target" className={cn("pointer-events-none absolute bottom-0 right-0 flex items-end justify-end bg-amber-300 font-black text-slate-950 [clip-path:polygon(100%_0,100%_100%,0_100%)]", compact ? "h-9 w-9 p-1 text-[9px]" : "h-14 w-14 p-1.5 text-xs")}>VJ</span>;
@@ -75,6 +69,89 @@ function measureNow() {
 
 function buildRehearsalWrap(state: DraftState, wrapPool: DraftCandidate[]) {
   return buildWrapSimulationSnapshot(state, wrapPool);
+}
+
+function buildOurTierMap(candidates: DraftCandidate[], board: RedraftBoardEntry[]) {
+  const candidateById = new Map(candidates.map((candidate) => [candidate.player.id, candidate] as const));
+  const result: TierOverrides = {};
+  const gapThreshold: Record<string, number> = { QB: 18, RB: 15, WR: 15, TE: 14 };
+  const maxTierSize: Record<string, number> = { QB: 4, RB: 5, WR: 5, TE: 4 };
+
+  for (const position of MARKET_POSITIONS) {
+    const entries = board
+      .filter((entry) => {
+        const candidate = candidateById.get(entry.playerId);
+        return candidate ? primaryPosition(candidate) === position : false;
+      })
+      .sort((a, b) => a.positionRank - b.positionRank);
+    let tier = 1;
+    let tierSize = 0;
+    let previous: DraftCandidate | null = null;
+    for (const entry of entries) {
+      const candidate = candidateById.get(entry.playerId);
+      if (!candidate) continue;
+      const projectionGap = previous
+        ? previous.projection.range.p50 - candidate.projection.range.p50
+        : 0;
+      if (previous && (projectionGap >= (gapThreshold[position] ?? 15) || tierSize >= (maxTierSize[position] ?? 5))) {
+        tier += 1;
+        tierSize = 0;
+      }
+      result[candidate.player.id] = tier;
+      tierSize += 1;
+      previous = candidate;
+    }
+  }
+  return result;
+}
+
+function marketRead(survival: number) {
+  if (survival <= 0.34) return { label: "Likely tier loss", className: "border-rose-300/35 bg-rose-300/[0.08] text-rose-100" };
+  if (survival <= 0.58) return { label: "Watch closely", className: "border-amber-300/35 bg-amber-300/[0.08] text-amber-100" };
+  return { label: "Safe to wait", className: "border-emerald-300/30 bg-emerald-300/[0.07] text-emerald-100" };
+}
+
+function starterRequirement(state: DraftState, position: PlayerPosition) {
+  return state.league.rosterSlots.filter((slot) => slot === position).length;
+}
+
+function teamShoppingList(team: DraftState["teams"][number]) {
+  const openCounts = team.openSlots.reduce<Record<string, number>>((counts, slot) => {
+    counts[slot] = (counts[slot] ?? 0) + 1;
+    return counts;
+  }, {});
+  const labels = MARKET_POSITIONS.flatMap((position) => {
+    const count = openCounts[position] ?? 0;
+    return count > 0 ? [`${position} starter${count > 1 ? ` ×${count}` : ""}`] : [];
+  });
+  const flexCount = openCounts["W/R/T"] ?? 0;
+  if (flexCount > 0) labels.push(`FLEX${flexCount > 1 ? ` ×${flexCount}` : ""}`);
+  return labels.length > 0 ? labels : ["Bench / value"];
+}
+
+function OpponentRosterCard({ team, state, beforeNextTurn }: {
+  team: DraftState["teams"][number];
+  state: DraftState;
+  beforeNextTurn: boolean;
+}) {
+  const shopping = teamShoppingList(team);
+  return (
+    <article className={cn("rounded-2xl border p-3", beforeNextTurn ? "border-amber-300/30 bg-amber-300/[0.07]" : "border-white/10 bg-black/20")}>
+      <div className="flex items-start justify-between gap-2">
+        <div><p className="font-black">{team.teamId}</p><p className="mt-0.5 text-[10px] text-slate-500">{team.starters.length + team.bench.length} players drafted</p></div>
+        <span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black uppercase", beforeNextTurn ? "border-amber-300/30 text-amber-100" : "border-white/10 text-slate-500")}>{beforeNextTurn ? "Before you" : "Later"}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-4 gap-1.5">
+        {MARKET_POSITIONS.map((position) => {
+          const count = team.positionCounts[position] ?? 0;
+          const required = starterRequirement(state, position);
+          const filled = count >= required;
+          return <div key={position} className={cn("rounded-lg border px-1.5 py-2 text-center", filled ? "border-emerald-300/15 bg-emerald-300/[0.04]" : "border-rose-300/20 bg-rose-300/[0.06]")}><span className="block text-[9px] font-black uppercase text-slate-500">{position}</span><span className={cn("mt-0.5 block text-sm font-black", filled ? "text-slate-200" : "text-rose-100")}>{count}<span className="text-[9px] text-slate-600">/{required}</span></span></div>;
+        })}
+      </div>
+      <div className="mt-3"><p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-600">Still shopping for</p><div className="mt-1.5 flex flex-wrap gap-1.5">{shopping.map((label) => <span key={label} className={cn("rounded-lg border px-2 py-1 text-[10px] font-bold", label === "Bench / value" ? "border-white/10 text-slate-400" : "border-violet-300/20 bg-violet-300/[0.06] text-violet-100")}>{label}</span>)}</div></div>
+    </article>
+  );
 }
 
 export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds = [] }: DraftRehearsalModeProps) {
@@ -105,6 +182,9 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
   const [paceMs, setPaceMs] = useState(900);
   const [simulationStarted, setSimulationStarted] = useState(false);
   const [managerSecondsLeft, setManagerSecondsLeft] = useState(60);
+  const [tierOverrides, setTierOverrides] = useState<TierOverrides>({});
+  const [tierEditorOpen, setTierEditorOpen] = useState(false);
+  const [tierEditorPosition, setTierEditorPosition] = useState<PlayerPosition>("QB");
 
   useEffect(() => {
     let cancelled = false;
@@ -146,6 +226,23 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
     window.localStorage.setItem(REHEARSAL_KEY, JSON.stringify(stored));
   }, [hydrated, inputMode, keeperLoad, metrics, scenario, seed, session, simulationStarted]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    let storedOverrides: TierOverrides | null = null;
+    try {
+      const stored = window.localStorage.getItem(REHEARSAL_TIER_KEY);
+      if (stored) storedOverrides = JSON.parse(stored) as TierOverrides;
+    } catch {
+      window.localStorage.removeItem(REHEARSAL_TIER_KEY);
+    }
+    if (storedOverrides) queueMicrotask(() => setTierOverrides(storedOverrides));
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(REHEARSAL_TIER_KEY, JSON.stringify(tierOverrides));
+  }, [hydrated, tierOverrides]);
+
   const pickInfo = getSnakePickInfo(draftState.currentPick, draftState.league.teams);
   const isMyTurn = pickInfo.teamId === draftState.myTeamId;
   const availableIds = useMemo(() => new Set(draftState.availablePlayerIds), [draftState.availablePlayerIds]);
@@ -160,16 +257,8 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
     () => rankDraftCandidates(draftState, candidates, rehearsalWrap, { baseBoard: rehearsalBoard }),
     [candidates, draftState, rehearsalBoard, rehearsalWrap],
   );
-  const recommendations = useMemo(() => rankedRecommendations.slice(0, 4), [rankedRecommendations]);
+  const recommendations = useMemo(() => rankedRecommendations.slice(0, 5), [rankedRecommendations]);
   const boardById = useMemo(() => new Map(rehearsalBoard.map((entry) => [entry.playerId, entry] as const)), [rehearsalBoard]);
-  const boardSignalById = useMemo(
-    () => new Map(candidates.flatMap((candidate) => {
-      const board = boardById.get(candidate.player.id);
-      return board ? [[candidate.player.id, buildDraftBoardSignal(candidate, board, favoriteIdSet.has(candidate.player.id))] as const] : [];
-    })),
-    [boardById, candidates, favoriteIdSet],
-  );
-  const quickScoreById = useMemo(() => buildDraftQuickScoreBoard(candidates, rehearsalBoard), [candidates, rehearsalBoard]);
   const runSnapshots = useMemo(
     () => buildPositionRunSnapshots(draftState, candidates, rehearsalWrap),
     [candidates, draftState, rehearsalWrap],
@@ -195,41 +284,75 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
     [myRosterTeam?.openSlots],
   );
   const turnContext = useMemo(() => buildDraftTurnContext(draftState), [draftState]);
+  const baselineTierById = useMemo(
+    () => buildOurTierMap(candidates, rehearsalBoard),
+    [candidates, rehearsalBoard],
+  );
+  const effectiveTierById = useMemo(
+    () => ({ ...baselineTierById, ...tierOverrides }),
+    [baselineTierById, tierOverrides],
+  );
+  const positionMarkets = useMemo(
+    () => buildPositionMarketSnapshots(draftState, candidates, rehearsalWrap),
+    [candidates, draftState, rehearsalWrap],
+  );
+  const positionMarketByPosition = useMemo(
+    () => new Map(positionMarkets.map((snapshot) => [snapshot.position, snapshot] as const)),
+    [positionMarkets],
+  );
+  const topRemainingTiers = useMemo(
+    () => MARKET_POSITIONS.map((position) => {
+      const available = candidates
+        .filter((candidate) => availableIds.has(candidate.player.id) && primaryPosition(candidate) === position)
+        .sort((a, b) => (boardById.get(a.player.id)?.positionRank ?? 999) - (boardById.get(b.player.id)?.positionRank ?? 999));
+      const tier = available.reduce((lowest, candidate) => Math.min(lowest, effectiveTierById[candidate.player.id] ?? 99), 99);
+      const players = available.filter((candidate) => (effectiveTierById[candidate.player.id] ?? 99) === tier);
+      const simulation = rehearsalWrap.positionSnapshots.find((snapshot) => snapshot.position === position);
+      const fallbackExpected = runSnapshotByPosition.get(position)?.expectedSelectionsBeforeNextTurn ?? 0;
+      const survivalProbability = simulation
+        ? simulation.distribution.filter((outcome) => outcome.count < players.length).reduce((sum, outcome) => sum + outcome.probability, 0)
+        : Math.min(0.97, Math.max(0.05, Math.exp(-fallbackExpected / Math.max(0.85, players.length * 0.9))));
+      return {
+        position,
+        tier,
+        players,
+        survivalProbability,
+      };
+    }),
+    [availableIds, boardById, candidates, effectiveTierById, rehearsalWrap.positionSnapshots, runSnapshotByPosition],
+  );
+  const recentPositionCounts = useMemo(
+    () => draftState.drafted
+      .filter((pick) => pick.eventType !== "keeper")
+      .slice(-8)
+      .reduce<Partial<Record<PlayerPosition, number>>>((counts, pick) => {
+        const candidate = candidateById.get(pick.playerId);
+        if (!candidate) return counts;
+        const position = primaryPosition(candidate);
+        counts[position] = (counts[position] ?? 0) + 1;
+        return counts;
+      }, {}),
+    [candidateById, draftState.drafted],
+  );
+  const teamsBeforeNextTurn = useMemo(
+    () => new Set(turnContext.interveningTeamIds),
+    [turnContext.interveningTeamIds],
+  );
+  const opponentTeamsBeforeNextTurn = useMemo(
+    () => draftState.teams.filter((team) => team.teamId !== draftState.myTeamId && teamsBeforeNextTurn.has(team.teamId)),
+    [draftState.myTeamId, draftState.teams, teamsBeforeNextTurn],
+  );
+  const remainingOpponentTeams = useMemo(
+    () => draftState.teams.filter((team) => team.teamId !== draftState.myTeamId && !teamsBeforeNextTurn.has(team.teamId)),
+    [draftState.myTeamId, draftState.teams, teamsBeforeNextTurn],
+  );
   const recommendationRankById = useMemo(
     () => new Map(rankedRecommendations.map((recommendation, index) => [recommendation.playerId, index + 1] as const)),
     [rankedRecommendations],
   );
-  const liveCallById = useMemo(
-    () => new Map(rankedRecommendations.flatMap((recommendation) => {
-      const candidate = candidateById.get(recommendation.playerId);
-      const signal = boardSignalById.get(recommendation.playerId);
-      const quickScore = quickScoreById.get(recommendation.playerId);
-      if (!candidate || !signal || !quickScore) return [];
-      const position = primaryPosition(candidate);
-      const positionCount = myRosterTeam?.positionCounts[position] ?? 0;
-      const rosterFit = position === "QB"
-        ? positionCount >= 1 ? "blocked" as const : "need" as const
-        : position === "TE"
-          ? positionCount >= 2 ? "blocked" as const : positionCount === 0 ? "need" as const : "open" as const
-        : positionCount < 2 ? "need" as const : "open" as const;
-      return [[candidate.player.id, buildLiveDraftCall({
-        candidate,
-        quickScore,
-        signal,
-        currentPick: draftState.currentPick,
-        isMyTurn,
-        makeItBackProbability: recommendation.explanation.makeItBackProbability,
-        tierSurvivalProbability: recommendation.explanation.tierSurvivalProbability,
-        rosterFit,
-      })] as const];
-    })),
-    [boardSignalById, candidateById, draftState.currentPick, isMyTurn, myRosterTeam?.positionCounts, quickScoreById, rankedRecommendations],
-  );
   const remainingBoard = useMemo(() => {
-    const topIds = new Set(recommendations.map((recommendation) => recommendation.playerId));
     const lowered = boardQuery.trim().toLowerCase();
     const rows = rankedRecommendations
-      .filter((recommendation) => !topIds.has(recommendation.playerId))
       .map((recommendation) => ({ recommendation, candidate: candidateById.get(recommendation.playerId) }))
       .filter((row): row is typeof row & { candidate: DraftCandidate } => Boolean(row.candidate))
       .filter(({ candidate }) => boardPosition === "ALL" || candidate.player.positions.includes(boardPosition))
@@ -240,7 +363,7 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
       if (boardSort === "model") return (boardById.get(a.candidate.player.id)?.boardRank ?? 999) - (boardById.get(b.candidate.player.id)?.boardRank ?? 999);
       return (recommendationRankById.get(a.candidate.player.id) ?? 999) - (recommendationRankById.get(b.candidate.player.id) ?? 999);
     });
-  }, [boardById, boardPosition, boardQuery, boardSort, boardVjOnly, candidateById, favoriteIdSet, rankedRecommendations, recommendationRankById, recommendations]);
+  }, [boardById, boardPosition, boardQuery, boardSort, boardVjOnly, candidateById, favoriteIdSet, rankedRecommendations, recommendationRankById]);
   const searchResults = useMemo(() => {
     const lowered = query.trim().toLowerCase();
     return candidates
@@ -255,24 +378,6 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
   const keeperCount = draftState.drafted.length - livePicks;
   const totalPicks = draftState.league.rosterSlots.filter((slot) => slot !== "IR").length * draftState.league.teams;
   const complete = draftState.currentPick > totalPicks;
-  const heroRecommendation = recommendations[0] ?? null;
-  const heroCandidate = heroRecommendation ? candidateById.get(heroRecommendation.playerId) ?? null : null;
-  const heroSignal = heroCandidate ? boardSignalById.get(heroCandidate.player.id) ?? null : null;
-  const heroLiveCall = heroCandidate ? liveCallById.get(heroCandidate.player.id) ?? null : null;
-  const heroComparison = heroRecommendation?.explanation.positionalComparisonPlayerId
-    ? candidateById.get(heroRecommendation.explanation.positionalComparisonPlayerId) ?? null
-    : null;
-  const heroPresentation = heroCandidate && heroRecommendation && heroSignal
-    ? explainWarRoomRecommendation({
-        candidate: heroCandidate,
-        recommendation: heroRecommendation,
-        signal: heroSignal,
-        runSnapshot: runSnapshotByPosition.get(primaryPosition(heroCandidate)),
-        positionalComparison: heroComparison,
-        turnContext,
-      })
-    : null;
-  const heroCall = heroSignal && heroLiveCall ? warRoomDraftCall(heroLiveCall.action, heroSignal) : null;
 
   function recordRecommendationLatency(state: DraftState) {
     const started = measureNow();
@@ -602,56 +707,120 @@ export function DraftRehearsalMode({ candidates, initialDraftState, favoriteIds 
             </div>
           </section>
 
+          {(inputMode !== "timed-simulation" || simulationStarted) ? (
+            <section className="rounded-[28px] border border-cyan-300/35 bg-[linear-gradient(135deg,rgba(34,211,238,0.09),rgba(10,23,39,0.96)_55%)] p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">On the clock</p><h3 className="mt-1 text-xl font-black">Five equal-weight options</h3><p className="mt-1 text-xs leading-5 text-slate-400">No forced #1. Compare the main why and the chance each player reaches your next pick.</p></div><span className={cn("rounded-xl border px-3 py-2 text-sm font-black", isMyTurn ? managerSecondsLeft <= 15 ? "border-rose-300/40 text-rose-100" : "border-amber-300/30 text-amber-100" : "border-white/10 bg-black/20 text-slate-300")}>{isMyTurn ? inputMode === "timed-simulation" ? `${managerSecondsLeft}s` : "Your pick" : `Next pick in ${draftState.picksUntilNextTurn}`}</span></div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                {recommendations.map((recommendation, index) => {
+                  const candidate = candidateById.get(recommendation.playerId);
+                  if (!candidate) return null;
+                  const recommendationRank = recommendationRankById.get(candidate.player.id) ?? index + 1;
+                  const chanceBack = Math.round(recommendation.explanation.makeItBackProbability * 100);
+                  return <article key={candidate.player.id} className="relative overflow-hidden rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-2 pr-5"><span className="text-[10px] font-black uppercase text-slate-500">#{index + 1}</span><span className="rounded-lg border border-cyan-300/20 px-2 py-1 text-[9px] font-black text-cyan-100">{chanceBack}% next pick</span></div><p className="mt-2 truncate font-black">{candidate.player.fullName}</p><p className="mt-1 text-[11px] text-slate-500">{primaryPosition(candidate)} · {candidate.player.team}</p><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-amber-200">Why</p><p className="mt-1 text-xs leading-5 text-slate-300">{recommendation.explanation.summary}</p>{isMyTurn ? <Button className="mt-2" size="sm" variant="outline" onClick={() => makeManagerPick(candidate, Math.max(0, recommendationRank - 1))}>Draft player</Button> : null}{favoriteIdSet.has(candidate.player.id) ? <VjEarmark compact /> : null}</article>;
+                })}
+              </div>
+              <div className={cn("mt-3 rounded-2xl border p-3", turnContext.mode === "long-gap" ? "border-rose-300/25 bg-rose-300/[0.07]" : turnContext.mode === "pair-building" ? "border-emerald-300/25 bg-emerald-300/[0.07]" : "border-white/10 bg-black/20")}><p className="text-xs font-black uppercase tracking-[0.14em]">{turnContext.label}</p><p className="mt-1 text-xs leading-5 text-slate-300">{turnContext.summary}</p></div>
+            </section>
+          ) : null}
+
+          <details className="rounded-[28px] border border-white/10 bg-[#0a1727]/70">
+            <summary className="cursor-pointer list-none p-4 text-xs font-black uppercase tracking-[0.18em] text-slate-400">Optional tier editor</summary>
+          <section className="rounded-[28px] border-t border-cyan-300/30 bg-[#0a1727]/92 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Top remaining tiers</p>
+                <h3 className="mt-1 text-xl font-black">Chance each tier makes it back</h3>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Every player still in our top available QB, RB, WR, and TE tier is shown. The percentage estimates whether at least one player from that tier survives to your next pick.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setTierEditorOpen((open) => !open)}>
+                <Pencil className="mr-2 h-4 w-4" /> {tierEditorOpen ? "Close tier editor" : "Edit my tiers"}
+              </Button>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {topRemainingTiers.map(({ position, tier, players, survivalProbability }) => {
+                const run = runSnapshotByPosition.get(position);
+                const market = positionMarketByPosition.get(position);
+                const read = marketRead(survivalProbability);
+                return (
+                  <article key={position} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div><p className="text-lg font-black">{position}</p><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Our top remaining tier · T{tier === 99 ? "—" : tier}</p></div>
+                      <span className={cn("rounded-xl border px-2.5 py-1.5 text-[10px] font-black", read.className)}>{read.label}</span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {players.map((candidate) => <span key={candidate.player.id} className="rounded-lg border border-white/10 bg-slate-950/70 px-2.5 py-1.5 text-xs font-bold">{candidate.player.fullName}</span>)}
+                      {players.length === 0 ? <span className="text-xs text-slate-500">No available players</span> : null}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-xl border border-white/[0.07] bg-black/20 p-2"><span className="block text-[9px] font-black uppercase text-slate-600">Before next turn</span><span className="font-black text-slate-200">{run?.expectedSelectionsBeforeNextTurn.toFixed(1) ?? "0.0"} expected</span></div>
+                      <div className="rounded-xl border border-white/[0.07] bg-black/20 p-2"><span className="block text-[9px] font-black uppercase text-slate-600">Tier makes it back</span><span className="font-black text-slate-200">{Math.round(survivalProbability * 100)}%</span></div>
+                      <div className="rounded-xl border border-white/[0.07] bg-black/20 p-2"><span className="block text-[9px] font-black uppercase text-slate-600">Teams with starter need</span><span className="font-black text-slate-200">{run?.teamsWithStarterNeed ?? 0}</span></div>
+                      <div className="rounded-xl border border-white/[0.07] bg-black/20 p-2"><span className="block text-[9px] font-black uppercase text-slate-600">Last 8 live picks</span><span className="font-black text-slate-200">{recentPositionCounts[position] ?? 0} {position}</span></div>
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-slate-400">{market?.tierDrop ? `The next modeled tier drops ${market.tierDrop.toFixed(1)} projected points. ` : ""}{run?.summary}</p>
+                  </article>
+                );
+              })}
+            </div>
+
+            {tierEditorOpen ? (
+              <div className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-300/[0.05] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div><p className="text-xs font-black uppercase tracking-[0.16em] text-amber-200">Manual tier overrides</p><p className="mt-1 text-xs text-slate-400">Changes stay in this browser and survive rehearsal resets.</p></div>
+                  <div className="flex gap-1 rounded-xl border border-white/10 bg-black/20 p-1">{MARKET_POSITIONS.map((position) => <button key={position} onClick={() => setTierEditorPosition(position)} className={cn("rounded-lg px-3 py-2 text-xs font-black", tierEditorPosition === position ? "bg-white text-slate-950" : "text-slate-400")}>{position}</button>)}</div>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {candidates
+                    .filter((candidate) => primaryPosition(candidate) === tierEditorPosition)
+                    .sort((a, b) => (boardById.get(a.player.id)?.positionRank ?? 999) - (boardById.get(b.player.id)?.positionRank ?? 999))
+                    .slice(0, 24)
+                    .map((candidate) => <label key={candidate.player.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-black/20 px-3 py-2"><span className="min-w-0"><span className="block truncate text-sm font-black">{candidate.player.fullName}</span><span className="text-[10px] text-slate-500">Our {tierEditorPosition}{boardById.get(candidate.player.id)?.positionRank ?? "—"} · ADP {candidate.market.adp}</span></span><Select className="w-20" value={String(effectiveTierById[candidate.player.id] ?? 1)} onChange={(event) => setTierOverrides((current) => ({ ...current, [candidate.player.id]: Number(event.target.value) }))}>{Array.from({ length: 12 }, (_, index) => index + 1).map((tier) => <option key={tier} value={tier}>T{tier}</option>)}</Select></label>)}
+                </div>
+                <Button className="mt-3" size="sm" variant="outline" onClick={() => setTierOverrides((current) => Object.fromEntries(Object.entries(current).filter(([playerId]) => {
+                  const candidate = candidateById.get(playerId);
+                  return !candidate || primaryPosition(candidate) !== tierEditorPosition;
+                })))}><RefreshCw className="mr-2 h-4 w-4" /> Reset {tierEditorPosition} tiers</Button>
+              </div>
+            ) : null}
+          </section>
+          </details>
+
+          <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4 sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200">Opponent roster construction</p><h3 className="mt-1 text-xl font-black">Where the room still has holes</h3><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">Each position shows drafted players versus required starters. The shopping list separates true starter holes from remaining flex or bench appetite.</p></div><span className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-black text-slate-300">All {draftState.teams.length - 1} opponents</span></div>
+
+            <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/[0.04] p-3">
+              <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.14em] text-amber-100">Pick before your next turn</p><p className="mt-1 text-xs text-slate-400">These teams drive the immediate make-it-back percentages above.</p></div><span className="rounded-lg bg-amber-300/10 px-2 py-1 text-xs font-black text-amber-100">{opponentTeamsBeforeNextTurn.length}</span></div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{opponentTeamsBeforeNextTurn.map((team) => <OpponentRosterCard key={team.teamId} team={team} state={draftState} beforeNextTurn />)}{opponentTeamsBeforeNextTurn.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-500">No opponent picks before your next selection.</p> : null}</div>
+            </div>
+
+            <div className="mt-4"><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Rest of the room · full visibility</p><div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{remainingOpponentTeams.map((team) => <OpponentRosterCard key={team.teamId} team={team} state={draftState} beforeNextTurn={false} />)}</div></div>
+          </section>
+
           {inputMode === "timed-simulation" ? <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Vaughn&apos;s current team</p><h3 className="mt-1 text-xl font-black">Roster and empty starting positions</h3></div><span className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-black text-slate-300">{myRosterTeam?.starters.length ?? 0} starters · {myRosterTeam?.bench.length ?? 0} bench</span></div><div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]"><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Drafted roster</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{myRosterPlayers.map((candidate) => <div key={candidate.player.id} className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-black/20 px-3 py-2"><span className="min-w-0"><span className="block truncate text-sm font-black">{candidate.player.fullName}</span><span className="text-[10px] text-slate-500">{primaryPosition(candidate)} · {myStarterIds.has(candidate.player.id) ? "starter" : "bench"}</span></span>{myKeeperIds.has(candidate.player.id) ? <span className="ml-2 rounded-lg border border-amber-300/25 bg-amber-300/[0.08] px-2 py-1 text-[9px] font-black text-amber-100">Keeper</span> : null}</div>)}{myRosterPlayers.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-3 text-sm text-slate-500">No players drafted yet.</p> : null}</div></div><div><p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Open starter slots</p><div className="mt-2 flex flex-wrap gap-2">{Object.entries(openSlotCounts).map(([slot, count]) => <span key={slot} className="rounded-xl border border-rose-300/20 bg-rose-300/[0.06] px-3 py-2 text-xs font-black text-rose-100">{slot === "W/R/T" ? "FLEX" : slot} × {count}</span>)}{Object.keys(openSlotCounts).length === 0 ? <span className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.06] px-3 py-2 text-xs font-black text-emerald-100">Starting lineup filled</span> : null}</div></div></div></section> : null}
 
-          {isMyTurn && (inputMode !== "timed-simulation" || simulationStarted) && heroCandidate && heroRecommendation && heroSignal && heroPresentation && heroCall ? (
-            <>
-              <section className="rounded-[28px] border border-cyan-300/30 bg-[#0a1727]/92 p-4 sm:p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Draft assistant · top pick</p><h3 className="mt-1 text-xl font-black">Your best decision right now</h3></div><span className={cn("rounded-xl border px-3 py-2 text-lg font-black", managerSecondsLeft <= 15 ? "border-rose-300/40 text-rose-100" : "border-amber-300/30 text-amber-100")}>{inputMode === "timed-simulation" ? `${managerSecondsLeft}s` : "Your pick"}</span></div>
-                <div className="relative mt-4 overflow-hidden rounded-[24px] border border-cyan-300/40 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(8,20,35,0.96)_62%)] p-5 sm:p-6">
-                  {favoriteIdSet.has(heroCandidate.player.id) ? <VjEarmark /> : null}
-                  <div className="flex flex-wrap items-start justify-between gap-3 pr-8"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">#1 recommendation</p><h4 className="mt-2 text-2xl font-black sm:text-3xl">{heroCandidate.player.fullName}</h4><p className="mt-1 text-sm text-slate-400">{primaryPosition(heroCandidate)} · {heroCandidate.player.team} · {heroPresentation.price}</p></div><span className={cn("rounded-xl border px-3 py-2 text-xs font-black", warRoomCallClasses[heroCall])}>{heroCall}</span></div>
-                  <p className="mt-4 text-lg font-black text-white">{heroPresentation.chanceBack}</p>
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-200">Why he is #1 · {heroPresentation.driver}</p><p className="mt-2 text-sm leading-6 text-slate-200">{heroPresentation.whyNow}</p>{heroPresentation.comparison ? <p className="mt-2 text-xs leading-5 text-slate-400">{heroPresentation.comparison}</p> : null}</div>
-                  <div className={cn("mt-4 rounded-2xl border p-3", turnContext.mode === "long-gap" ? "border-rose-300/25 bg-rose-300/[0.07]" : turnContext.mode === "pair-building" ? "border-emerald-300/25 bg-emerald-300/[0.07]" : "border-white/10 bg-black/20")}><p className="text-xs font-black uppercase tracking-[0.14em]">{turnContext.label}</p><p className="mt-1 text-xs leading-5 text-slate-300">{turnContext.summary}</p></div>
-                  <Button className="mt-4" onClick={() => makeManagerPick(heroCandidate, 0)}>Draft {heroCandidate.player.fullName}</Button>
-                </div>
-
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  {recommendations.slice(1, 4).map((recommendation, index) => {
-                    const candidate = candidateById.get(recommendation.playerId);
-                    const signal = candidate ? boardSignalById.get(candidate.player.id) : null;
-                    const liveCall = candidate ? liveCallById.get(candidate.player.id) : null;
-                    if (!candidate || !signal || !liveCall) return null;
-                    const comparison = recommendation.explanation.positionalComparisonPlayerId ? candidateById.get(recommendation.explanation.positionalComparisonPlayerId) : null;
-                    const presentation = explainWarRoomRecommendation({ candidate, recommendation, signal, runSnapshot: runSnapshotByPosition.get(primaryPosition(candidate)), positionalComparison: comparison, turnContext });
-                    const call = warRoomDraftCall(liveCall.action, signal);
-                    return <div key={candidate.player.id} className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4"><div className="flex items-start justify-between gap-2 pr-5"><span className="text-[10px] font-black uppercase text-slate-500">#{index + 2} alternative</span><span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black", warRoomCallClasses[call])}>{call}</span></div><p className="mt-3 font-black">{candidate.player.fullName}</p><p className="mt-1 text-xs text-slate-500">{primaryPosition(candidate)} · ADP {candidate.market.adp}</p><p className="mt-3 text-xs font-bold text-white">{presentation.chanceBack}</p><p className="mt-2 text-xs leading-5 text-slate-400"><span className="font-bold text-slate-200">{presentation.driver}:</span> {presentation.whyNow}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => makeManagerPick(candidate, index + 1)}>Draft player</Button>{favoriteIdSet.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
-                  })}
-                </div>
-              </section>
-
+          {(inputMode !== "timed-simulation" || simulationStarted) ? (
               <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4 sm:p-5">
                 <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">All remaining players</p><h3 className="mt-1 text-xl font-black">Full live board</h3></div><span className="rounded-xl border border-amber-300/25 bg-amber-300/[0.08] px-3 py-2 text-xs font-black text-amber-100">{managerSecondsLeft}s remaining</span></div>
-                <div className="mt-4 flex flex-wrap gap-2">{([['recommended', 'Recommended now'], ['adp', 'ADP'], ['model', 'Model board']] as const).map(([id, label]) => <button key={id} onClick={() => { setBoardSort(id); setBoardShowCount(40); }} className={cn("rounded-full border px-3 py-2 text-xs font-black", boardSort === id ? "border-cyan-300 bg-cyan-300/12 text-cyan-100" : "border-white/10 text-slate-400")}>{label}</button>)}<button onClick={() => { setBoardVjOnly((current) => !current); setBoardShowCount(40); }} className={cn("rounded-full border px-3 py-2 text-xs font-black", boardVjOnly ? "border-amber-300 bg-amber-300/12 text-amber-100" : "border-white/10 text-slate-400")}>VJ targets</button></div>
+                <div className="mt-4 flex flex-wrap gap-2">{([['recommended', 'Situation fit'], ['adp', 'ADP'], ['model', 'Our board']] as const).map(([id, label]) => <button key={id} onClick={() => { setBoardSort(id); setBoardShowCount(40); }} className={cn("rounded-full border px-3 py-2 text-xs font-black", boardSort === id ? "border-cyan-300 bg-cyan-300/12 text-cyan-100" : "border-white/10 text-slate-400")}>{label}</button>)}<button onClick={() => { setBoardVjOnly((current) => !current); setBoardShowCount(40); }} className={cn("rounded-full border px-3 py-2 text-xs font-black", boardVjOnly ? "border-amber-300 bg-amber-300/12 text-amber-100" : "border-white/10 text-slate-400")}>VJ targets</button></div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"><label className="relative"><Search className="absolute left-3 top-3.5 h-4 w-4 text-slate-500" /><Input value={boardQuery} onChange={(event) => { setBoardQuery(event.target.value); setBoardShowCount(40); }} placeholder="Search remaining players…" className="pl-10" /></label><div className="flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/60 p-1">{BOARD_POSITIONS.map((item) => <button key={item} onClick={() => { setBoardPosition(item); setBoardShowCount(40); }} className={cn("min-w-10 rounded-xl px-2 py-2 text-xs font-black", boardPosition === item ? "bg-white text-slate-950" : "text-slate-400")}>{item}</button>)}</div></div>
-                {boardSort === "adp" ? <p className="mt-3 text-xs text-slate-500">Market order is active. The recommendation number remains visible as a gut check.</p> : null}
+                {boardSort === "adp" ? <p className="mt-3 text-xs text-slate-500">Market order is active. Situation-fit order remains visible as a secondary lens.</p> : null}
                 <div className="mt-4 divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/10">
                   {remainingBoard.slice(0, boardShowCount).map(({ candidate, recommendation }) => {
-                    const signal = boardSignalById.get(candidate.player.id);
-                    const liveCall = liveCallById.get(candidate.player.id);
-                    if (!signal || !liveCall) return null;
-                    const comparison = recommendation.explanation.positionalComparisonPlayerId ? candidateById.get(recommendation.explanation.positionalComparisonPlayerId) : null;
-                    const presentation = explainWarRoomRecommendation({ candidate, recommendation, signal, runSnapshot: runSnapshotByPosition.get(primaryPosition(candidate)), positionalComparison: comparison, turnContext });
-                    const call = warRoomDraftCall(liveCall.action, signal);
                     const recommendationRank = recommendationRankById.get(candidate.player.id) ?? 999;
-                    return <div key={candidate.player.id} className="relative grid gap-3 bg-[#091524] p-3 pr-10 sm:grid-cols-[52px_minmax(180px,1fr)_110px_minmax(180px,1.2fr)_auto] sm:items-center"><span className="text-slate-400"><span className="block text-[9px] font-black uppercase text-slate-600">Now</span><span className="text-lg font-black">#{recommendationRank}</span></span><span className="min-w-0"><span className="block truncate font-black">{candidate.player.fullName}</span><span className="text-xs text-slate-500">{primaryPosition(candidate)} · {candidate.player.team} · ADP {candidate.market.adp}</span></span><span className={cn("w-fit rounded-lg border px-2 py-1 text-[10px] font-black", warRoomCallClasses[call])}>{call}</span><span className="text-xs leading-5 text-slate-400"><span className="font-bold text-slate-200">{presentation.driver}:</span> {presentation.whyNow}</span><Button size="sm" variant="outline" onClick={() => makeManagerPick(candidate, recommendationRank - 1)}>Draft</Button>{favoriteIdSet.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
+                    const position = primaryPosition(candidate);
+                    const duplicate = (position === "QB" || position === "TE") && (myRosterTeam?.positionCounts[position] ?? 0) >= 1;
+                    const marketFall = draftState.currentPick - candidate.market.adp;
+                    const exceptional = marketFall >= 8 && recommendation.explanation.boardEdge >= 6;
+                    const chanceBack = Math.round(recommendation.explanation.makeItBackProbability * 100);
+                    const factualLabel = exceptional ? "Exceptional value" : duplicate ? "Roster duplicate" : chanceBack >= 70 ? "Can wait" : chanceBack <= 35 ? "Unlikely back" : "Watch window";
+                    const factualClass = exceptional ? "border-emerald-300/35 bg-emerald-300/[0.08] text-emerald-100" : duplicate ? "border-violet-300/30 bg-violet-300/[0.07] text-violet-100" : chanceBack >= 70 ? "border-cyan-300/25 bg-cyan-300/[0.06] text-cyan-100" : chanceBack <= 35 ? "border-rose-300/30 bg-rose-300/[0.07] text-rose-100" : "border-amber-300/25 bg-amber-300/[0.06] text-amber-100";
+                    return <div key={candidate.player.id} className="relative grid gap-3 bg-[#091524] p-3 pr-10 sm:grid-cols-[52px_minmax(180px,1fr)_120px_minmax(180px,1.2fr)_auto] sm:items-center"><span className="text-slate-400"><span className="block text-[9px] font-black uppercase text-slate-600">Consider</span><span className="text-lg font-black">#{recommendationRank}</span></span><span className="min-w-0"><span className="block truncate font-black">{candidate.player.fullName}</span><span className="text-xs text-slate-500">{position} · {candidate.player.team} · ADP {candidate.market.adp} · Our T{effectiveTierById[candidate.player.id] ?? "—"}</span></span><span className={cn("w-fit rounded-lg border px-2 py-1 text-[10px] font-black", factualClass)}>{factualLabel}</span><span className="text-xs leading-5 text-slate-400">Our board #{recommendation.explanation.ourBoardRank} vs market #{recommendation.explanation.marketRank}. <span className="font-bold text-slate-200">{chanceBack}% chance back</span>; {Math.round(recommendation.explanation.tierSurvivalProbability * 100)}% tier survival.</span><Button size="sm" variant="outline" disabled={!isMyTurn} onClick={() => makeManagerPick(candidate, recommendationRank - 1)}>{isMyTurn ? "Draft" : "Waiting"}</Button>{favoriteIdSet.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
                   })}
                   {remainingBoard.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">No remaining players match these filters.</p> : null}
                 </div>
                 {remainingBoard.length > boardShowCount ? <Button variant="outline" className="mt-3 w-full" onClick={() => setBoardShowCount((count) => count + 40)}>Show more players</Button> : null}
               </section>
-            </>
           ) : null}
 
           {inputMode === "timed-simulation" && !simulationStarted ? <section className="rounded-[28px] border border-dashed border-cyan-300/25 bg-[#0a1727]/70 p-8 text-center"><Clock3 className="mx-auto h-8 w-8 text-cyan-300" /><h3 className="mt-3 text-xl font-black">Choose the room, then start the clock.</h3><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-400">The board will reset with your two canonical keepers and the selected opponent keeper load. No simulated picks occur until you press Start simulation.</p></section> : null}

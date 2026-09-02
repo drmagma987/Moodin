@@ -233,9 +233,17 @@ function priceConfidence(candidate: DraftCandidate, blockers: string[]) {
   else if (adpEcrGap > 25) score -= 8;
   drivers.push(`ADP and ECR differ by ${adpEcrGap.toFixed(1)} slots.`);
 
-  if (typeof candidate.market.yahooRank === "number") {
+  if (typeof (candidate.market.yahooXRank ?? candidate.market.yahooRank) === "number") {
     score += 10;
-    drivers.push("Yahoo rank independently contributes to the expected draft price.");
+    drivers.push("Yahoo XRank independently informs expected room visibility.");
+  }
+
+  if (typeof candidate.market.rankSpread === "number") {
+    const spread = candidate.market.rankSpread;
+    const penalty = spread >= 80 ? 22 : spread >= 50 ? 14 : spread >= 30 ? 7 : 0;
+    score -= penalty;
+    drivers.push(`Captured expert Rank Spread is ${spread.toFixed(0)}.`);
+    if (penalty >= 14) blockers.push("Expert disagreement is wide; availability should be expressed as a range.");
   }
 
   return dimension(

@@ -19,6 +19,7 @@
     "fantasy:certification:resume": "node ./scripts/run_fantasy_certification_background.mjs resume",
     "fantasy:certification:stop": "node ./scripts/run_fantasy_certification_background.mjs stop",
     "fantasy:certify-policy": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/run_fantasy_policy_certification.mjs",
+    "fantasy:draft-day-preflight": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/run_fantasy_draft_day_preflight.mjs",
     "fantasy:draft-day-readiness": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/run_fantasy_draft_day_readiness.mjs",
     "fantasy:historical-backtest": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/build_fantasy_historical_backtest.mjs",
     "fantasy:rookie-wr-validation": "python3 scripts/build_rookie_wr_validation.py"

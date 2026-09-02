@@ -3,7 +3,6 @@ import type { DraftCandidate, DraftState, LeagueConfig } from "@/lib/fantasy/typ
 import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
 
 export type LeagueSetupInput = {
-  teamNames: string;
   myTeamName: string;
   myDraftSlot: string;
   draftOrder: string;
@@ -45,9 +44,7 @@ export function resolveLeagueSetup(
 ): LeagueSetupResolution {
   const errors: string[] = [];
   const receipts: string[] = [];
-  const ordered = parseOrderedNames(input.draftOrder);
-  const listed = parseOrderedNames(input.teamNames);
-  const teamNames = ordered.length > 0 ? ordered : listed;
+  const teamNames = parseOrderedNames(input.draftOrder);
   if (teamNames.length !== league.teams) errors.push(`Expected ${league.teams} ordered teams; found ${teamNames.length}.`);
   if (new Set(teamNames.map(normalize)).size !== teamNames.length) errors.push("Team names must be unique.");
 

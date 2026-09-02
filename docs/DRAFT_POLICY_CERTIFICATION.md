@@ -33,6 +33,8 @@ Release requires zero illegal/incomplete rosters, duplicate players, keeper loss
 
 ## Draft-day readiness and freeze
 
+`npm run fantasy:draft-day-preflight` is a non-freezing operational check. It verifies current artifact/canonical identity, required-position coverage, certified v5 reports, the candidate-readiness receipt, a conservative latency budget, a non-persisted manual-entry/reload recovery probe, and the static Yahoo bridge contract. `FANTASY_REQUIRE_SAME_DAY=1` additionally fails when the player artifact was not captured on the current New York calendar day. A passing preflight still requires the human checks in `docs/FANTASY_DRAFT_DAY_RUNBOOK.md`.
+
 `npm run fantasy:draft-day-readiness` runs the shared recommendation engine through normal, RB-avalanche, QB/TE-run, target-wipe, and heavy-keeper operational rehearsals. It records real recommendation latency, live/rehearsal parity, top alternatives, artifact identity, keeper identity, board identity, and a deliberate stale-board rejection. The generated receipt is a candidate freeze by default. It cannot be called the final draft-day artifact until the manager has reviewed same-day injuries, keeper assignments, and draft order, then intentionally runs `FANTASY_FINAL_FREEZE=1 npm run fantasy:draft-day-readiness`.
 
 The automated command does not substitute for human clock practice. Before the real draft, complete a normal-room manual-entry rehearsal, a positional-run explanation rehearsal, an ambiguous-entry rejection, and a reload recovery. That human gate remains visible in the receipt instead of being silently claimed by automation.

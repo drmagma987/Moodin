@@ -481,6 +481,38 @@ Prefer adding dated bullets under `Current Progress Log` rather than rewriting t
 - Added a dedicated Firestore leaderboard helper/collection for `Make It Rain`, reusing the hardened anonymous-auth posting pattern without changing the existing bachelor-party leaderboard flow.
 - Copied the supplied target image into `public/make-it-rain/target.jpg` as the placeholder target art.
 
+### 2026-06-03
+
+- Added a fully isolated `BR Gym` local-first PWA under `/brgym` without changing the existing Moodin landing page.
+- Built route-scoped workout flow, history, templates, equipment profiles, and settings around localStorage only:
+  - start/resume workout flow
+  - auto-starting rest timer with Web Audio ding and mute toggle
+  - Push/Pull/Legs/Shoulders defaults plus editable custom templates
+  - Apartment Gym, Hotel Gym, and EH Gym setup profiles
+  - cross-setup recommendation translation with EH kg/lb display
+  - equipment-missing swap suggestions with visible user choice
+  - JSON export/import/reset actions
+- Added BR Gym PWA basics with route metadata, manifest, placeholder icon, and a lightweight service worker.
+- Refactored BR Gym to the preferred lightweight stack:
+  - Zustand now owns persisted BR Gym data plus active workout/timer/settings state
+  - Sonner powers save/import/export/reset feedback toasts
+  - local `components/ui` shadcn-style primitives were added for the BR Gym controls without pulling in heavier UI dependencies
+  - rest timer now uses native Web Audio, vibration, and optional wake lock from centralized timer state
+- Replaced the placeholder BR Gym icon with the supplied black-and-white BR Gym logo:
+  - copied the logo to `public/brgym/logo.jpg`
+  - wired BR Gym metadata, manifest, and service-worker cache to use that image as the PWA icon
+  - added a small header logo treatment inside the BR Gym route shell
+- Refined the BR Gym active workout logger for lower-scroll mobile use:
+  - workout logging now focuses on one selected lift at a time via a lift dropdown
+  - the selected lift shows all visible set rows on-screen together instead of one long multi-exercise scroll
+  - each set row keeps last-time reminders inline and supports updating an already logged set
+  - extra sets can be added explicitly and are saved as normal logged sets
+- Refined the BR Gym workout start flow:
+  - the default path is now a prominent quick-start card using the likely next workout and current gym setup
+  - injury toggles, template overrides, and gym changes now live in a separate customize section so they do not block a straightforward resume flow
+- Verified with `npm run lint`, `npm run build`, and `npx tsc --noEmit`.
+- `npm run build` needed unrestricted network access because the pre-existing `make-it-rain` route fetches Google Fonts during production build.
+
 Before final responses after code changes, usually run:
 
 ```bash
@@ -856,3 +888,45 @@ If checks cannot be run, say so clearly.
   - cached positional replacement baselines once per simulated pick, reducing total recommendation latency from roughly 1.7–2.1 seconds to 26–37 ms while leaving the 16 simulations and scoring logic unchanged
   - passed all three targeted 32-sample regressions, all 32 systematic states, 26 adversarial drafts across 13 room types, 364 manager decisions, and five automated draft-day rehearsals with zero suspicious states or live/rehearsal parity mismatches
   - retained the current 2026-08-26 player artifact as a candidate freeze only; same-day player news, depth charts, ADP, keepers, draft order, and human rehearsals remain required before `FANTASY_FINAL_FREEZE=1`
+  - added a non-freezing `fantasy:draft-day-preflight` command covering artifact identity/freshness, certified report provenance, required-position coverage, conservative latency budgets, canonical manual-entry/reload recovery, and the static Yahoo bridge contract
+  - added `docs/FANTASY_DRAFT_DAY_RUNBOOK.md` for draft-morning refresh, Yahoo connection checks, human clock rehearsal, final freeze, and live failure recovery
+  - ignored transient certification worker state and mixed-wrap discovery artifacts while retaining the committed merged/sharded v5 release evidence
+
+### 2026-08-31
+
+- Pivoted the Fantasy Football draft rehearsal from a recommendation-first assistant toward a market-state copilot:
+  - added an always-visible QB/RB/WR/TE market monitor with top remaining model tier, expected selections before the next turn, tier-survival probability, starter demand, and recent positional draft volume
+  - added full-room roster visibility with every team’s QB/RB/WR/TE status and explicit highlighting for teams selecting before Vaughn’s next turn
+  - generated position-specific model tiers and added browser-persisted manual tier overrides
+  - replaced the dominant top-pick recommendation with three distinct consideration cases: best roster fit, exceptional value, and best wait-or-take decision
+  - defined exceptional value as clearing both an ADP-fall gate and a model-board advantage gate; duplicate QB/TE players remain visible but are labeled as roster duplicates unless they clear the exceptional-value rule
+  - removed `Fair Value`, `Pass`, and `Too Early` language from the rehearsal board in favor of factual availability, tier, roster, and value signals
+  - kept every available player on the full searchable board instead of removing the top recommendation group
+- Refined the rehearsal hierarchy after the first market-copilot review:
+  - moved the three consideration cases above the tier and opponent views and keeps them visible between Vaughn picks, with draft actions only enabled on his turn
+  - retitled the tier monitor around the explicit chance that at least one player in each top remaining position tier makes it back
+  - replaced the dense full-room table with grouped opponent roster cards showing drafted counts versus required starters plus explicit starter, flex, or bench shopping needs
+  - separated teams picking before Vaughn from the rest of the room while retaining all nine opponents
+  - hides the unrelated Sleeper quick-intake form in rehearsal so the decision cockpit reaches the top of the working mobile content
+- Verified with canonical league integrity, `npm run lint`, and `npx tsc --noEmit` (lint retains the existing bachelor-party single-page font warning).
+
+### 2026-09-01
+
+- Unified the Fantasy Football pre-draft board and live assistant into one default War Room:
+  - added a browser-persisted personal player order with desktop drag-and-drop plus mobile-friendly one- and ten-slot move controls
+  - shows each player's preferred rank, standard model rank, Yahoo XRank, and the explicit Yahoo-minus-model rank difference without hiding players that lack Yahoo coverage
+  - added a quick player-name entry lane that derives and displays the destination team automatically from the current snake-draft pick and finalized official order
+  - retained the existing top-five recommendation engine as a separate model-driven view that recalculates after recorded selections
+  - reduced navigation to War Room, Practice, and Setup so users no longer switch between separate pre-draft and live-draft screens
+  - included the personal board order in local persistence and audited draft backups
+- Verified canonical league integrity, lint, TypeScript, diff whitespace, and a successful local `/fantasy-football` response.
+- Completed the Fantasy Football Supertool pre-test implementation:
+  - imported the workbook `Source Data` market reference into generated repository data with a reviewable identity/coverage receipt (200 workbook rows, 199 application matches, 186 Yahoo XRanks/ADPs, zero ambiguous or invalid matches)
+  - stores Yahoo XRank, Yahoo ADP, Aggregate Rank, individual expert ranks, Rank Spread, Source Count, and Yahoo-minus-aggregate separately; workbook target/personal fields remain excluded
+  - applied the approved 26-player September refresh as a persistent layer with 14 bounded median adjustments and 12 annotation-only notes, including double-counting guards for Josh Jacobs, MarShawn Lloyd, and Isiah Pacheco
+  - made Yahoo XRank the primary room-visibility input for wrap simulations and make-it-back estimates without changing projection, VOR, model score, or browser-persisted personal order; wide Rank Spread now lowers price confidence and exposes broader availability bands
+  - promoted the three decision lenses, complete top QB/RB/WR/TE tiers, recent run volume, and readable immediate-opponent/full-room roster cards into the live War Room
+  - expanded the complete remaining-player board to Recommended, Model, Yahoo XRank, Yahoo ADP, Aggregate, and Personal orders with search and position filters; expanded the personal board to all players with Aggregate Rank and disagreement context
+  - simplified setup so the official ordered team list is the sole team-name/ID source and retained automatic snake/keeper-aware pick ownership
+  - regenerated a same-day 473-player live artifact and added permanent Jalen Hurts/Trevor Lawrence plus two-TE duplicate-position regressions
+- Verified with 122/122 fantasy tests, canonical integrity, non-freezing draft-day preflight, TypeScript, lint (existing bachelor-party font warning only), production build, local visual smoke testing, and `git diff --check`.

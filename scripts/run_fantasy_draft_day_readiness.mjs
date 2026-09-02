@@ -16,6 +16,7 @@ import {
 import { buildDraftRefreshCheckpoint } from "../lib/fantasy/draftRefreshControl.ts";
 import { assertDraftRoomFreeze, freezeDraftRoom } from "../lib/fantasy/draftOperations.ts";
 import { leagueSourceOfTruthFingerprint } from "../lib/fantasy/leagueSourceOfTruth.ts";
+import { evaluateDraftDayLatency } from "../lib/fantasy/draftDayPreflight.ts";
 
 const OUTPUT = new URL("../lib/fantasy/data/draftDayReadiness.generated.json", import.meta.url);
 const candidates = snapshot.candidates;
@@ -86,7 +87,7 @@ function runOperationalRehearsal(scenario, index) {
   if (!selected) failures.push("no manager recommendation");
   if (liveTop?.playerId !== rehearsalTop?.playerId) failures.push("live/rehearsal mismatch");
   if (liveTop?.playerId !== modelBoardTop?.playerId) failures.push("hero/model-board mismatch");
-  if (recommendationLatencyMs > 1000) failures.push(`recommendation exceeded 1000ms (${recommendationLatencyMs.toFixed(1)}ms)`);
+  failures.push(...evaluateDraftDayLatency({ recommendationMs: recommendationLatencyMs, rankingMs: rankingLatencyMs }).failures);
   return {
     scenario: scenario.id,
     seed,

@@ -1,0 +1,3417 @@
+{
+  "generatedAt": "2026-09-02T02:07:23.265Z",
+  "sourceFile": "top_200_ppr_draft_board (3).xlsx",
+  "sourceSheet": "Source Data",
+  "workbookRows": 200,
+  "fields": {
+    "yahooXRank": "Yahoo displayed player order; availability input only, never model value.",
+    "yahooAdp": "Yahoo average draft position; retained separately from XRank.",
+    "aggregateRank": "Mean of captured expert ranks; comparison evidence only.",
+    "sourceRanks": "Captured individual expert-source ranks; comparison evidence only.",
+    "rankSpread": "Expert disagreement; widens uncertainty without directional movement.",
+    "sourceCount": "Number of expert ranks represented in Aggregate Rank.",
+    "yahooXRankMinusAggregate": "Yahoo XRank minus Aggregate Rank."
+  },
+  "records": [
+    {
+      "playerName": "Bijan Robinson",
+      "normalizedName": "bijan robinson",
+      "position": "RB",
+      "team": "ATL",
+      "aggregateRank": 1.6666666666666667,
+      "sourceRanks": {
+        "fieldYates": 1,
+        "mikeClay": 2,
+        "ryanWeisse": 2
+      },
+      "yahooXRank": 2,
+      "yahooAdp": 3,
+      "rankSpread": 1,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 0.33333333333333326
+    },
+    {
+      "playerName": "Ja'Marr Chase",
+      "normalizedName": "ja marr chase",
+      "position": "WR",
+      "team": "CIN",
+      "aggregateRank": 2.6666666666666665,
+      "sourceRanks": {
+        "fieldYates": 4,
+        "mikeClay": 3,
+        "ryanWeisse": 1
+      },
+      "yahooXRank": 3,
+      "yahooAdp": 2,
+      "rankSpread": 3,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 0.3333333333333335
+    },
+    {
+      "playerName": "Jahmyr Gibbs",
+      "normalizedName": "jahmyr gibbs",
+      "position": "RB",
+      "team": "DET",
+      "aggregateRank": 2.6666666666666665,
+      "sourceRanks": {
+        "fieldYates": 2,
+        "mikeClay": 1,
+        "ryanWeisse": 5
+      },
+      "yahooXRank": 1,
+      "yahooAdp": 1,
+      "rankSpread": 4,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -1.6666666666666665
+    },
+    {
+      "playerName": "Puka Nacua",
+      "normalizedName": "puka nacua",
+      "position": "WR",
+      "team": "LAR",
+      "aggregateRank": 4,
+      "sourceRanks": {
+        "fieldYates": 5,
+        "mikeClay": 4,
+        "ryanWeisse": 3
+      },
+      "yahooXRank": 4,
+      "yahooAdp": 4,
+      "rankSpread": 2,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 0
+    },
+    {
+      "playerName": "Christian McCaffrey",
+      "normalizedName": "christian mccaffrey",
+      "position": "RB",
+      "team": "SF",
+      "aggregateRank": 5.333333333333333,
+      "sourceRanks": {
+        "fieldYates": 3,
+        "mikeClay": 6,
+        "ryanWeisse": 7
+      },
+      "yahooXRank": 6,
+      "yahooAdp": 7,
+      "rankSpread": 4,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 0.666666666666667
+    },
+    {
+      "playerName": "Jaxon Smith-Njigba",
+      "normalizedName": "jaxon smith njigba",
+      "position": "WR",
+      "team": "SEA",
+      "aggregateRank": 5.666666666666667,
+      "sourceRanks": {
+        "fieldYates": 6,
+        "mikeClay": 5,
+        "ryanWeisse": 6
+      },
+      "yahooXRank": 8,
+      "yahooAdp": 5,
+      "rankSpread": 1,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2.333333333333333
+    },
+    {
+      "playerName": "Amon-Ra St. Brown",
+      "normalizedName": "amon ra st brown",
+      "position": "WR",
+      "team": "DET",
+      "aggregateRank": 7,
+      "sourceRanks": {
+        "fieldYates": 9,
+        "mikeClay": 8,
+        "ryanWeisse": 4
+      },
+      "yahooXRank": 7,
+      "yahooAdp": 6,
+      "rankSpread": 5,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 0
+    },
+    {
+      "playerName": "Jonathan Taylor",
+      "normalizedName": "jonathan taylor",
+      "position": "RB",
+      "team": "IND",
+      "aggregateRank": 8,
+      "sourceRanks": {
+        "fieldYates": 7,
+        "mikeClay": 7,
+        "ryanWeisse": 10
+      },
+      "yahooXRank": 5,
+      "yahooAdp": 8,
+      "rankSpread": 3,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -3
+    },
+    {
+      "playerName": "Justin Jefferson",
+      "normalizedName": "justin jefferson",
+      "position": "WR",
+      "team": "MIN",
+      "aggregateRank": 10,
+      "sourceRanks": {
+        "fieldYates": 12,
+        "mikeClay": 10,
+        "ryanWeisse": 8
+      },
+      "yahooXRank": 13,
+      "yahooAdp": 10,
+      "rankSpread": 4,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 3
+    },
+    {
+      "playerName": "CeeDee Lamb",
+      "normalizedName": "ceedee lamb",
+      "position": "WR",
+      "team": "DAL",
+      "aggregateRank": 10.333333333333334,
+      "sourceRanks": {
+        "fieldYates": 13,
+        "mikeClay": 9,
+        "ryanWeisse": 9
+      },
+      "yahooXRank": 11,
+      "yahooAdp": 9,
+      "rankSpread": 4,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 0.6666666666666661
+    },
+    {
+      "playerName": "De'Von Achane",
+      "normalizedName": "de von achane",
+      "position": "RB",
+      "team": "MIA",
+      "aggregateRank": 12,
+      "sourceRanks": {
+        "fieldYates": 8,
+        "mikeClay": 11,
+        "ryanWeisse": 17
+      },
+      "yahooXRank": 15,
+      "yahooAdp": 12,
+      "rankSpread": 9,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 3
+    },
+    {
+      "playerName": "Drake London",
+      "normalizedName": "drake london",
+      "position": "WR",
+      "team": "ATL",
+      "aggregateRank": 14,
+      "sourceRanks": {
+        "fieldYates": 17,
+        "mikeClay": 14,
+        "ryanWeisse": 11
+      },
+      "yahooXRank": 20,
+      "yahooAdp": 13,
+      "rankSpread": 6,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 6
+    },
+    {
+      "playerName": "James Cook III",
+      "normalizedName": "james cook",
+      "position": "RB",
+      "team": "BUF",
+      "aggregateRank": 14.333333333333334,
+      "sourceRanks": {
+        "fieldYates": 10,
+        "mikeClay": 12,
+        "ryanWeisse": 21
+      },
+      "yahooXRank": 9,
+      "yahooAdp": 11,
+      "rankSpread": 11,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -5.333333333333334
+    },
+    {
+      "playerName": "Chase Brown",
+      "normalizedName": "chase brown",
+      "position": "RB",
+      "team": "CIN",
+      "aggregateRank": 15.333333333333334,
+      "sourceRanks": {
+        "fieldYates": 14,
+        "mikeClay": 19,
+        "ryanWeisse": 13
+      },
+      "yahooXRank": 14,
+      "yahooAdp": 14,
+      "rankSpread": 6,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -1.333333333333334
+    },
+    {
+      "playerName": "Trey McBride",
+      "normalizedName": "trey mcbride",
+      "position": "TE",
+      "team": "ARI",
+      "aggregateRank": 18,
+      "sourceRanks": {
+        "fieldYates": 18,
+        "mikeClay": 20,
+        "ryanWeisse": 16
+      },
+      "yahooXRank": 31,
+      "yahooAdp": 17,
+      "rankSpread": 4,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 13
+    },
+    {
+      "playerName": "Derrick Henry",
+      "normalizedName": "derrick henry",
+      "position": "RB",
+      "team": "BAL",
+      "aggregateRank": 19.333333333333332,
+      "sourceRanks": {
+        "fieldYates": 11,
+        "mikeClay": 16,
+        "ryanWeisse": 31
+      },
+      "yahooXRank": 17,
+      "yahooAdp": 26,
+      "rankSpread": 20,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -2.333333333333332
+    },
+    {
+      "playerName": "Brock Bowers",
+      "normalizedName": "brock bowers",
+      "position": "TE",
+      "team": "LV",
+      "aggregateRank": 19.666666666666668,
+      "sourceRanks": {
+        "fieldYates": 16,
+        "mikeClay": 21,
+        "ryanWeisse": 22
+      },
+      "yahooXRank": 19,
+      "yahooAdp": 20,
+      "rankSpread": 6,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -0.6666666666666679
+    },
+    {
+      "playerName": "Saquon Barkley",
+      "normalizedName": "saquon barkley",
+      "position": "RB",
+      "team": "PHI",
+      "aggregateRank": 19.666666666666668,
+      "sourceRanks": {
+        "fieldYates": 21,
+        "mikeClay": 15,
+        "ryanWeisse": 23
+      },
+      "yahooXRank": 10,
+      "yahooAdp": 16,
+      "rankSpread": 8,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -9.666666666666668
+    },
+    {
+      "playerName": "Kenneth Walker III",
+      "normalizedName": "kenneth walker",
+      "position": "RB",
+      "team": "KC",
+      "aggregateRank": 22,
+      "sourceRanks": {
+        "fieldYates": 15,
+        "mikeClay": 18,
+        "ryanWeisse": 33
+      },
+      "yahooXRank": 12,
+      "yahooAdp": 23,
+      "rankSpread": 18,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -10
+    },
+    {
+      "playerName": "Chris Olave",
+      "normalizedName": "chris olave",
+      "position": "WR",
+      "team": "NO",
+      "aggregateRank": 22.666666666666668,
+      "sourceRanks": {
+        "fieldYates": 27,
+        "mikeClay": 27,
+        "ryanWeisse": 14
+      },
+      "yahooXRank": 25,
+      "yahooAdp": 24,
+      "rankSpread": 13,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2.333333333333332
+    },
+    {
+      "playerName": "Omarion Hampton",
+      "normalizedName": "omarion hampton",
+      "position": "RB",
+      "team": "LAC",
+      "aggregateRank": 22.666666666666668,
+      "sourceRanks": {
+        "fieldYates": 22,
+        "mikeClay": 22,
+        "ryanWeisse": 24
+      },
+      "yahooXRank": 16,
+      "yahooAdp": 19,
+      "rankSpread": 2,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -6.666666666666668
+    },
+    {
+      "playerName": "A.J. Brown",
+      "normalizedName": "a j brown",
+      "position": "WR",
+      "team": "NE",
+      "aggregateRank": 23.333333333333332,
+      "sourceRanks": {
+        "fieldYates": 26,
+        "mikeClay": 26,
+        "ryanWeisse": 18
+      },
+      "yahooXRank": 23,
+      "yahooAdp": 18,
+      "rankSpread": 8,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -0.33333333333333215
+    },
+    {
+      "playerName": "Garrett Wilson",
+      "normalizedName": "garrett wilson",
+      "position": "WR",
+      "team": "NYJ",
+      "aggregateRank": 25,
+      "sourceRanks": {
+        "fieldYates": 34,
+        "mikeClay": 29,
+        "ryanWeisse": 12
+      },
+      "yahooXRank": 38,
+      "yahooAdp": 32,
+      "rankSpread": 22,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 13
+    },
+    {
+      "playerName": "Jeremiyah Love",
+      "normalizedName": "jeremiyah love",
+      "position": "RB",
+      "team": "ARI",
+      "aggregateRank": 25.333333333333332,
+      "sourceRanks": {
+        "fieldYates": 20,
+        "mikeClay": 13,
+        "ryanWeisse": 43
+      },
+      "yahooXRank": 28,
+      "yahooAdp": 31,
+      "rankSpread": 30,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2.666666666666668
+    },
+    {
+      "playerName": "Ashton Jeanty",
+      "normalizedName": "ashton jeanty",
+      "position": "RB",
+      "team": "LV",
+      "aggregateRank": 26.333333333333332,
+      "sourceRanks": {
+        "fieldYates": 23,
+        "mikeClay": 17,
+        "ryanWeisse": 39
+      },
+      "yahooXRank": 21,
+      "yahooAdp": 15,
+      "rankSpread": 22,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -5.333333333333332
+    },
+    {
+      "playerName": "Nico Collins",
+      "normalizedName": "nico collins",
+      "position": "WR",
+      "team": "HOU",
+      "aggregateRank": 26.333333333333332,
+      "sourceRanks": {
+        "fieldYates": 39,
+        "mikeClay": 25,
+        "ryanWeisse": 15
+      },
+      "yahooXRank": 18,
+      "yahooAdp": 21,
+      "rankSpread": 24,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -8.333333333333332
+    },
+    {
+      "playerName": "Rashee Rice",
+      "normalizedName": "rashee rice",
+      "position": "WR",
+      "team": "KC",
+      "aggregateRank": 26.333333333333332,
+      "sourceRanks": {
+        "fieldYates": 19,
+        "mikeClay": 24,
+        "ryanWeisse": 36
+      },
+      "yahooXRank": 36,
+      "yahooAdp": 22,
+      "rankSpread": 17,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 9.666666666666668
+    },
+    {
+      "playerName": "Malik Nabers",
+      "normalizedName": "malik nabers",
+      "position": "WR",
+      "team": "NYG",
+      "aggregateRank": 27,
+      "sourceRanks": {
+        "fieldYates": 25,
+        "mikeClay": 28,
+        "ryanWeisse": 28
+      },
+      "yahooXRank": 24,
+      "yahooAdp": 27,
+      "rankSpread": 3,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -3
+    },
+    {
+      "playerName": "George Pickens",
+      "normalizedName": "george pickens",
+      "position": "WR",
+      "team": "DAL",
+      "aggregateRank": 28.666666666666668,
+      "sourceRanks": {
+        "fieldYates": 29,
+        "mikeClay": 31,
+        "ryanWeisse": 26
+      },
+      "yahooXRank": 22,
+      "yahooAdp": 25,
+      "rankSpread": 5,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -6.666666666666668
+    },
+    {
+      "playerName": "Josh Allen",
+      "normalizedName": "josh allen",
+      "position": "QB",
+      "team": "BUF",
+      "aggregateRank": 29.666666666666668,
+      "sourceRanks": {
+        "fieldYates": 28,
+        "mikeClay": 36,
+        "ryanWeisse": 25
+      },
+      "yahooXRank": 32,
+      "yahooAdp": 28,
+      "rankSpread": 11,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2.333333333333332
+    },
+    {
+      "playerName": "Zay Flowers",
+      "normalizedName": "zay flowers",
+      "position": "WR",
+      "team": "BAL",
+      "aggregateRank": 31,
+      "sourceRanks": {
+        "fieldYates": 41,
+        "mikeClay": 33,
+        "ryanWeisse": 19
+      },
+      "yahooXRank": 33,
+      "yahooAdp": 35,
+      "rankSpread": 22,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2
+    },
+    {
+      "playerName": "Breece Hall",
+      "normalizedName": "breece hall",
+      "position": "RB",
+      "team": "NYJ",
+      "aggregateRank": 31.333333333333332,
+      "sourceRanks": {
+        "fieldYates": 30,
+        "mikeClay": 23,
+        "ryanWeisse": 41
+      },
+      "yahooXRank": 30,
+      "yahooAdp": 30,
+      "rankSpread": 18,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -1.3333333333333321
+    },
+    {
+      "playerName": "Javonte Williams",
+      "normalizedName": "javonte williams",
+      "position": "RB",
+      "team": "DAL",
+      "aggregateRank": 33.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 24,
+        "mikeClay": 30,
+        "ryanWeisse": 46
+      },
+      "yahooXRank": 34,
+      "yahooAdp": 37,
+      "rankSpread": 22,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 0.6666666666666643
+    },
+    {
+      "playerName": "Kyren Williams",
+      "normalizedName": "kyren williams",
+      "position": "RB",
+      "team": "LAR",
+      "aggregateRank": 34,
+      "sourceRanks": {
+        "fieldYates": 31,
+        "mikeClay": 37,
+        "ryanWeisse": 34
+      },
+      "yahooXRank": 27,
+      "yahooAdp": 36,
+      "rankSpread": 6,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -7
+    },
+    {
+      "playerName": "DeVonta Smith",
+      "normalizedName": "devonta smith",
+      "position": "WR",
+      "team": "PHI",
+      "aggregateRank": 35.666666666666664,
+      "sourceRanks": {
+        "fieldYates": 43,
+        "mikeClay": 35,
+        "ryanWeisse": 29
+      },
+      "yahooXRank": 26,
+      "yahooAdp": 29,
+      "rankSpread": 14,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -9.666666666666664
+    },
+    {
+      "playerName": "Tetairoa McMillan",
+      "normalizedName": "tetairoa mcmillan",
+      "position": "WR",
+      "team": "CAR",
+      "aggregateRank": 37,
+      "sourceRanks": {
+        "fieldYates": 42,
+        "mikeClay": 34,
+        "ryanWeisse": 35
+      },
+      "yahooXRank": 39,
+      "yahooAdp": 34,
+      "rankSpread": 8,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2
+    },
+    {
+      "playerName": "Travis Etienne Jr.",
+      "normalizedName": "travis etienne",
+      "position": "RB",
+      "team": "NO",
+      "aggregateRank": 37,
+      "sourceRanks": {
+        "fieldYates": 32,
+        "mikeClay": 32,
+        "ryanWeisse": 47
+      },
+      "yahooXRank": 41,
+      "yahooAdp": 44,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 4
+    },
+    {
+      "playerName": "Ladd McConkey",
+      "normalizedName": "ladd mcconkey",
+      "position": "WR",
+      "team": "LAC",
+      "aggregateRank": 38.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 51,
+        "mikeClay": 44,
+        "ryanWeisse": 20
+      },
+      "yahooXRank": 40,
+      "yahooAdp": 39,
+      "rankSpread": 31,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 1.6666666666666643
+    },
+    {
+      "playerName": "Colston Loveland",
+      "normalizedName": "colston loveland",
+      "position": "TE",
+      "team": "CHI",
+      "aggregateRank": 38.666666666666664,
+      "sourceRanks": {
+        "fieldYates": 35,
+        "mikeClay": 49,
+        "ryanWeisse": 32
+      },
+      "yahooXRank": 37,
+      "yahooAdp": 42,
+      "rankSpread": 17,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -1.6666666666666643
+    },
+    {
+      "playerName": "Emeka Egbuka",
+      "normalizedName": "emeka egbuka",
+      "position": "WR",
+      "team": "TB",
+      "aggregateRank": 41.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 33,
+        "mikeClay": 42,
+        "ryanWeisse": 49
+      },
+      "yahooXRank": 43,
+      "yahooAdp": 41,
+      "rankSpread": 16,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 1.6666666666666643
+    },
+    {
+      "playerName": "Jaylen Waddle",
+      "normalizedName": "jaylen waddle",
+      "position": "WR",
+      "team": "DEN",
+      "aggregateRank": 43,
+      "sourceRanks": {
+        "fieldYates": 44,
+        "mikeClay": 47,
+        "ryanWeisse": 38
+      },
+      "yahooXRank": 35,
+      "yahooAdp": 43,
+      "rankSpread": 9,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -8
+    },
+    {
+      "playerName": "D'Andre Swift",
+      "normalizedName": "d andre swift",
+      "position": "RB",
+      "team": "CHI",
+      "aggregateRank": 44,
+      "sourceRanks": {
+        "fieldYates": 38,
+        "mikeClay": 41,
+        "ryanWeisse": 53
+      },
+      "yahooXRank": 42,
+      "yahooAdp": 57,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -2
+    },
+    {
+      "playerName": "Drake Maye",
+      "normalizedName": "drake maye",
+      "position": "QB",
+      "team": "NE",
+      "aggregateRank": 44,
+      "sourceRanks": {
+        "fieldYates": 48,
+        "mikeClay": 57,
+        "ryanWeisse": 27
+      },
+      "yahooXRank": 61,
+      "yahooAdp": 48,
+      "rankSpread": 30,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 17
+    },
+    {
+      "playerName": "Quinshon Judkins",
+      "normalizedName": "quinshon judkins",
+      "position": "RB",
+      "team": "CLE",
+      "aggregateRank": 44.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 37,
+        "mikeClay": 38,
+        "ryanWeisse": 58
+      },
+      "yahooXRank": 58,
+      "yahooAdp": 52,
+      "rankSpread": 21,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 13.666666666666664
+    },
+    {
+      "playerName": "Davante Adams",
+      "normalizedName": "davante adams",
+      "position": "WR",
+      "team": "LAR",
+      "aggregateRank": 45.666666666666664,
+      "sourceRanks": {
+        "fieldYates": 50,
+        "mikeClay": 43,
+        "ryanWeisse": 44
+      },
+      "yahooXRank": 56,
+      "yahooAdp": 47,
+      "rankSpread": 7,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 10.333333333333336
+    },
+    {
+      "playerName": "Bucky Irving",
+      "normalizedName": "bucky irving",
+      "position": "RB",
+      "team": "TB",
+      "aggregateRank": 47.666666666666664,
+      "sourceRanks": {
+        "fieldYates": 47,
+        "mikeClay": 40,
+        "ryanWeisse": 56
+      },
+      "yahooXRank": 51,
+      "yahooAdp": 46,
+      "rankSpread": 16,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 3.3333333333333357
+    },
+    {
+      "playerName": "Cam Skattebo",
+      "normalizedName": "cam skattebo",
+      "position": "RB",
+      "team": "NYG",
+      "aggregateRank": 48.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 45,
+        "mikeClay": 39,
+        "ryanWeisse": 61
+      },
+      "yahooXRank": 46,
+      "yahooAdp": 45,
+      "rankSpread": 22,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -2.3333333333333357
+    },
+    {
+      "playerName": "Tee Higgins",
+      "normalizedName": "tee higgins",
+      "position": "WR",
+      "team": "CIN",
+      "aggregateRank": 48.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 57,
+        "mikeClay": 46,
+        "ryanWeisse": 42
+      },
+      "yahooXRank": 29,
+      "yahooAdp": 38,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -19.333333333333336
+    },
+    {
+      "playerName": "Lamar Jackson",
+      "normalizedName": "lamar jackson",
+      "position": "QB",
+      "team": "BAL",
+      "aggregateRank": 48.666666666666664,
+      "sourceRanks": {
+        "fieldYates": 36,
+        "mikeClay": 56,
+        "ryanWeisse": 54
+      },
+      "yahooXRank": 50,
+      "yahooAdp": 40,
+      "rankSpread": 20,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 1.3333333333333357
+    },
+    {
+      "playerName": "Tyler Warren",
+      "normalizedName": "tyler warren",
+      "position": "TE",
+      "team": "IND",
+      "aggregateRank": 51,
+      "sourceRanks": {
+        "fieldYates": 46,
+        "mikeClay": 50,
+        "ryanWeisse": 57
+      },
+      "yahooXRank": 48,
+      "yahooAdp": 50,
+      "rankSpread": 11,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -3
+    },
+    {
+      "playerName": "Carnell Tate",
+      "normalizedName": "carnell tate",
+      "position": "WR",
+      "team": "TEN",
+      "aggregateRank": 53.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 61,
+        "mikeClay": 54,
+        "ryanWeisse": 45
+      },
+      "yahooXRank": 73,
+      "yahooAdp": 63,
+      "rankSpread": 16,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 19.666666666666664
+    },
+    {
+      "playerName": "DJ Moore",
+      "normalizedName": "dj moore",
+      "position": "WR",
+      "team": "BUF",
+      "aggregateRank": 54.666666666666664,
+      "sourceRanks": {
+        "fieldYates": 72,
+        "mikeClay": 52,
+        "ryanWeisse": 40
+      },
+      "yahooXRank": 47,
+      "yahooAdp": 53,
+      "rankSpread": 32,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -7.666666666666664
+    },
+    {
+      "playerName": "Terry McLaurin",
+      "normalizedName": "terry mclaurin",
+      "position": "WR",
+      "team": "WSH",
+      "aggregateRank": 55,
+      "sourceRanks": {
+        "fieldYates": 60,
+        "mikeClay": 45,
+        "ryanWeisse": 60
+      },
+      "yahooXRank": 45,
+      "yahooAdp": 49,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -10
+    },
+    {
+      "playerName": "Rome Odunze",
+      "normalizedName": "rome odunze",
+      "position": "WR",
+      "team": "CHI",
+      "aggregateRank": 55.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 67,
+        "mikeClay": 48,
+        "ryanWeisse": 51
+      },
+      "yahooXRank": 49,
+      "yahooAdp": 55,
+      "rankSpread": 19,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -6.333333333333336
+    },
+    {
+      "playerName": "Jalen Hurts",
+      "normalizedName": "jalen hurts",
+      "position": "QB",
+      "team": "PHI",
+      "aggregateRank": 56.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 52,
+        "mikeClay": 58,
+        "ryanWeisse": 59
+      },
+      "yahooXRank": 66,
+      "yahooAdp": 60,
+      "rankSpread": 7,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 9.666666666666664
+    },
+    {
+      "playerName": "Joe Burrow",
+      "normalizedName": "joe burrow",
+      "position": "QB",
+      "team": "CIN",
+      "aggregateRank": 59,
+      "sourceRanks": {
+        "fieldYates": 73,
+        "mikeClay": 74,
+        "ryanWeisse": 30
+      },
+      "yahooXRank": 63,
+      "yahooAdp": 59,
+      "rankSpread": 44,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 4
+    },
+    {
+      "playerName": "David Montgomery",
+      "normalizedName": "david montgomery",
+      "position": "RB",
+      "team": "HOU",
+      "aggregateRank": 60.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 56,
+        "mikeClay": 60,
+        "ryanWeisse": 65
+      },
+      "yahooXRank": 57,
+      "yahooAdp": 58,
+      "rankSpread": 9,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -3.3333333333333357
+    },
+    {
+      "playerName": "Jameson Williams",
+      "normalizedName": "jameson williams",
+      "position": "WR",
+      "team": "DET",
+      "aggregateRank": 61.666666666666664,
+      "sourceRanks": {
+        "fieldYates": 79,
+        "mikeClay": 51,
+        "ryanWeisse": 55
+      },
+      "yahooXRank": 52,
+      "yahooAdp": 54,
+      "rankSpread": 28,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -9.666666666666664
+    },
+    {
+      "playerName": "Bhayshul Tuten",
+      "normalizedName": "bhayshul tuten",
+      "position": "RB",
+      "team": "JAX",
+      "aggregateRank": 62,
+      "sourceRanks": {
+        "fieldYates": 49,
+        "mikeClay": 59,
+        "ryanWeisse": 78
+      },
+      "yahooXRank": 54,
+      "yahooAdp": 62,
+      "rankSpread": 29,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -8
+    },
+    {
+      "playerName": "Jayden Daniels",
+      "normalizedName": "jayden daniels",
+      "position": "QB",
+      "team": "WSH",
+      "aggregateRank": 62.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 40,
+        "mikeClay": 55,
+        "ryanWeisse": 92
+      },
+      "yahooXRank": 65,
+      "yahooAdp": 56,
+      "rankSpread": 52,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2.6666666666666643
+    },
+    {
+      "playerName": "Jadarian Price",
+      "normalizedName": "jadarian price",
+      "position": "RB",
+      "team": "SEA",
+      "aggregateRank": 63.333333333333336,
+      "sourceRanks": {
+        "fieldYates": 54,
+        "mikeClay": 61,
+        "ryanWeisse": 75
+      },
+      "yahooXRank": 59,
+      "yahooAdp": 65,
+      "rankSpread": 21,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -4.333333333333336
+    },
+    {
+      "playerName": "Luther Burden III",
+      "normalizedName": "luther burden",
+      "position": "WR",
+      "team": "CHI",
+      "aggregateRank": 64.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 77,
+        "mikeClay": 53,
+        "ryanWeisse": 64
+      },
+      "yahooXRank": 44,
+      "yahooAdp": 51,
+      "rankSpread": 24,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -20.66666666666667
+    },
+    {
+      "playerName": "Rhamondre Stevenson",
+      "normalizedName": "rhamondre stevenson",
+      "position": "RB",
+      "team": "NE",
+      "aggregateRank": 65.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 62,
+        "mikeClay": 63,
+        "ryanWeisse": 72
+      },
+      "yahooXRank": 62,
+      "yahooAdp": 73,
+      "rankSpread": 10,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -3.6666666666666714
+    },
+    {
+      "playerName": "Courtland Sutton",
+      "normalizedName": "courtland sutton",
+      "position": "WR",
+      "team": "DEN",
+      "aggregateRank": 66.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 87,
+        "mikeClay": 65,
+        "ryanWeisse": 48
+      },
+      "yahooXRank": 100,
+      "yahooAdp": 74,
+      "rankSpread": 39,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 33.33333333333333
+    },
+    {
+      "playerName": "Jaylen Warren",
+      "normalizedName": "jaylen warren",
+      "position": "RB",
+      "team": "PIT",
+      "aggregateRank": 67.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 71,
+        "mikeClay": 64,
+        "ryanWeisse": 67
+      },
+      "yahooXRank": 69,
+      "yahooAdp": 81,
+      "rankSpread": 7,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 1.6666666666666714
+    },
+    {
+      "playerName": "DK Metcalf",
+      "normalizedName": "dk metcalf",
+      "position": "WR",
+      "team": "PIT",
+      "aggregateRank": 68,
+      "sourceRanks": {
+        "fieldYates": 68,
+        "mikeClay": 68,
+        "ryanWeisse": 68
+      },
+      "yahooXRank": 76,
+      "yahooAdp": 72,
+      "rankSpread": 0,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 8
+    },
+    {
+      "playerName": "Michael Pittman Jr.",
+      "normalizedName": "michael pittman",
+      "position": "WR",
+      "team": "PIT",
+      "aggregateRank": 69.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 91,
+        "mikeClay": 66,
+        "ryanWeisse": 52
+      },
+      "yahooXRank": 104,
+      "yahooAdp": 78,
+      "rankSpread": 39,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 34.33333333333333
+    },
+    {
+      "playerName": "TreVeyon Henderson",
+      "normalizedName": "treveyon henderson",
+      "position": "RB",
+      "team": "NE",
+      "aggregateRank": 71,
+      "sourceRanks": {
+        "fieldYates": 66,
+        "mikeClay": 97,
+        "ryanWeisse": 50
+      },
+      "yahooXRank": 64,
+      "yahooAdp": 61,
+      "rankSpread": 47,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -7
+    },
+    {
+      "playerName": "Christian Watson",
+      "normalizedName": "christian watson",
+      "position": "WR",
+      "team": "GB",
+      "aggregateRank": 71.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 76,
+        "mikeClay": 76,
+        "ryanWeisse": 62
+      },
+      "yahooXRank": 53,
+      "yahooAdp": 66,
+      "rankSpread": 14,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -18.33333333333333
+    },
+    {
+      "playerName": "Justin Herbert",
+      "normalizedName": "justin herbert",
+      "position": "QB",
+      "team": "LAC",
+      "aggregateRank": 71.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 59,
+        "mikeClay": 93,
+        "ryanWeisse": 63
+      },
+      "yahooXRank": 74,
+      "yahooAdp": 82,
+      "rankSpread": 34,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2.3333333333333286
+    },
+    {
+      "playerName": "Kyle Pitts Sr.",
+      "normalizedName": "kyle pitts",
+      "position": "TE",
+      "team": "ATL",
+      "aggregateRank": 72,
+      "sourceRanks": {
+        "fieldYates": 58,
+        "mikeClay": 71,
+        "ryanWeisse": 87
+      },
+      "yahooXRank": 79,
+      "yahooAdp": 71,
+      "rankSpread": 29,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 7
+    },
+    {
+      "playerName": "Harold Fannin Jr.",
+      "normalizedName": "harold fannin",
+      "position": "TE",
+      "team": "CLE",
+      "aggregateRank": 73.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 53,
+        "mikeClay": 72,
+        "ryanWeisse": 95
+      },
+      "yahooXRank": 77,
+      "yahooAdp": 69,
+      "rankSpread": 42,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 3.6666666666666714
+    },
+    {
+      "playerName": "Sam LaPorta",
+      "normalizedName": "sam laporta",
+      "position": "TE",
+      "team": "DET",
+      "aggregateRank": 73.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 82,
+        "mikeClay": 73,
+        "ryanWeisse": 66
+      },
+      "yahooXRank": 70,
+      "yahooAdp": 70,
+      "rankSpread": 16,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -3.6666666666666714
+    },
+    {
+      "playerName": "Trevor Lawrence",
+      "normalizedName": "trevor lawrence",
+      "position": "QB",
+      "team": "JAX",
+      "aggregateRank": 75.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 75,
+        "mikeClay": 82,
+        "ryanWeisse": 70
+      },
+      "yahooXRank": 80,
+      "yahooAdp": 83,
+      "rankSpread": 12,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 4.333333333333329
+    },
+    {
+      "playerName": "Caleb Williams",
+      "normalizedName": "caleb williams",
+      "position": "QB",
+      "team": "CHI",
+      "aggregateRank": 76.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 105,
+        "mikeClay": 87,
+        "ryanWeisse": 37
+      },
+      "yahooXRank": 71,
+      "yahooAdp": 75,
+      "rankSpread": 68,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -5.333333333333329
+    },
+    {
+      "playerName": "Marvin Harrison Jr.",
+      "normalizedName": "marvin harrison",
+      "position": "WR",
+      "team": "ARI",
+      "aggregateRank": 77,
+      "sourceRanks": {
+        "fieldYates": 74,
+        "mikeClay": 67,
+        "ryanWeisse": 90
+      },
+      "yahooXRank": 68,
+      "yahooAdp": 68,
+      "rankSpread": 23,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -9
+    },
+    {
+      "playerName": "Wan'Dale Robinson",
+      "normalizedName": "wan dale robinson",
+      "position": "WR",
+      "team": "TEN",
+      "aggregateRank": 79,
+      "sourceRanks": {
+        "fieldYates": 80,
+        "mikeClay": 88,
+        "ryanWeisse": 69
+      },
+      "yahooXRank": 112,
+      "yahooAdp": 92,
+      "rankSpread": 19,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 33
+    },
+    {
+      "playerName": "Mike Evans",
+      "normalizedName": "mike evans",
+      "position": "WR",
+      "team": "SF",
+      "aggregateRank": 81.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 86,
+        "mikeClay": 77,
+        "ryanWeisse": 81
+      },
+      "yahooXRank": 60,
+      "yahooAdp": 64,
+      "rankSpread": 9,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -21.33333333333333
+    },
+    {
+      "playerName": "Parker Washington",
+      "normalizedName": "parker washington",
+      "position": "WR",
+      "team": "JAX",
+      "aggregateRank": 82.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 78,
+        "mikeClay": 69,
+        "ryanWeisse": 100
+      },
+      "yahooXRank": 55,
+      "yahooAdp": 67,
+      "rankSpread": 31,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -27.33333333333333
+    },
+    {
+      "playerName": "Tony Pollard",
+      "normalizedName": "tony pollard",
+      "position": "RB",
+      "team": "TEN",
+      "aggregateRank": 82.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 63,
+        "mikeClay": 98,
+        "ryanWeisse": 86
+      },
+      "yahooXRank": 82,
+      "yahooAdp": 86,
+      "rankSpread": 35,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -0.3333333333333286
+    },
+    {
+      "playerName": "Michael Wilson",
+      "normalizedName": "michael wilson",
+      "position": "WR",
+      "team": "ARI",
+      "aggregateRank": 82.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 85,
+        "mikeClay": 80,
+        "ryanWeisse": 83
+      },
+      "yahooXRank": 86,
+      "yahooAdp": 79,
+      "rankSpread": 5,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 3.3333333333333286
+    },
+    {
+      "playerName": "Jaxson Dart",
+      "normalizedName": "jaxson dart",
+      "position": "QB",
+      "team": "NYG",
+      "aggregateRank": 84.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 70,
+        "mikeClay": 75,
+        "ryanWeisse": 108
+      },
+      "yahooXRank": 106,
+      "yahooAdp": 84,
+      "rankSpread": 38,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 21.66666666666667
+    },
+    {
+      "playerName": "Chuba Hubbard",
+      "normalizedName": "chuba hubbard",
+      "position": "RB",
+      "team": "CAR",
+      "aggregateRank": 86.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 65,
+        "mikeClay": 105,
+        "ryanWeisse": 89
+      },
+      "yahooXRank": 89,
+      "yahooAdp": 89,
+      "rankSpread": 40,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 2.6666666666666714
+    },
+    {
+      "playerName": "Kenneth Gainwell",
+      "normalizedName": "kenneth gainwell",
+      "position": "RB",
+      "team": "TB",
+      "aggregateRank": 87,
+      "sourceRanks": {
+        "fieldYates": 69,
+        "mikeClay": 99,
+        "ryanWeisse": 93
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 30,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Patrick Mahomes",
+      "normalizedName": "patrick mahomes",
+      "position": "QB",
+      "team": "KC",
+      "aggregateRank": 87.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 90,
+        "mikeClay": 94,
+        "ryanWeisse": 79
+      },
+      "yahooXRank": 120,
+      "yahooAdp": 99,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 32.33333333333333
+    },
+    {
+      "playerName": "Brian Thomas Jr.",
+      "normalizedName": "brian thomas",
+      "position": "WR",
+      "team": "JAX",
+      "aggregateRank": 89,
+      "sourceRanks": {
+        "fieldYates": 106,
+        "mikeClay": 79,
+        "ryanWeisse": 82
+      },
+      "yahooXRank": 72,
+      "yahooAdp": 76,
+      "rankSpread": 27,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -17
+    },
+    {
+      "playerName": "Jakobi Meyers",
+      "normalizedName": "jakobi meyers",
+      "position": "WR",
+      "team": "JAX",
+      "aggregateRank": 90,
+      "sourceRanks": {
+        "fieldYates": 93,
+        "mikeClay": 81,
+        "ryanWeisse": 96
+      },
+      "yahooXRank": 126,
+      "yahooAdp": 91,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 36
+    },
+    {
+      "playerName": "George Kittle",
+      "normalizedName": "george kittle",
+      "position": "TE",
+      "team": "SF",
+      "aggregateRank": 90.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 64,
+        "mikeClay": 101,
+        "ryanWeisse": 106
+      },
+      "yahooXRank": 88,
+      "yahooAdp": 93,
+      "rankSpread": 42,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -2.3333333333333286
+    },
+    {
+      "playerName": "Dak Prescott",
+      "normalizedName": "dak prescott",
+      "position": "QB",
+      "team": "DAL",
+      "aggregateRank": 91,
+      "sourceRanks": {
+        "fieldYates": 89,
+        "mikeClay": 83,
+        "ryanWeisse": 101
+      },
+      "yahooXRank": 78,
+      "yahooAdp": 77,
+      "rankSpread": 18,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -13
+    },
+    {
+      "playerName": "Josh Jacobs",
+      "normalizedName": "josh jacobs",
+      "position": "RB",
+      "team": "GB",
+      "aggregateRank": 91,
+      "sourceRanks": {
+        "fieldYates": 55,
+        "mikeClay": 62,
+        "ryanWeisse": 156
+      },
+      "yahooXRank": 108,
+      "yahooAdp": 33,
+      "rankSpread": 101,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 17
+    },
+    {
+      "playerName": "Tucker Kraft",
+      "normalizedName": "tucker kraft",
+      "position": "TE",
+      "team": "GB",
+      "aggregateRank": 91.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 88,
+        "mikeClay": 102,
+        "ryanWeisse": 85
+      },
+      "yahooXRank": 67,
+      "yahooAdp": 80,
+      "rankSpread": 17,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -24.66666666666667
+    },
+    {
+      "playerName": "Travis Kelce",
+      "normalizedName": "travis kelce",
+      "position": "TE",
+      "team": "KC",
+      "aggregateRank": 92,
+      "sourceRanks": {
+        "fieldYates": 99,
+        "mikeClay": 104,
+        "ryanWeisse": 73
+      },
+      "yahooXRank": 121,
+      "yahooAdp": 96,
+      "rankSpread": 31,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 29
+    },
+    {
+      "playerName": "Jonathon Brooks",
+      "normalizedName": "jonathon brooks",
+      "position": "RB",
+      "team": "CAR",
+      "aggregateRank": 92.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 101,
+        "mikeClay": 96,
+        "ryanWeisse": 80
+      },
+      "yahooXRank": 75,
+      "yahooAdp": 98,
+      "rankSpread": 21,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -17.33333333333333
+    },
+    {
+      "playerName": "Brock Purdy",
+      "normalizedName": "brock purdy",
+      "position": "QB",
+      "team": "SF",
+      "aggregateRank": 93,
+      "sourceRanks": {
+        "fieldYates": 96,
+        "mikeClay": 85,
+        "ryanWeisse": 98
+      },
+      "yahooXRank": 97,
+      "yahooAdp": 94,
+      "rankSpread": 13,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 4
+    },
+    {
+      "playerName": "Alec Pierce",
+      "normalizedName": "alec pierce",
+      "position": "WR",
+      "team": "IND",
+      "aggregateRank": 93.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 104,
+        "mikeClay": 70,
+        "ryanWeisse": 107
+      },
+      "yahooXRank": 98,
+      "yahooAdp": 85,
+      "rankSpread": 37,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 4.333333333333329
+    },
+    {
+      "playerName": "Rico Dowdle",
+      "normalizedName": "rico dowdle",
+      "position": "RB",
+      "team": "PIT",
+      "aggregateRank": 95,
+      "sourceRanks": {
+        "fieldYates": 113,
+        "mikeClay": 95,
+        "ryanWeisse": 77
+      },
+      "yahooXRank": 81,
+      "yahooAdp": 87,
+      "rankSpread": 36,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -14
+    },
+    {
+      "playerName": "Bo Nix",
+      "normalizedName": "bo nix",
+      "position": "QB",
+      "team": "DEN",
+      "aggregateRank": 95.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 98,
+        "mikeClay": 84,
+        "ryanWeisse": 104
+      },
+      "yahooXRank": 102,
+      "yahooAdp": 97,
+      "rankSpread": 20,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 6.666666666666671
+    },
+    {
+      "playerName": "Jordan Addison",
+      "normalizedName": "jordan addison",
+      "position": "WR",
+      "team": "MIN",
+      "aggregateRank": 99,
+      "sourceRanks": {
+        "fieldYates": 114,
+        "mikeClay": 89,
+        "ryanWeisse": 94
+      },
+      "yahooXRank": 95,
+      "yahooAdp": 95,
+      "rankSpread": 25,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -4
+    },
+    {
+      "playerName": "MarShawn Lloyd",
+      "normalizedName": "marshawn lloyd",
+      "position": "RB",
+      "team": "GB",
+      "aggregateRank": 99,
+      "sourceRanks": {
+        "fieldYates": 95,
+        "mikeClay": 100,
+        "ryanWeisse": 102
+      },
+      "yahooXRank": 84,
+      "yahooAdp": 181,
+      "rankSpread": 7,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -15
+    },
+    {
+      "playerName": "Matthew Stafford",
+      "normalizedName": "matthew stafford",
+      "position": "QB",
+      "team": "LAR",
+      "aggregateRank": 100.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 97,
+        "mikeClay": 86,
+        "ryanWeisse": 119
+      },
+      "yahooXRank": 113,
+      "yahooAdp": 90,
+      "rankSpread": 33,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 12.333333333333329
+    },
+    {
+      "playerName": "Rachaad White",
+      "normalizedName": "rachaad white",
+      "position": "RB",
+      "team": "WSH",
+      "aggregateRank": 101.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 81,
+        "mikeClay": 120,
+        "ryanWeisse": 103
+      },
+      "yahooXRank": 116,
+      "yahooAdp": 118,
+      "rankSpread": 39,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 14.666666666666671
+    },
+    {
+      "playerName": "Chris Godwin Jr.",
+      "normalizedName": "chris godwin",
+      "position": "WR",
+      "team": "TB",
+      "aggregateRank": 101.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 102,
+        "mikeClay": 127,
+        "ryanWeisse": 76
+      },
+      "yahooXRank": 83,
+      "yahooAdp": 104,
+      "rankSpread": 51,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -18.66666666666667
+    },
+    {
+      "playerName": "Kyle Monangai",
+      "normalizedName": "kyle monangai",
+      "position": "RB",
+      "team": "CHI",
+      "aggregateRank": 102,
+      "sourceRanks": {
+        "fieldYates": 100,
+        "mikeClay": 107,
+        "ryanWeisse": 99
+      },
+      "yahooXRank": 109,
+      "yahooAdp": 107,
+      "rankSpread": 8,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 7
+    },
+    {
+      "playerName": "Matthew Golden",
+      "normalizedName": "matthew golden",
+      "position": "WR",
+      "team": "GB",
+      "aggregateRank": 103,
+      "sourceRanks": {
+        "fieldYates": 103,
+        "mikeClay": 78,
+        "ryanWeisse": 128
+      },
+      "yahooXRank": 101,
+      "yahooAdp": 108,
+      "rankSpread": 50,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -2
+    },
+    {
+      "playerName": "Jared Goff",
+      "normalizedName": "jared goff",
+      "position": "QB",
+      "team": "DET",
+      "aggregateRank": 104.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 135,
+        "ryanWeisse": 74
+      },
+      "yahooXRank": 118,
+      "yahooAdp": 124,
+      "rankSpread": 61,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 13.5
+    },
+    {
+      "playerName": "Stefon Diggs",
+      "normalizedName": "stefon diggs",
+      "position": "WR",
+      "team": "WSH",
+      "aggregateRank": 104.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 84,
+        "mikeClay": 114,
+        "ryanWeisse": 116
+      },
+      "yahooXRank": 92,
+      "yahooAdp": 112,
+      "rankSpread": 32,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -12.666666666666671
+    },
+    {
+      "playerName": "Aaron Jones Sr.",
+      "normalizedName": "aaron jones",
+      "position": "RB",
+      "team": "MIN",
+      "aggregateRank": 105.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 83,
+        "mikeClay": 115,
+        "ryanWeisse": 118
+      },
+      "yahooXRank": 125,
+      "yahooAdp": 121,
+      "rankSpread": 35,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 19.66666666666667
+    },
+    {
+      "playerName": "Josh Downs",
+      "normalizedName": "josh downs",
+      "position": "WR",
+      "team": "IND",
+      "aggregateRank": 105.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 104,
+        "mikeClay": 124,
+        "ryanWeisse": 88
+      },
+      "yahooXRank": 87,
+      "yahooAdp": 106,
+      "rankSpread": 36,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -18.33333333333333
+    },
+    {
+      "playerName": "RJ Harvey",
+      "normalizedName": "rj harvey",
+      "position": "RB",
+      "team": "DEN",
+      "aggregateRank": 105.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 109,
+        "mikeClay": 123,
+        "ryanWeisse": 84
+      },
+      "yahooXRank": 110,
+      "yahooAdp": 101,
+      "rankSpread": 39,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 4.666666666666671
+    },
+    {
+      "playerName": "Quentin Johnston",
+      "normalizedName": "quentin johnston",
+      "position": "WR",
+      "team": "LAC",
+      "aggregateRank": 106,
+      "sourceRanks": {
+        "fieldYates": 134,
+        "mikeClay": 113,
+        "ryanWeisse": 71
+      },
+      "yahooXRank": 91,
+      "yahooAdp": 111,
+      "rankSpread": 63,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -15
+    },
+    {
+      "playerName": "Jake Ferguson",
+      "normalizedName": "jake ferguson",
+      "position": "TE",
+      "team": "DAL",
+      "aggregateRank": 108.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 92,
+        "mikeClay": 109,
+        "ryanWeisse": 124
+      },
+      "yahooXRank": 146,
+      "yahooAdp": 110,
+      "rankSpread": 32,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 37.66666666666667
+    },
+    {
+      "playerName": "J.K. Dobbins",
+      "normalizedName": "j k dobbins",
+      "position": "RB",
+      "team": "DEN",
+      "aggregateRank": 111.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 108,
+        "mikeClay": 106,
+        "ryanWeisse": 120
+      },
+      "yahooXRank": 85,
+      "yahooAdp": 100,
+      "rankSpread": 14,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -26.33333333333333
+    },
+    {
+      "playerName": "Khalil Shakir",
+      "normalizedName": "khalil shakir",
+      "position": "WR",
+      "team": "BUF",
+      "aggregateRank": 111.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 129,
+        "mikeClay": 91,
+        "ryanWeisse": 115
+      },
+      "yahooXRank": 140,
+      "yahooAdp": 117,
+      "rankSpread": 38,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 28.33333333333333
+    },
+    {
+      "playerName": "Jalen Coker",
+      "normalizedName": "jalen coker",
+      "position": "WR",
+      "team": "CAR",
+      "aggregateRank": 112.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 116,
+        "mikeClay": 130,
+        "ryanWeisse": 91
+      },
+      "yahooXRank": 117,
+      "yahooAdp": 127,
+      "rankSpread": 39,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 4.666666666666671
+    },
+    {
+      "playerName": "Jayden Reed",
+      "normalizedName": "jayden reed",
+      "position": "WR",
+      "team": "GB",
+      "aggregateRank": 112.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 135,
+        "mikeClay": 92,
+        "ryanWeisse": 110
+      },
+      "yahooXRank": 96,
+      "yahooAdp": 102,
+      "rankSpread": 43,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -16.33333333333333
+    },
+    {
+      "playerName": "Jacory Croskey-Merritt",
+      "normalizedName": "jacory croskey merritt",
+      "position": "RB",
+      "team": "WSH",
+      "aggregateRank": 113.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 110,
+        "mikeClay": 108,
+        "ryanWeisse": 122
+      },
+      "yahooXRank": 90,
+      "yahooAdp": 113,
+      "rankSpread": 14,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -23.33333333333333
+    },
+    {
+      "playerName": "Dalton Kincaid",
+      "normalizedName": "dalton kincaid",
+      "position": "TE",
+      "team": "BUF",
+      "aggregateRank": 114,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 116,
+        "ryanWeisse": 112
+      },
+      "yahooXRank": 107,
+      "yahooAdp": 109,
+      "rankSpread": 4,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -7
+    },
+    {
+      "playerName": "Isaiah Likely",
+      "normalizedName": "isaiah likely",
+      "position": "TE",
+      "team": "NYG",
+      "aggregateRank": 116,
+      "sourceRanks": {
+        "fieldYates": 126,
+        "mikeClay": 111,
+        "ryanWeisse": 111
+      },
+      "yahooXRank": 123,
+      "yahooAdp": 119,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 7
+    },
+    {
+      "playerName": "KC Concepcion",
+      "normalizedName": "kc concepcion",
+      "position": "WR",
+      "team": "CLE",
+      "aggregateRank": 117,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 125,
+        "ryanWeisse": 109
+      },
+      "yahooXRank": 99,
+      "yahooAdp": 114,
+      "rankSpread": 16,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -18
+    },
+    {
+      "playerName": "Dallas Goedert",
+      "normalizedName": "dallas goedert",
+      "position": "TE",
+      "team": "PHI",
+      "aggregateRank": 117.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 94,
+        "mikeClay": 103,
+        "ryanWeisse": 155
+      },
+      "yahooXRank": 119,
+      "yahooAdp": 116,
+      "rankSpread": 61,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 1.6666666666666714
+    },
+    {
+      "playerName": "Tyler Shough",
+      "normalizedName": "tyler shough",
+      "position": "QB",
+      "team": "NO",
+      "aggregateRank": 119,
+      "sourceRanks": {
+        "fieldYates": 118,
+        "mikeClay": 134,
+        "ryanWeisse": 105
+      },
+      "yahooXRank": 138,
+      "yahooAdp": 138,
+      "rankSpread": 29,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 19
+    },
+    {
+      "playerName": "De'Zhaun Stribling",
+      "normalizedName": "de zhaun stribling",
+      "position": "WR",
+      "team": "SF",
+      "aggregateRank": 120,
+      "sourceRanks": {
+        "fieldYates": 107,
+        "mikeClay": 90,
+        "ryanWeisse": 163
+      },
+      "yahooXRank": 94,
+      "yahooAdp": 132,
+      "rankSpread": 73,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -26
+    },
+    {
+      "playerName": "Blake Corum",
+      "normalizedName": "blake corum",
+      "position": "RB",
+      "team": "LAR",
+      "aggregateRank": 120.33333333333333,
+      "sourceRanks": {
+        "fieldYates": 112,
+        "mikeClay": 122,
+        "ryanWeisse": 127
+      },
+      "yahooXRank": 93,
+      "yahooAdp": 115,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -27.33333333333333
+    },
+    {
+      "playerName": "Mark Andrews",
+      "normalizedName": "mark andrews",
+      "position": "TE",
+      "team": "BAL",
+      "aggregateRank": 120.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 110,
+        "ryanWeisse": 131
+      },
+      "yahooXRank": 134,
+      "yahooAdp": 123,
+      "rankSpread": 21,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 13.5
+    },
+    {
+      "playerName": "Xavier Worthy",
+      "normalizedName": "xavier worthy",
+      "position": "WR",
+      "team": "KC",
+      "aggregateRank": 123,
+      "sourceRanks": {
+        "fieldYates": 136,
+        "mikeClay": 112,
+        "ryanWeisse": 121
+      },
+      "yahooXRank": 130,
+      "yahooAdp": 120,
+      "rankSpread": 24,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 7
+    },
+    {
+      "playerName": "Juwan Johnson",
+      "normalizedName": "juwan johnson",
+      "position": "TE",
+      "team": "NO",
+      "aggregateRank": 123.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 114,
+        "mikeClay": 160,
+        "ryanWeisse": 97
+      },
+      "yahooXRank": 141,
+      "yahooAdp": 149,
+      "rankSpread": 63,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 17.33333333333333
+    },
+    {
+      "playerName": "Kyler Murray",
+      "normalizedName": "kyler murray",
+      "position": "QB",
+      "team": "MIN",
+      "aggregateRank": 124.66666666666667,
+      "sourceRanks": {
+        "fieldYates": 128,
+        "mikeClay": 133,
+        "ryanWeisse": 113
+      },
+      "yahooXRank": 115,
+      "yahooAdp": 128,
+      "rankSpread": 20,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -9.666666666666671
+    },
+    {
+      "playerName": "Woody Marks",
+      "normalizedName": "woody marks",
+      "position": "RB",
+      "team": "HOU",
+      "aggregateRank": 125,
+      "sourceRanks": {
+        "fieldYates": 121,
+        "mikeClay": 137,
+        "ryanWeisse": 117
+      },
+      "yahooXRank": 131,
+      "yahooAdp": 129,
+      "rankSpread": 20,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 6
+    },
+    {
+      "playerName": "Jordan Mason",
+      "normalizedName": "jordan mason",
+      "position": "RB",
+      "team": "MIN",
+      "aggregateRank": 126,
+      "sourceRanks": {
+        "fieldYates": 122,
+        "mikeClay": 121,
+        "ryanWeisse": 135
+      },
+      "yahooXRank": 103,
+      "yahooAdp": 122,
+      "rankSpread": 14,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -23
+    },
+    {
+      "playerName": "Romeo Doubs",
+      "normalizedName": "romeo doubs",
+      "position": "WR",
+      "team": "NE",
+      "aggregateRank": 126,
+      "sourceRanks": {
+        "fieldYates": 113,
+        "mikeClay": 129,
+        "ryanWeisse": 136
+      },
+      "yahooXRank": 124,
+      "yahooAdp": 126,
+      "rankSpread": 23,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -2
+    },
+    {
+      "playerName": "T.J. Hockenson",
+      "normalizedName": "t j hockenson",
+      "position": "TE",
+      "team": "MIN",
+      "aggregateRank": 127.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 117,
+        "ryanWeisse": 138
+      },
+      "yahooXRank": 212,
+      "yahooAdp": 142,
+      "rankSpread": 21,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 84.5
+    },
+    {
+      "playerName": "Tyjae Spears",
+      "normalizedName": "tyjae spears",
+      "position": "RB",
+      "team": "TEN",
+      "aggregateRank": 129.33333333333334,
+      "sourceRanks": {
+        "fieldYates": 119,
+        "mikeClay": 139,
+        "ryanWeisse": 130
+      },
+      "yahooXRank": 139,
+      "yahooAdp": 140,
+      "rankSpread": 20,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 9.666666666666657
+    },
+    {
+      "playerName": "Baker Mayfield",
+      "normalizedName": "baker mayfield",
+      "position": "QB",
+      "team": "TB",
+      "aggregateRank": 131.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 149,
+        "ryanWeisse": 114
+      },
+      "yahooXRank": 135,
+      "yahooAdp": 131,
+      "rankSpread": 35,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 3.5
+    },
+    {
+      "playerName": "Deebo Samuel",
+      "normalizedName": "deebo samuel",
+      "position": "WR",
+      "team": "SF",
+      "aggregateRank": 132.66666666666666,
+      "sourceRanks": {
+        "fieldYates": 130,
+        "mikeClay": 128,
+        "ryanWeisse": 140
+      },
+      "yahooXRank": 150,
+      "yahooAdp": 125,
+      "rankSpread": 12,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 17.333333333333343
+    },
+    {
+      "playerName": "Hunter Henry",
+      "normalizedName": "hunter henry",
+      "position": "TE",
+      "team": "NE",
+      "aggregateRank": 135.33333333333334,
+      "sourceRanks": {
+        "fieldYates": 115,
+        "mikeClay": 118,
+        "ryanWeisse": 173
+      },
+      "yahooXRank": 164,
+      "yahooAdp": 130,
+      "rankSpread": 58,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 28.666666666666657
+    },
+    {
+      "playerName": "Zach Charbonnet",
+      "normalizedName": "zach charbonnet",
+      "position": "RB",
+      "team": "SEA",
+      "aggregateRank": 136.66666666666666,
+      "sourceRanks": {
+        "fieldYates": 120,
+        "mikeClay": 138,
+        "ryanWeisse": 152
+      },
+      "yahooXRank": 144,
+      "yahooAdp": 139,
+      "rankSpread": 32,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 7.333333333333343
+    },
+    {
+      "playerName": "Makai Lemon",
+      "normalizedName": "makai lemon",
+      "position": "WR",
+      "team": "PHI",
+      "aggregateRank": 137.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 126,
+        "ryanWeisse": 149
+      },
+      "yahooXRank": 105,
+      "yahooAdp": 88,
+      "rankSpread": 23,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -32.5
+    },
+    {
+      "playerName": "Malik Willis",
+      "normalizedName": "malik willis",
+      "position": "QB",
+      "team": "MIA",
+      "aggregateRank": 137.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 150,
+        "ryanWeisse": 125
+      },
+      "yahooXRank": 132,
+      "yahooAdp": 146,
+      "rankSpread": 25,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -5.5
+    },
+    {
+      "playerName": "Denzel Boston",
+      "normalizedName": "denzel boston",
+      "position": "WR",
+      "team": "CLE",
+      "aggregateRank": 140,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 143,
+        "ryanWeisse": 137
+      },
+      "yahooXRank": 143,
+      "yahooAdp": 137,
+      "rankSpread": 6,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 3
+    },
+    {
+      "playerName": "Tyler Allgeier",
+      "normalizedName": "tyler allgeier",
+      "position": "RB",
+      "team": "ARI",
+      "aggregateRank": 142,
+      "sourceRanks": {
+        "fieldYates": 138,
+        "mikeClay": 142,
+        "ryanWeisse": 146
+      },
+      "yahooXRank": 136,
+      "yahooAdp": 136,
+      "rankSpread": 8,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -6
+    },
+    {
+      "playerName": "Chris Rodriguez Jr.",
+      "normalizedName": "chris rodriguez",
+      "position": "RB",
+      "team": "JAX",
+      "aggregateRank": 142.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 140,
+        "ryanWeisse": 145
+      },
+      "yahooXRank": 111,
+      "yahooAdp": 134,
+      "rankSpread": 5,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -31.5
+    },
+    {
+      "playerName": "Rashid Shaheed",
+      "normalizedName": "rashid shaheed",
+      "position": "WR",
+      "team": "SEA",
+      "aggregateRank": 142.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 131,
+        "ryanWeisse": 154
+      },
+      "yahooXRank": 133,
+      "yahooAdp": 133,
+      "rankSpread": 23,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -9.5
+    },
+    {
+      "playerName": "Tre Tucker",
+      "normalizedName": "tre tucker",
+      "position": "WR",
+      "team": "LV",
+      "aggregateRank": 142.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 152,
+        "ryanWeisse": 133
+      },
+      "yahooXRank": 148,
+      "yahooAdp": 159,
+      "rankSpread": 19,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 5.5
+    },
+    {
+      "playerName": "Mike Washington Jr.",
+      "normalizedName": "mike washington",
+      "position": "RB",
+      "team": "LV",
+      "aggregateRank": 144.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 157,
+        "ryanWeisse": 132
+      },
+      "yahooXRank": 128,
+      "yahooAdp": 144,
+      "rankSpread": 25,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -16.5
+    },
+    {
+      "playerName": "Caleb Douglas",
+      "normalizedName": "caleb douglas",
+      "position": "WR",
+      "team": "MIA",
+      "aggregateRank": 145,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 148,
+        "ryanWeisse": 142
+      },
+      "yahooXRank": 170,
+      "yahooAdp": 179,
+      "rankSpread": 6,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 25
+    },
+    {
+      "playerName": "Jordan Love",
+      "normalizedName": "jordan love",
+      "position": "QB",
+      "team": "GB",
+      "aggregateRank": 146,
+      "sourceRanks": {
+        "fieldYates": 111,
+        "mikeClay": 198,
+        "ryanWeisse": 129
+      },
+      "yahooXRank": 122,
+      "yahooAdp": 152,
+      "rankSpread": 87,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -24
+    },
+    {
+      "playerName": "Isiah Pacheco",
+      "normalizedName": "isiah pacheco",
+      "position": "RB",
+      "team": "DET",
+      "aggregateRank": 147.66666666666666,
+      "sourceRanks": {
+        "fieldYates": 140,
+        "mikeClay": 155,
+        "ryanWeisse": 148
+      },
+      "yahooXRank": 178,
+      "yahooAdp": 154,
+      "rankSpread": 15,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 30.333333333333343
+    },
+    {
+      "playerName": "Jordyn Tyson",
+      "normalizedName": "jordyn tyson",
+      "position": "WR",
+      "team": "NO",
+      "aggregateRank": 150.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 151,
+        "ryanWeisse": 150
+      },
+      "yahooXRank": 129,
+      "yahooAdp": 103,
+      "rankSpread": 1,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -21.5
+    },
+    {
+      "playerName": "Brian Robinson Jr.",
+      "normalizedName": "brian robinson",
+      "position": "RB",
+      "team": "ATL",
+      "aggregateRank": 152.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 141,
+        "ryanWeisse": 164
+      },
+      "yahooXRank": 160,
+      "yahooAdp": 145,
+      "rankSpread": 23,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 7.5
+    },
+    {
+      "playerName": "Daniel Jones",
+      "normalizedName": "daniel jones",
+      "position": "QB",
+      "team": "IND",
+      "aggregateRank": 154,
+      "sourceRanks": {
+        "fieldYates": 112,
+        "mikeClay": 136,
+        "ryanWeisse": 214
+      },
+      "yahooXRank": 163,
+      "yahooAdp": 147,
+      "rankSpread": 102,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 9
+    },
+    {
+      "playerName": "Adonai Mitchell",
+      "normalizedName": "adonai mitchell",
+      "position": "WR",
+      "team": "NYJ",
+      "aggregateRank": 155.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 146,
+        "ryanWeisse": 165
+      },
+      "yahooXRank": 147,
+      "yahooAdp": 165,
+      "rankSpread": 19,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -8.5
+    },
+    {
+      "playerName": "Dylan Sampson",
+      "normalizedName": "dylan sampson",
+      "position": "RB",
+      "team": "CLE",
+      "aggregateRank": 155.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 168,
+        "ryanWeisse": 143
+      },
+      "yahooXRank": 180,
+      "yahooAdp": 156,
+      "rankSpread": 25,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 24.5
+    },
+    {
+      "playerName": "Alvin Kamara",
+      "normalizedName": "alvin kamara",
+      "position": "RB",
+      "team": "NO",
+      "aggregateRank": 156.33333333333334,
+      "sourceRanks": {
+        "fieldYates": 133,
+        "mikeClay": 195,
+        "ryanWeisse": 141
+      },
+      "yahooXRank": 184,
+      "yahooAdp": 143,
+      "rankSpread": 62,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": 27.666666666666657
+    },
+    {
+      "playerName": "Jalen Nailor",
+      "normalizedName": "jalen nailor",
+      "position": "WR",
+      "team": "LV",
+      "aggregateRank": 159.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 153,
+        "ryanWeisse": 166
+      },
+      "yahooXRank": 177,
+      "yahooAdp": 164,
+      "rankSpread": 13,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 17.5
+    },
+    {
+      "playerName": "Dalton Schultz",
+      "normalizedName": "dalton schultz",
+      "position": "TE",
+      "team": "HOU",
+      "aggregateRank": 160.66666666666666,
+      "sourceRanks": {
+        "fieldYates": 117,
+        "mikeClay": 207,
+        "ryanWeisse": 158
+      },
+      "yahooXRank": 149,
+      "yahooAdp": 180,
+      "rankSpread": 90,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -11.666666666666657
+    },
+    {
+      "playerName": "Braelon Allen",
+      "normalizedName": "braelon allen",
+      "position": "RB",
+      "team": "NYJ",
+      "aggregateRank": 163.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 158,
+        "ryanWeisse": 169
+      },
+      "yahooXRank": 161,
+      "yahooAdp": 176,
+      "rankSpread": 11,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -2.5
+    },
+    {
+      "playerName": "Keenan Allen",
+      "normalizedName": "keenan allen",
+      "position": "WR",
+      "team": "IND",
+      "aggregateRank": 163.66666666666666,
+      "sourceRanks": {
+        "fieldYates": 131,
+        "mikeClay": 161,
+        "ryanWeisse": 199
+      },
+      "yahooXRank": 145,
+      "yahooAdp": 168,
+      "rankSpread": 68,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -18.666666666666657
+    },
+    {
+      "playerName": "Jonah Coleman",
+      "normalizedName": "jonah coleman",
+      "position": "RB",
+      "team": "DEN",
+      "aggregateRank": 165.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 156,
+        "ryanWeisse": 175
+      },
+      "yahooXRank": 142,
+      "yahooAdp": 141,
+      "rankSpread": 19,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -23.5
+    },
+    {
+      "playerName": "C.J. Stroud",
+      "normalizedName": "c j stroud",
+      "position": "QB",
+      "team": "HOU",
+      "aggregateRank": 166.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 199,
+        "ryanWeisse": 134
+      },
+      "yahooXRank": 165,
+      "yahooAdp": 170,
+      "rankSpread": 65,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -1.5
+    },
+    {
+      "playerName": "Kayshon Boutte",
+      "normalizedName": "kayshon boutte",
+      "position": "WR",
+      "team": "HOU",
+      "aggregateRank": 167,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 211,
+        "ryanWeisse": 123
+      },
+      "yahooXRank": 171,
+      "yahooAdp": 196,
+      "rankSpread": 88,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 4
+    },
+    {
+      "playerName": "Ryan Flournoy",
+      "normalizedName": "ryan flournoy",
+      "position": "WR",
+      "team": "DAL",
+      "aggregateRank": 167,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 208,
+        "ryanWeisse": 126
+      },
+      "yahooXRank": 162,
+      "yahooAdp": 194,
+      "rankSpread": 82,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -5
+    },
+    {
+      "playerName": "Devaughn Vele",
+      "normalizedName": "devaughn vele",
+      "position": "WR",
+      "team": "NO",
+      "aggregateRank": 170,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 164,
+        "ryanWeisse": 176
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 12,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Ray Davis",
+      "normalizedName": "ray davis",
+      "position": "RB",
+      "team": "BUF",
+      "aggregateRank": 172,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 167,
+        "ryanWeisse": 177
+      },
+      "yahooXRank": 152,
+      "yahooAdp": 171,
+      "rankSpread": 10,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -20
+    },
+    {
+      "playerName": "Keaton Mitchell",
+      "normalizedName": "keaton mitchell",
+      "position": "RB",
+      "team": "LAC",
+      "aggregateRank": 174.66666666666666,
+      "sourceRanks": {
+        "fieldYates": 139,
+        "mikeClay": 154,
+        "ryanWeisse": 231
+      },
+      "yahooXRank": 127,
+      "yahooAdp": 148,
+      "rankSpread": 92,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": -47.66666666666666
+    },
+    {
+      "playerName": "Justice Hill",
+      "normalizedName": "justice hill",
+      "position": "RB",
+      "team": "BAL",
+      "aggregateRank": 176.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 196,
+        "ryanWeisse": 157
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 39,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Bryce Young",
+      "normalizedName": "bryce young",
+      "position": "QB",
+      "team": "CAR",
+      "aggregateRank": 178.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 218,
+        "ryanWeisse": 139
+      },
+      "yahooXRank": 183,
+      "yahooAdp": 195,
+      "rankSpread": 79,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 4.5
+    },
+    {
+      "playerName": "Sam Darnold",
+      "normalizedName": "sam darnold",
+      "position": "QB",
+      "team": "SEA",
+      "aggregateRank": 179.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 200,
+        "ryanWeisse": 159
+      },
+      "yahooXRank": 151,
+      "yahooAdp": 166,
+      "rankSpread": 41,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -28.5
+    },
+    {
+      "playerName": "Chig Okonkwo",
+      "normalizedName": "chig okonkwo",
+      "position": "TE",
+      "team": "WSH",
+      "aggregateRank": 180,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 216,
+        "ryanWeisse": 144
+      },
+      "yahooXRank": 156,
+      "yahooAdp": 182,
+      "rankSpread": 72,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -24
+    },
+    {
+      "playerName": "Jacoby Brissett",
+      "normalizedName": "jacoby brissett",
+      "position": "QB",
+      "team": "ARI",
+      "aggregateRank": 183.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 220,
+        "ryanWeisse": 147
+      },
+      "yahooXRank": 208,
+      "yahooAdp": 215,
+      "rankSpread": 73,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 24.5
+    },
+    {
+      "playerName": "Jaylin Noel",
+      "normalizedName": "jaylin noel",
+      "position": "WR",
+      "team": "HOU",
+      "aggregateRank": 183.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 165,
+        "ryanWeisse": 202
+      },
+      "yahooXRank": 190,
+      "yahooAdp": 172,
+      "rankSpread": 37,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 6.5
+    },
+    {
+      "playerName": "Jerry Jeudy",
+      "normalizedName": "jerry jeudy",
+      "position": "WR",
+      "team": "CLE",
+      "aggregateRank": 184.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 144,
+        "ryanWeisse": 225
+      },
+      "yahooXRank": 194,
+      "yahooAdp": 150,
+      "rankSpread": 81,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 9.5
+    },
+    {
+      "playerName": "Malachi Fields",
+      "normalizedName": "malachi fields",
+      "position": "WR",
+      "team": "NYG",
+      "aggregateRank": 185.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 203,
+        "ryanWeisse": 168
+      },
+      "yahooXRank": 224,
+      "yahooAdp": 187,
+      "rankSpread": 35,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 38.5
+    },
+    {
+      "playerName": "Brenton Strange",
+      "normalizedName": "brenton strange",
+      "position": "TE",
+      "team": "JAX",
+      "aggregateRank": 187.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 194,
+        "ryanWeisse": 181
+      },
+      "yahooXRank": 166,
+      "yahooAdp": 161,
+      "rankSpread": 13,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -21.5
+    },
+    {
+      "playerName": "Terrance Ferguson",
+      "normalizedName": "terrance ferguson",
+      "position": "TE",
+      "team": "LAR",
+      "aggregateRank": 189,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 119,
+        "ryanWeisse": 259
+      },
+      "yahooXRank": 157,
+      "yahooAdp": 173,
+      "rankSpread": 140,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -32
+    },
+    {
+      "playerName": "Jauan Jennings",
+      "normalizedName": "jauan jennings",
+      "position": "WR",
+      "team": "MIN",
+      "aggregateRank": 189.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 201,
+        "ryanWeisse": 178
+      },
+      "yahooXRank": 214,
+      "yahooAdp": 178,
+      "rankSpread": 23,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 24.5
+    },
+    {
+      "playerName": "Tank Bigsby",
+      "normalizedName": "tank bigsby",
+      "position": "RB",
+      "team": "PHI",
+      "aggregateRank": 192.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 166,
+        "ryanWeisse": 219
+      },
+      "yahooXRank": 137,
+      "yahooAdp": 157,
+      "rankSpread": 53,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -55.5
+    },
+    {
+      "playerName": "Calvin Ridley",
+      "normalizedName": "calvin ridley",
+      "position": "WR",
+      "team": "TEN",
+      "aggregateRank": 193,
+      "sourceRanks": {
+        "fieldYates": 132,
+        "mikeClay": 145,
+        "ryanWeisse": 302
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 170,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Travis Hunter",
+      "normalizedName": "travis hunter",
+      "position": "WR",
+      "team": "JAX",
+      "aggregateRank": 193,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 147,
+        "ryanWeisse": 239
+      },
+      "yahooXRank": 174,
+      "yahooAdp": 135,
+      "rankSpread": 92,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -19
+    },
+    {
+      "playerName": "Dontayvion Wicks",
+      "normalizedName": "dontayvion wicks",
+      "position": "WR",
+      "team": "PHI",
+      "aggregateRank": 193.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 163,
+        "ryanWeisse": 224
+      },
+      "yahooXRank": 154,
+      "yahooAdp": 169,
+      "rankSpread": 61,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -39.5
+    },
+    {
+      "playerName": "Malik Davis",
+      "normalizedName": "malik davis",
+      "position": "RB",
+      "team": "DAL",
+      "aggregateRank": 193.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 225,
+        "ryanWeisse": 162
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 63,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Rashod Bateman",
+      "normalizedName": "rashod bateman",
+      "position": "WR",
+      "team": "BAL",
+      "aggregateRank": 194.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 162,
+        "ryanWeisse": 227
+      },
+      "yahooXRank": 222,
+      "yahooAdp": 184,
+      "rankSpread": 65,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 27.5
+    },
+    {
+      "playerName": "Kenyon Sadiq",
+      "normalizedName": "kenyon sadiq",
+      "position": "TE",
+      "team": "NYJ",
+      "aggregateRank": 197.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 159,
+        "ryanWeisse": 236
+      },
+      "yahooXRank": 195,
+      "yahooAdp": 158,
+      "rankSpread": 77,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -2.5
+    },
+    {
+      "playerName": "Cam Ward",
+      "normalizedName": "cam ward",
+      "position": "QB",
+      "team": "TEN",
+      "aggregateRank": 199,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 219,
+        "ryanWeisse": 179
+      },
+      "yahooXRank": 179,
+      "yahooAdp": 186,
+      "rankSpread": 40,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -20
+    },
+    {
+      "playerName": "Jahan Dotson",
+      "normalizedName": "jahan dotson",
+      "position": "WR",
+      "team": "ATL",
+      "aggregateRank": 199.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 229,
+        "ryanWeisse": 170
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 59,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Kaelon Black",
+      "normalizedName": "kaelon black",
+      "position": "RB",
+      "team": "SF",
+      "aggregateRank": 200.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 212,
+        "ryanWeisse": 189
+      },
+      "yahooXRank": 159,
+      "yahooAdp": 198,
+      "rankSpread": 23,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -41.5
+    },
+    {
+      "playerName": "Pat Freiermuth",
+      "normalizedName": "pat freiermuth",
+      "position": "TE",
+      "team": "PIT",
+      "aggregateRank": 201,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 206,
+        "ryanWeisse": 196
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 10,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Samaje Perine",
+      "normalizedName": "samaje perine",
+      "position": "RB",
+      "team": "CIN",
+      "aggregateRank": 202,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 222,
+        "ryanWeisse": 182
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 40,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Tyrone Tracy Jr.",
+      "normalizedName": "tyrone tracy",
+      "position": "RB",
+      "team": "NYG",
+      "aggregateRank": 202,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 244,
+        "ryanWeisse": 160
+      },
+      "yahooXRank": 221,
+      "yahooAdp": 151,
+      "rankSpread": 84,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 19
+    },
+    {
+      "playerName": "Ja'Kobi Lane",
+      "normalizedName": "ja kobi lane",
+      "position": "WR",
+      "team": "BAL",
+      "aggregateRank": 203.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 197,
+        "ryanWeisse": 210
+      },
+      "yahooXRank": 172,
+      "yahooAdp": 162,
+      "rankSpread": 13,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -31.5
+    },
+    {
+      "playerName": "Jalen Tolbert",
+      "normalizedName": "jalen tolbert",
+      "position": "WR",
+      "team": "MIA",
+      "aggregateRank": 205.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 231,
+        "ryanWeisse": 180
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 51,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Gunnar Helm",
+      "normalizedName": "gunnar helm",
+      "position": "TE",
+      "team": "TEN",
+      "aggregateRank": 209,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 215,
+        "ryanWeisse": 203
+      },
+      "yahooXRank": 218,
+      "yahooAdp": 216,
+      "rankSpread": 12,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": 9
+    },
+    {
+      "playerName": "Malik Washington",
+      "normalizedName": "malik washington",
+      "position": "WR",
+      "team": "MIA",
+      "aggregateRank": 209.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 224,
+        "ryanWeisse": 195
+      },
+      "yahooXRank": 209,
+      "yahooAdp": 189,
+      "rankSpread": 29,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -0.5
+    },
+    {
+      "playerName": "Aaron Rodgers",
+      "normalizedName": "aaron rodgers",
+      "position": "QB",
+      "team": "PIT",
+      "aggregateRank": 211,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 269,
+        "ryanWeisse": 153
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 116,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Jalen McMillan",
+      "normalizedName": "jalen mcmillan",
+      "position": "WR",
+      "team": "TB",
+      "aggregateRank": 214,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 132,
+        "ryanWeisse": 296
+      },
+      "yahooXRank": 153,
+      "yahooAdp": 160,
+      "rankSpread": 164,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -61
+    },
+    {
+      "playerName": "Omar Cooper Jr.",
+      "normalizedName": "omar cooper",
+      "position": "WR",
+      "team": "NYJ",
+      "aggregateRank": 214,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 210,
+        "ryanWeisse": 218
+      },
+      "yahooXRank": 200,
+      "yahooAdp": 155,
+      "rankSpread": 8,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -14
+    },
+    {
+      "playerName": "Tank Dell",
+      "normalizedName": "tank dell",
+      "position": "WR",
+      "team": "HOU",
+      "aggregateRank": 215.33333333333334,
+      "sourceRanks": {
+        "fieldYates": 137,
+        "mikeClay": 202,
+        "ryanWeisse": 307
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 170,
+      "sourceCount": 3,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Xavier Legette",
+      "normalizedName": "xavier legette",
+      "position": "WR",
+      "team": "CAR",
+      "aggregateRank": 216.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 228,
+        "ryanWeisse": 205
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 23,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Isaac TeSlaa",
+      "normalizedName": "isaac teslaa",
+      "position": "WR",
+      "team": "DET",
+      "aggregateRank": 218,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 262,
+        "ryanWeisse": 174
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 88,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Jaylen Wright",
+      "normalizedName": "jaylen wright",
+      "position": "RB",
+      "team": "MIA",
+      "aggregateRank": 218,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 214,
+        "ryanWeisse": 222
+      },
+      "yahooXRank": null,
+      "yahooAdp": null,
+      "rankSpread": 8,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": null
+    },
+    {
+      "playerName": "Emmett Johnson",
+      "normalizedName": "emmett johnson",
+      "position": "RB",
+      "team": "KC",
+      "aggregateRank": 220.5,
+      "sourceRanks": {
+        "fieldYates": null,
+        "mikeClay": 240,
+        "ryanWeisse": 201
+      },
+      "yahooXRank": 167,
+      "yahooAdp": 167,
+      "rankSpread": 39,
+      "sourceCount": 2,
+      "yahooXRankMinusAggregate": -53.5
+    }
+  ]
+}

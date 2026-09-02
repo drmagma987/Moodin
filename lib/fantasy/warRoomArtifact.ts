@@ -1,4 +1,4 @@
-import warRoomDatasetJson from "@/lib/fantasy/data/warRoomDataset.generated.json";
+import warRoomDatasetJson from "@/lib/fantasy/data/warRoomDataset.generated.json" with { type: "json" };
 import { assertDraftStateMatchesSourceOfTruth } from "@/lib/fantasy/draftState";
 import {
   leagueSourceOfTruth,

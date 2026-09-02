@@ -155,7 +155,15 @@ export type MarketSnapshot = {
   adpSource?: "direct" | "rank-proxy" | "unknown";
   adpProvider?: "fantasypros" | "fantasy-football-calculator" | "manual";
   ecrProvider?: "fantasypros" | "yahoo-editorial" | "manual";
+  /** @deprecated Use yahooXRank. Retained for saved-artifact compatibility. */
   yahooRank?: number;
+  yahooXRank?: number;
+  yahooAdp?: number;
+  aggregateRank?: number;
+  sourceRanks?: Partial<Record<"fieldYates" | "mikeClay" | "ryanWeisse", number>>;
+  rankSpread?: number;
+  marketSourceCount?: number;
+  yahooXRankMinusAggregate?: number;
 };
 
 export type CanonicalPlayer = {
@@ -956,6 +964,8 @@ export type CandidateExplanation = {
   ceilingTierEdge: number;
   positionalComparisonPlayerId: string | null;
   makeItBackProbability: number;
+  makeItBackProbabilityLow: number;
+  makeItBackProbabilityHigh: number;
   valueNow: number;
   valueLater: number;
   vona: number;
@@ -974,6 +984,8 @@ export type CandidateExplanation = {
   structuralScore: number;
   valueGapVsMarket: number;
   tierSurvivalProbability: number;
+  tierSurvivalProbabilityLow: number;
+  tierSurvivalProbabilityHigh: number;
   expectedPositionSelections: number;
   runRisk: "low" | "medium" | "high";
   fragilityScore: number;
@@ -1020,6 +1032,9 @@ export type PositionRunSnapshot = {
   expectedSelectionsBeforeNextTurn: number;
   tierPlayerCount: number;
   tierSurvivalProbability: number;
+  tierSurvivalProbabilityLow: number;
+  tierSurvivalProbabilityHigh: number;
+  marketUncertainty: "normal" | "wide";
   cliffDrop: number;
   headline: string;
   summary: string;
