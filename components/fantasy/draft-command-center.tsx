@@ -47,7 +47,7 @@ import { recordDraftDecision, type DraftDecisionJournalEntry } from "@/lib/fanta
 import { assertDraftRoomFreeze, buildKeeperFingerprint, freezeDraftRoom, type DraftRoomFreeze } from "@/lib/fantasy/draftOperations";
 import { parseScreenshotDraftText, type ScreenshotDraftRecovery } from "@/lib/fantasy/screenshotDraftRecovery";
 import { buildPostDraftActionQueue } from "@/lib/fantasy/postDraftActions";
-import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
+import { leagueSourceOfTruth, leagueSourceOfTruthFingerprint } from "@/lib/fantasy/leagueSourceOfTruth";
 import { buildDraftRefreshCheckpoint, compareDraftRefreshCheckpoints, type DraftRefreshCheckpoint } from "@/lib/fantasy/draftRefreshControl";
 import { DraftRehearsalMode } from "@/components/fantasy/draft-rehearsal-mode";
 import { explainWarRoomRecommendation, warRoomDraftCall, type WarRoomDraftCall } from "@/lib/fantasy/warRoomPresentation";
@@ -830,6 +830,39 @@ export function DraftCommandCenter({
     URL.revokeObjectURL(url);
   }
 
+  function downloadRankingsExport() {
+    const boardByPlayerId = new Map(board.map((entry) => [entry.playerId, entry] as const));
+    const rankings = effectivePersonalBoardOrder.map((playerId, index) => {
+      const candidate = candidateById.get(playerId);
+      const boardEntry = boardByPlayerId.get(playerId);
+      return {
+        rank: index + 1,
+        playerId,
+        fullName: candidate?.player.fullName ?? playerId,
+        team: candidate?.player.team ?? null,
+        position: candidate ? primaryPosition(candidate) : null,
+        modelRank: boardEntry?.boardRank ?? null,
+        yahooXRank: candidate?.market.yahooXRank ?? candidate?.market.yahooRank ?? null,
+      };
+    });
+    const payload = {
+      format: "moodin-fantasy-personal-rankings",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      leagueConfigVersion: leagueSourceOfTruth.version,
+      leagueConfigFingerprint: leagueSourceOfTruthFingerprint,
+      boardFingerprint: currentRefresh.boardFingerprint,
+      playerCount: rankings.length,
+      rankings,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `moodin-fantasy-rankings-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   function restoreDraftBackup() {
     try {
       const parsed = JSON.parse(backupText) as {
@@ -1374,7 +1407,8 @@ export function DraftCommandCenter({
                     const comparison = recommendation.explanation.positionalComparisonPlayerId ? candidateById.get(recommendation.explanation.positionalComparisonPlayerId) : null;
                     const presentation = explainWarRoomRecommendation({ candidate, recommendation, signal, runSnapshot: runSnapshotByPosition.get(primaryPosition(candidate)), positionalComparison: comparison });
                     const call = warRoomDraftCall(liveCall.action, signal);
-                    return <div key={candidate.player.id} className="relative overflow-hidden rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-2 pr-5"><span className="text-[10px] font-black uppercase text-slate-500">#{index + 1}</span><span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black", warRoomCallClasses[call])}>{call}</span></div><div className="mt-2 flex items-baseline gap-2"><p className="truncate font-black">{candidate.player.fullName}</p><span className="shrink-0 text-[11px] text-slate-500">{primaryPosition(candidate)}</span></div><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-amber-200">Why</p><p className="mt-1 text-xs leading-5 text-slate-300">{presentation.driver}: {presentation.whyNow}</p><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">Available next pick</p><p className="mt-1 text-xs font-bold text-white">{presentation.chanceBack}</p>{isMyTurn ? <Button className="mt-2" size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>Drafted by Vaughn</Button> : null}{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
+                    const whyBullets = `${presentation.driver}: ${presentation.whyNow}`.split(/(?<=[.!?])\s+/).filter(Boolean).slice(0, 2);
+                    return <div key={candidate.player.id} className="relative overflow-hidden rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-2 pr-5"><span className="text-[10px] font-black uppercase text-slate-500">#{index + 1}</span><span className={cn("rounded-lg border px-2 py-1 text-[9px] font-black", warRoomCallClasses[call])}>{call}</span></div><div className="mt-2 flex items-baseline gap-2"><p className="truncate font-black">{candidate.player.fullName}</p><span className="shrink-0 text-[11px] text-slate-500">{primaryPosition(candidate)}</span></div><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-amber-200">Why</p><ul className="mt-1 space-y-1 text-xs leading-4 text-slate-300">{whyBullets.map((bullet) => <li key={bullet} className="flex gap-1.5"><span className="text-amber-200">•</span><span>{bullet}</span></li>)}</ul><p className="mt-2 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-200">Available next pick</p><p className="mt-1 text-xs font-bold text-white">{presentation.chanceBack}</p>{isMyTurn ? <Button className="mt-2" size="sm" variant="outline" disabled={!roomFreeze} onClick={() => recordPick(candidate)}>Drafted by Vaughn</Button> : null}{favoriteById.has(candidate.player.id) ? <VjEarmark compact /> : null}</div>;
                   })}
                 </div>
               </section>
@@ -1397,9 +1431,9 @@ export function DraftCommandCenter({
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Your draft order</p>
                     <h3 className="mt-1 text-xl font-black">Reorder the board around your preferences.</h3>
-                    <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Drag rows on desktop or use the arrow controls on mobile. Your order saves on this device and remains separate from the model that powers the top-five recommendations.</p>
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Drag rows on desktop or use the arrow controls on mobile. Export this ordered file from Vercel when you are done so it can be applied to your localhost draft board.</p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={resetPersonalBoard}>Reset to model order</Button>
+                  <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={downloadRankingsExport}>Export rankings</Button><Button variant="outline" size="sm" onClick={resetPersonalBoard}>Reset to model order</Button></div>
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
                   <label className="relative">
@@ -1520,6 +1554,10 @@ export function DraftCommandCenter({
                   {myRosterPlayers.length > 0 ? myRosterPlayers.slice(0, 12).map((candidate) => <div key={candidate.player.id} className="flex items-center justify-between rounded-xl bg-black/20 px-3 py-2 text-sm"><span className="truncate font-bold">{candidate.player.fullName}</span><span className="ml-2 text-xs text-slate-500">{primaryPosition(candidate)}</span></div>) : <p className="rounded-xl border border-dashed border-white/10 p-3 text-xs text-slate-500">No rostered players recorded yet.</p>}
                 </div>
               </section>
+              <section className="rounded-[28px] border border-cyan-300/20 bg-[#0a1727]/92 p-4">
+                <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">Quick player board</p><p className="mt-1 text-sm text-slate-400">Top available by current model</p></div><span className="text-[10px] font-black uppercase text-slate-500">{remainingDraftBoard.length} available</span></div>
+                <div className="mt-3 max-h-80 space-y-1.5 overflow-y-auto pr-1">{remainingDraftBoard.slice(0, 20).map(({ candidate, recommendation }) => <button key={candidate.player.id} onClick={() => setSelectedPlayerId(candidate.player.id)} className="flex w-full items-center gap-2 rounded-xl bg-black/20 px-2.5 py-2 text-left hover:bg-white/[0.06]"><span className="w-6 text-center text-xs font-black text-slate-500">#{recommendationRankById.get(candidate.player.id)}</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-black">{candidate.player.fullName}</span><span className="text-[10px] text-slate-500">{primaryPosition(candidate)} · ADP {candidate.market.yahooAdp ?? candidate.market.adp ?? "—"}</span></span><span className="shrink-0 text-[10px] font-black text-cyan-100">{Math.round(recommendation.explanation.makeItBackProbability * 100)}% back</span></button>)}{remainingDraftBoard.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-3 text-xs text-slate-500">No available players match the current filters.</p> : null}</div>
+              </section>
               <section className="rounded-[28px] border border-violet-300/20 bg-[#0a1727]/92 p-4">
                 <div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200">Live position pressure</p><p className="mt-1 text-sm text-slate-400">{wrap.simulations} roster-aware wrap simulations</p></div><Zap className="h-5 w-5 text-violet-300" /></div>
                 <div className="mt-3 space-y-2">
@@ -1527,7 +1565,7 @@ export function DraftCommandCenter({
                 </div>
               </section>
               <section className="rounded-[28px] border border-amber-300/20 bg-[#0a1727]/92 p-4"><div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Favorites still available</p><p className="mt-1 text-sm text-slate-400">Your conviction, in draft order</p></div><Star className="h-5 w-5 fill-amber-300 text-amber-300" /></div><div className="mt-3 space-y-2">{favoriteCards.filter(({ candidate }) => availableIds.has(candidate.player.id)).slice(0, 10).map(({ favorite, candidate, board: entry }) => <button key={candidate.player.id} onClick={() => recordPick(candidate)} className="flex w-full items-center gap-3 rounded-xl bg-black/20 p-3 text-left"><span className="text-sm font-black text-slate-500">#{entry?.boardRank}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-black">{candidate.player.fullName}</span><span className="text-[11px] text-slate-500">{primaryPosition(candidate)} · ADP {candidate.market.adp}</span></span><span className={cn("rounded-lg border px-2 py-1 text-[10px] font-black", priorityMeta[favorite.priority].color)}>{priorityMeta[favorite.priority].short}</span></button>)}</div></section>
-              <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Recent picks</p><div className="mt-3 space-y-2">{draftState.drafted.slice(0, 10).map((pick) => { const candidate = candidateById.get(pick.playerId); return <div key={`${pick.overallPick}-${pick.playerId}`} className="flex gap-3 rounded-xl bg-black/20 p-2.5 text-sm"><span className="w-8 font-black text-slate-500">{pick.overallPick}</span><span className="min-w-0"><span className="block truncate font-bold">{candidate?.player.fullName ?? pick.playerId}</span><span className="text-xs text-slate-500">{teamLabel(pick.teamId)}</span></span></div>; })}{draftState.drafted.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-500">No live picks recorded yet. Your progress will save automatically on this device.</p> : null}</div></section>
+              <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4"><div className="flex items-center justify-between"><p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">Draft pick results</p><span className="text-[10px] font-black uppercase text-slate-500">{draftState.drafted.length} picks</span></div><div className="mt-3 max-h-96 space-y-2 overflow-y-auto pr-1">{[...draftState.drafted].reverse().map((pick) => { const candidate = candidateById.get(pick.playerId); return <div key={`${pick.overallPick}-${pick.playerId}`} className="flex gap-3 rounded-xl bg-black/20 p-2.5 text-sm"><span className="w-8 font-black text-slate-500">{pick.overallPick}</span><span className="min-w-0"><span className="block truncate font-bold">{candidate?.player.fullName ?? pick.playerId}</span><span className="text-xs text-slate-500">{teamLabel(pick.teamId)} · {pick.eventType === "keeper" ? "Keeper" : pick.source}</span></span></div>; })}{draftState.drafted.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-500">No live picks recorded yet. Your progress will save automatically on this device.</p> : null}</div></section>
               {decisionJournal.length > 0 ? <section className="rounded-[28px] border border-emerald-300/20 bg-[#0a1727]/92 p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200">Decision journal</p><p className="mt-1 text-sm text-slate-400">What the board knew at your picks</p><div className="mt-3 space-y-2">{decisionJournal.slice(0, 4).map((entry) => <div key={entry.id} className="rounded-xl bg-black/20 p-3 text-xs"><p className="font-black">Pick {entry.overallPick} · {candidateById.get(entry.selectedPlayerId)?.player.fullName ?? entry.selectedPlayerId}</p><p className="mt-1 text-slate-500">Top recommendation: {entry.recommendations[0] ? candidateById.get(entry.recommendations[0].playerId)?.player.fullName : "—"}</p></div>)}</div></section> : null}
               {myRosterPlayers.length >= draftState.league.rosterSlots.filter((slot) => slot !== "IR").length ? <section className="rounded-[28px] border border-amber-300/20 bg-[#0a1727]/92 p-4"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Roster action queue</p><p className="mt-1 text-sm text-slate-400">Triggers and actions—not a roster grade</p><div className="mt-3 space-y-2">{postDraftActions.map((action) => <div key={action.id} className="rounded-xl border border-white/[0.07] bg-black/20 p-3"><p className="text-sm font-black">{action.title}</p><p className="mt-1 text-xs text-amber-100">Trigger: {action.trigger}</p><p className="mt-1 text-xs text-slate-300">{action.action}</p><p className="mt-1 text-[11px] text-slate-500">{action.rationale}</p></div>)}</div></section> : null}
             </aside>
