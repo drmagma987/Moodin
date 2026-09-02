@@ -930,3 +930,18 @@ If checks cannot be run, say so clearly.
   - simplified setup so the official ordered team list is the sole team-name/ID source and retained automatic snake/keeper-aware pick ownership
   - regenerated a same-day 473-player live artifact and added permanent Jalen Hurts/Trevor Lawrence plus two-TE duplicate-position regressions
 - Verified with 122/122 fantasy tests, canonical integrity, non-freezing draft-day preflight, TypeScript, lint (existing bachelor-party font warning only), production build, local visual smoke testing, and `git diff --check`.
+
+### 2026-09-02
+
+- Added profile-completeness-aware fantasy calibration:
+  - every player now receives a 0-100 completeness score spanning projections, market coverage, historical usage, expected opportunity, current context, identity, and applicable research
+  - positive and negative player-specific adjustments are scaled symmetrically from 35% to 100% strength based on that score
+  - historical workload uncertainty is now distinct from verified competition evidence, preventing short samples such as Sam LaPorta's from generating unsupported competition-pressure claims
+  - college research now reconciles stale rookie flags before calibration, correcting Carnell Tate, Jeremiyah Love, and Jadarian Price in the live artifact
+  - canonical integrity now rejects invalid completeness values, rookie-research identity conflicts, and unsupported competition-pressure claims
+- Regenerated a same-day 473-player live War Room artifact and verified 125/125 fantasy tests, canonical integrity, non-freezing draft-day preflight, TypeScript, and lint (existing bachelor-party font warning only).
+- Aligned Rehearse with the improved War Room presentation:
+  - both surfaces now lead with the same five equal-weight option framing and quick-hit why/next-pick availability treatment
+  - Rehearse moves the current roster and live position pressure into the right rail, hides the retired top-remaining-tier block, and retains a scrollable full pick history
+  - Rehearse now receives the browser-adjusted personal ranking order and exposes the same Recommended, Model, Yahoo XRank, Yahoo ADP, Aggregate, and Personal board sorts
+- Verified the parity pass with 125/125 fantasy tests, TypeScript, lint (existing bachelor-party font warning only), and a successful production build.

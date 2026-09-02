@@ -1392,8 +1392,8 @@ export function DraftCommandCenter({
 
               <section className="rounded-[28px] border border-cyan-300/25 bg-[#0a1727]/92 p-4 sm:p-5">
                 <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">On the clock</p><h3 className="mt-1 text-xl font-black">{isMyTurn ? "Best pick, with the next few exits" : "Best options for your next pick"}</h3></div>
-                  <p className="text-xs text-slate-500">One compact recommendation view · updates after every pick</p>
+                  <div><p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-300">On the clock</p><h3 className="mt-1 text-xl font-black">Five equal-weight options</h3><p className="mt-1 text-xs text-slate-400">Compare the main why and the chance each player reaches your next pick.</p></div>
+                  <p className="text-xs text-slate-500">Updates after every pick</p>
                 </div>
 
                 {isMyTurn ? <div className={cn("mt-3 rounded-2xl border px-3 py-2", turnContext.mode === "long-gap" ? "border-rose-300/25 bg-rose-300/[0.07]" : turnContext.mode === "pair-building" ? "border-emerald-300/25 bg-emerald-300/[0.07]" : "border-white/10 bg-black/20")}><p className={cn("text-[10px] font-black uppercase tracking-[0.16em]", turnContext.mode === "long-gap" ? "text-rose-200" : turnContext.mode === "pair-building" ? "text-emerald-200" : "text-slate-300")}>{turnContext.label}</p><p className="mt-1 text-xs leading-5 text-slate-300">{turnContext.summary}</p></div> : null}
@@ -1573,7 +1573,7 @@ export function DraftCommandCenter({
         ) : null}
 
         {workspace === "rehearsal" ? (
-          <DraftRehearsalMode candidates={candidates} initialDraftState={initialDraftState} favoriteIds={favorites.map((favorite) => favorite.playerId)} />
+          <DraftRehearsalMode candidates={candidates} initialDraftState={initialDraftState} favoriteIds={favorites.map((favorite) => favorite.playerId)} personalBoardOrder={effectivePersonalBoardOrder} />
         ) : null}
 
         {workspace === "setup" ? (

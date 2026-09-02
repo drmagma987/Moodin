@@ -36,7 +36,7 @@ import {
 } from "@/lib/fantasy/leagueSourceOfTruth";
 import { calibrateDraftCandidates } from "@/lib/fantasy/projectionCalibration";
 import { fetchSleeperMarketSignals } from "@/lib/fantasy/sleeper";
-import { applyPlayerContexts, removeQualitativeContexts } from "@/lib/fantasy/playerContext";
+import { applyPlayerContexts, reconcileRookieIdentity, removeQualitativeContexts } from "@/lib/fantasy/playerContext";
 import { qualitativeContextSnapshotMeta } from "@/lib/fantasy/qualitativeContext";
 import {
   applySeasonMarketToCandidates,
@@ -637,14 +637,26 @@ export async function getDraftLabDataset(mode: DraftBoardMode = "working"): Prom
           .filter((profile) => profile.rookieSeason === seasonEvidence.activeSeason || profile.draftYear === seasonEvidence.activeSeason)
           .map((profile) => profile.displayName)
       : [];
-    const contextApplied = applyPlayerContexts(yahooBlended.candidates, undefined, {
-      rookieNames: currentRookieNames,
+    const collegeRookieNames = collegeResearchMeta.rookieSeason === seasonEvidence.activeSeason
+      ? collegeResearchInputs
+          .filter((input) => input.lane === "rookie")
+          .map((input) => input.playerName)
+      : [];
+    const rookieReconciled = reconcileRookieIdentity(
+      yahooBlended.candidates,
+      [...currentRookieNames, ...collegeRookieNames],
+    );
+    const contextApplied = applyPlayerContexts(rookieReconciled.candidates, undefined, {
+      rookieNames: [...currentRookieNames, ...collegeRookieNames],
       sleeperPlayers: sleeperResult.ok ? sleeperResult.value.players.values() : [],
     });
     const calibrationEvidence = {
       nflverseByPlayerId: seasonEvidence.nflverseByPlayerId,
       ffOpportunityByPlayerId: seasonEvidence.ffOpportunityByPlayerId,
       sleeperTrendsByPlayerId: sleeperResult.ok ? sleeperResult.value.trends : undefined,
+      researchProfileNames: new Set(
+        collegeResearchInputs.map((input) => input.playerName.toLowerCase().replace(/[^a-z0-9]/g, "")),
+      ),
     };
     const baselineCandidates = calibrateDraftCandidates(
       removeQualitativeContexts(contextApplied.candidates),

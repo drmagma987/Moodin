@@ -57,8 +57,9 @@ function normalizeName(value: string) {
 function mergedRefreshSnapshot(
   current: CandidateRefreshSnapshot | undefined,
   entry: ApprovedRankingRefreshEntry,
+  appliedDelta: number,
 ): CandidateRefreshSnapshot {
-  const netImpact = Number(((current?.netImpact ?? 0) + entry.medianPointDelta).toFixed(2));
+  const netImpact = Number(((current?.netImpact ?? 0) + appliedDelta).toFixed(2));
   const status = netImpact >= 2.5 ? "rising" : netImpact <= -2.5 ? "falling" : current?.status ?? "steady";
   return {
     status,
@@ -68,12 +69,12 @@ function mergedRefreshSnapshot(
     lastUpdatedAt: approvedRankingRefreshMeta.approvedAt,
     adjustments: [
       ...(current?.adjustments ?? []),
-      ...(entry.medianPointDelta === 0 ? [] : [{ label: "Approved residual", delta: entry.medianPointDelta, reason: entry.rationale }]),
+      ...(appliedDelta === 0 ? [] : [{ label: "Approved residual", delta: appliedDelta, reason: entry.rationale }]),
     ].slice(-4),
     headlines: [entry.annotation, ...(current?.headlines ?? [])].slice(0, 3),
-    summary: entry.medianPointDelta === 0
+    summary: appliedDelta === 0
       ? `${entry.annotation} Annotation only; the fresh projection already carries the numerical effect.`
-      : `${entry.annotation} Approved residual: ${entry.medianPointDelta > 0 ? "+" : ""}${entry.medianPointDelta.toFixed(2)} median points.`,
+      : `${entry.annotation} Completeness-scaled approved residual: ${appliedDelta > 0 ? "+" : ""}${appliedDelta.toFixed(2)} median points.`,
   };
 }
 
@@ -85,7 +86,8 @@ export function applyApprovedRankingRefresh(candidates: DraftCandidate[]) {
     const entry = entriesByName.get(key);
     if (!entry) return candidate;
     matches.set(key, (matches.get(key) ?? 0) + 1);
-    const delta = entry.medianPointDelta;
+    const adjustmentScale = candidate.signals?.profileCompleteness?.adjustmentScale ?? 1;
+    const delta = Number((entry.medianPointDelta * adjustmentScale).toFixed(2));
     return {
       ...candidate,
       projection: delta === 0 ? candidate.projection : {
@@ -98,7 +100,7 @@ export function applyApprovedRankingRefresh(candidates: DraftCandidate[]) {
       },
       signals: candidate.signals ? {
         ...candidate.signals,
-        refresh: mergedRefreshSnapshot(candidate.signals.refresh, entry),
+        refresh: mergedRefreshSnapshot(candidate.signals.refresh, entry, delta),
         notes: [
           ...candidate.signals.notes,
           `[Approved refresh] ${entry.annotation} ${entry.rationale}`,

@@ -72,6 +72,25 @@ function normalizeName(value: string) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+export function reconcileRookieIdentity(
+  candidates: DraftCandidate[],
+  rookiePlayerNames: Iterable<string>,
+) {
+  const rookieNames = new Set(Array.from(rookiePlayerNames, normalizeName));
+  let appliedCount = 0;
+  const reconciled = candidates.map((candidate) => {
+    if (candidate.player.rookie || !rookieNames.has(normalizeName(candidate.player.fullName))) {
+      return candidate;
+    }
+    appliedCount += 1;
+    return {
+      ...candidate,
+      player: { ...candidate.player, rookie: true },
+    } satisfies DraftCandidate;
+  });
+  return { candidates: reconciled, appliedCount };
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" ? value as Record<string, unknown> : null;
 }

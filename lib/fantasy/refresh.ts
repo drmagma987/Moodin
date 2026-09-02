@@ -202,7 +202,9 @@ function buildRefreshSnapshot(
   }
 
   const adjustments: CandidateRefreshAdjustment[] = [];
+  const adjustmentScale = candidate.signals?.profileCompleteness?.adjustmentScale ?? 1;
   let netImpact = 0;
+  let rawNetImpact = 0;
   let confidencePenalty = 0;
   let weightedMagnitude = 0;
   const sortedSignals = [...signals].sort(
@@ -212,11 +214,13 @@ function buildRefreshSnapshot(
   for (const signal of sortedSignals) {
     const config = CATEGORY_CONFIG[signal.category];
     const weight = impactWeight(signal, now);
-    const delta = Number((config.medianMultiplier * weight).toFixed(2));
-    const floorDelta = Number((config.floorMultiplier * weight).toFixed(2));
+    const rawDelta = config.medianMultiplier * weight;
+    const delta = Number((config.medianMultiplier * weight * adjustmentScale).toFixed(2));
+    const floorDelta = Number((config.floorMultiplier * weight * adjustmentScale).toFixed(2));
     netImpact += delta;
-    weightedMagnitude += Math.abs(delta);
-    confidencePenalty += config.confidencePenaltyMultiplier * weight;
+    rawNetImpact += rawDelta;
+    weightedMagnitude += Math.abs(rawDelta);
+    confidencePenalty += config.confidencePenaltyMultiplier * weight * adjustmentScale;
     adjustments.push({
       label: config.label,
       delta,
@@ -234,11 +238,11 @@ function buildRefreshSnapshot(
   const positiveSignals = adjustments.filter((adjustment) => adjustment.delta > 0).length;
   const negativeSignals = adjustments.filter((adjustment) => adjustment.delta < 0).length;
   const status =
-    positiveSignals > 0 && negativeSignals > 0 && Math.abs(netImpact) <= 2.8
+    positiveSignals > 0 && negativeSignals > 0 && Math.abs(rawNetImpact) <= 2.8
       ? "volatile"
-      : netImpact >= 2.5
+      : rawNetImpact >= 2.5
         ? "rising"
-        : netImpact <= -2.5
+        : rawNetImpact <= -2.5
           ? "falling"
           : "steady";
   const freshnessScore = Math.round(

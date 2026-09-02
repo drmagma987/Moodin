@@ -428,6 +428,7 @@ export type CandidateVegasSnapshot = {
 
 export type ProjectionSignalSnapshot = {
   sourceCount: number;
+  profileCompleteness: CandidateProfileCompletenessSnapshot;
   evidenceConfidence: CandidateEvidenceConfidenceSnapshot;
   situation: CandidateSituationAssessment;
   qualitativeAdjustment: CandidateQualitativeAdjustmentSnapshot;
@@ -455,6 +456,22 @@ export type ProjectionSignalSnapshot = {
   seasonMarket?: CandidateSeasonMarketSnapshot;
   vegas?: CandidateVegasSnapshot;
   notes: string[];
+};
+
+export type CandidateProfileCompletenessSnapshot = {
+  score: number;
+  adjustmentScale: number;
+  label: "complete" | "usable" | "limited";
+  components: {
+    projection: number;
+    market: number;
+    historicalUsage: number;
+    expectedOpportunity: number;
+    currentContext: number;
+    identity: number;
+    research: number;
+  };
+  summary: string;
 };
 
 export type CandidateAdvancedUsageSnapshot = {
@@ -868,7 +885,10 @@ export type CandidateExpectedOpportunitySnapshot = {
 export type CandidateRoleSecuritySnapshot = {
   label: "secure" | "balanced" | "fragile" | "unknown";
   securityScore: number;
-  competitionPressure: number;
+  workloadUncertainty: number;
+  competitionPressure: number | null;
+  competitionEvidence: boolean;
+  evidenceGames: number;
   roleShare: number | null;
   adjustedMedianDelta: number;
   stabilityImpact: number;

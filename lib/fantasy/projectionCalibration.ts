@@ -8,6 +8,7 @@ import { buildScoringProfileSignal } from "@/lib/fantasy/scoringProfile";
 import type { SleeperTrendSnapshot } from "@/lib/fantasy/sleeper";
 import type {
   CandidateExpectedOpportunitySnapshot,
+  CandidateProfileCompletenessSnapshot,
   CandidateRegressionSnapshot,
   CandidateRoleSecuritySnapshot,
   CandidateScoringProfileSnapshot,
@@ -41,6 +42,84 @@ function clamp(value: number, min: number, max: number) {
 
 function primaryPosition(candidate: DraftCandidate): PlayerPosition {
   return candidate.player.positions[0] ?? "WR";
+}
+
+function buildProfileCompleteness(input: {
+  candidate: DraftCandidate;
+  nflverseStats?: NflversePlayerSeasonStats;
+  ffOpportunityStats?: FfOpportunitySeasonStats;
+  sleeperTrend?: SleeperTrendSnapshot;
+  hasResearchProfile?: boolean;
+}): CandidateProfileCompletenessSnapshot {
+  const { candidate, nflverseStats, ffOpportunityStats, sleeperTrend, hasResearchProfile } = input;
+  const projectedValues = Object.values(candidate.projection.stats)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const projection = projectedValues.length >= 5 ? 25 : projectedValues.length >= 2 ? 18 : 10;
+  const market = Math.min(15,
+    (candidate.market.ecr > 0 ? 5 : 0) +
+    (candidate.market.adp > 0 ? 3 : 0) +
+    (candidate.market.expertStdDev !== null && candidate.market.expertStdDev !== undefined ? 2 : 0) +
+    (candidate.seasonMarket ? 3 : 0) +
+    (candidate.vegas ? 2 : 0) +
+    (sleeperTrend ? 2 : 0),
+  );
+  const historicalUsage = nflverseStats
+    ? Math.round(20 * clamp(nflverseStats.games / 15, 0.2, 1))
+    : 0;
+  const expectedOpportunity = ffOpportunityStats
+    ? Math.min(15, 9 + Math.round(6 * clamp(ffOpportunityStats.weeks / 15, 0, 1)))
+    : 0;
+  const context = candidate.context;
+  const knownContextFields = context
+    ? [
+        context.currentRole !== "unknown",
+        context.healthStatus !== "unknown",
+        context.trackRecord !== "unknown",
+        context.roleContinuity !== "unknown",
+        context.environment !== "uncertain",
+      ].filter(Boolean).length
+    : 0;
+  const currentContext = Math.min(15,
+    knownContextFields * 2 +
+    (context && context.source !== "inferred-default" ? 3 : 0) +
+    (context?.qualitative?.evidence.length ? 2 : 0),
+  );
+  const identity = Math.min(10,
+    (candidate.player.externalIds.nflverse ? 4 : 0) +
+    (candidate.player.externalIds.sleeper ? 3 : 0) +
+    (candidate.player.team ? 2 : 0) +
+    (candidate.player.rookie || candidate.player.age !== null ? 1 : 0),
+  );
+  const research = hasResearchProfile ? 15 : 0;
+  const score = Math.round(clamp(
+    projection + market + historicalUsage + expectedOpportunity + currentContext + identity + research,
+    0,
+    100,
+  ));
+  const adjustmentScale = Number((0.35 + score * 0.0065).toFixed(2));
+  const label = score >= 80 ? "complete" : score >= 58 ? "usable" : "limited";
+  return {
+    score,
+    adjustmentScale,
+    label,
+    components: { projection, market, historicalUsage, expectedOpportunity, currentContext, identity, research },
+    summary: `Profile completeness is ${score}/100; player-specific adjustments apply at ${Math.round(adjustmentScale * 100)}% strength.`,
+  };
+}
+
+function scaledDelta(value: number, scale: number) {
+  return Number((value * scale).toFixed(2));
+}
+
+function scaleSignalAdjustments<T extends { adjustedMedianDelta: number; stabilityImpact: number }>(
+  signal: T,
+  scale: number,
+): T {
+  return {
+    ...signal,
+    adjustedMedianDelta: scaledDelta(signal.adjustedMedianDelta, scale),
+    stabilityImpact: scaledDelta(signal.stabilityImpact, scale),
+  };
 }
 
 function exactProjectionScore(candidate: DraftCandidate, rules: FantasyScoringRules) {
@@ -601,7 +680,11 @@ function buildFailureModes(candidate: DraftCandidate) {
     failures.push("Expected-opportunity baseline is not strong enough to justify overpaying.");
   }
   if (signals.roleSecurity.label === "fragile") {
-    failures.push("Committee or target-competition pressure could erode the weekly floor fast.");
+    failures.push(
+      signals.roleSecurity.competitionEvidence
+        ? "Verified role competition could erode the weekly floor fast."
+        : "The historical workload profile may not support the projected weekly floor.",
+    );
   }
   if (signals.scoringProfile.label === "touchdown-fragile") {
     failures.push("Too much of the scoring case depends on touchdown efficiency holding.");
@@ -767,6 +850,7 @@ type CalibrationContext = {
   ffOpportunityByPlayerId?: Map<string, FfOpportunitySeasonStats>;
   sleeperTrendsByPlayerId?: Map<string, SleeperTrendSnapshot>;
   useQualitativeContext?: boolean;
+  researchProfileNames?: Set<string>;
 };
 
 export function calibrateDraftCandidates(
@@ -837,7 +921,7 @@ export function calibrateDraftCandidates(
       opportunityRaw === null
         ? null
         : opportunityScoreFromZ(opportunityZScore!);
-    const opportunityDelta =
+    const rawOpportunityDelta =
       opportunityScore === null
         ? 0
         : Number(
@@ -846,28 +930,40 @@ export function calibrateDraftCandidates(
     const sleeperTrend = candidate.player.externalIds.sleeper
       ? context?.sleeperTrendsByPlayerId?.get(candidate.player.externalIds.sleeper)
       : undefined;
-    const sleeperMomentumDelta = momentumDelta(sleeperTrend, position);
-    const expectedOpportunity = buildExpectedOpportunitySignal({
+    const rawSleeperMomentumDelta = momentumDelta(sleeperTrend, position);
+    const profileCompleteness = buildProfileCompleteness({
+      candidate,
+      nflverseStats,
+      ffOpportunityStats,
+      sleeperTrend,
+      hasResearchProfile: context?.researchProfileNames?.has(
+        candidate.player.fullName.toLowerCase().replace(/[^a-z0-9]/g, ""),
+      ),
+    });
+    const adjustmentScale = profileCompleteness.adjustmentScale;
+    const opportunityDelta = scaledDelta(rawOpportunityDelta, adjustmentScale);
+    const sleeperMomentumDelta = scaledDelta(rawSleeperMomentumDelta, adjustmentScale);
+    const expectedOpportunity = scaleSignalAdjustments(buildExpectedOpportunitySignal({
       candidate,
       rules,
       nflverseStats,
       ffOpportunityStats,
-    });
-    const roleSecurity = buildRoleSecuritySignal({
+    }), adjustmentScale);
+    const roleSecurity = scaleSignalAdjustments(buildRoleSecuritySignal({
       candidate,
       nflverseStats,
-    });
-    const scoringProfile = buildScoringProfileSignal({
+    }), adjustmentScale);
+    const scoringProfile = scaleSignalAdjustments(buildScoringProfileSignal({
       candidate,
       rules,
       nflverseStats,
-    });
-    const regression = buildRegressionSignal({
+    }), adjustmentScale);
+    const regression = scaleSignalAdjustments(buildRegressionSignal({
       candidate,
       rules,
       nflverseStats,
       ffOpportunityStats,
-    });
+    }), adjustmentScale);
     const advancedUsage = buildAdvancedUsageSnapshot({
       position,
       stats: nflverseStats,
@@ -891,11 +987,19 @@ export function calibrateDraftCandidates(
       roleSecurity.adjustedMedianDelta +
       scoringProfile.adjustedMedianDelta +
       regression.adjustedMedianDelta;
-    const qualitativeAdjustment = buildQualitativeAdjustment(
+    const rawQualitativeAdjustment = buildQualitativeAdjustment(
       candidate,
       medianBeforeQualitative,
       context?.useQualitativeContext !== false,
     );
+    const qualitativeAdjustment = {
+      ...rawQualitativeAdjustment,
+      percentDelta: scaledDelta(rawQualitativeAdjustment.percentDelta, adjustmentScale),
+      pointsDelta: scaledDelta(rawQualitativeAdjustment.pointsDelta, adjustmentScale),
+      summary: rawQualitativeAdjustment.applied
+        ? `${rawQualitativeAdjustment.summary} Applied at ${Math.round(adjustmentScale * 100)}% strength for profile completeness.`
+        : rawQualitativeAdjustment.summary,
+    };
     const calibratedMedian = medianBeforeQualitative + qualitativeAdjustment.pointsDelta;
     const calibratedRange = buildCalibratedRange(
       calibratedMedian,
@@ -929,6 +1033,9 @@ export function calibrateDraftCandidates(
       situation,
     });
     const notes: string[] = [];
+    if (profileCompleteness.adjustmentScale < 0.9) {
+      notes.push(profileCompleteness.summary);
+    }
     if (opportunityScore !== null && opportunityScore >= 72) {
       notes.push(`Strong ${nflverseStats?.games ?? 0}-game nflverse role prior.`);
     } else if (opportunityScore !== null && opportunityScore <= 35) {
@@ -974,6 +1081,7 @@ export function calibrateDraftCandidates(
         (candidate.seasonMarket ? 1 : 0) +
         (candidate.vegas ? 1 : 0) +
         (sleeperTrend ? 1 : 0),
+      profileCompleteness,
       evidenceConfidence,
       situation,
       qualitativeAdjustment,

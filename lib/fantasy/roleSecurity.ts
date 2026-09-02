@@ -33,7 +33,7 @@ function roleShareForPosition(position: PlayerPosition, stats: NflversePlayerSea
 function buildDrivers(input: {
   position: PlayerPosition;
   label: CandidateRoleSecuritySnapshot["label"];
-  competitionPressure: number;
+  competitionEvidence: boolean;
   roleShare: number | null;
   games: number;
   rookie: boolean;
@@ -47,7 +47,11 @@ function buildDrivers(input: {
         : "Role concentration suggests the player is not living in a messy committee.",
     );
   } else if (input.label === "fragile") {
-    drivers.push("Competition pressure looks real enough that weekly role slippage would matter.");
+    drivers.push(
+      input.competitionEvidence
+        ? "Current player-specific evidence identifies material role competition."
+        : "Historical workload evidence is thin enough to lower the weekly floor.",
+    );
   }
 
   if (input.roleShare !== null && input.roleShare >= 0.27) {
@@ -72,16 +76,22 @@ export function buildRoleSecuritySignal(input: {
 }) {
   const { candidate, nflverseStats } = input;
   const position = primaryPosition(candidate);
+  const competitionEvidence = candidate.context?.currentRole === "competition";
 
   if (!nflverseStats || nflverseStats.games <= 0 || !["QB", "RB", "WR", "TE"].includes(position)) {
     return {
       label: "unknown",
       securityScore: 50,
-      competitionPressure: 50,
+      workloadUncertainty: 50,
+      competitionPressure: competitionEvidence ? 65 : null,
+      competitionEvidence,
+      evidenceGames: 0,
       roleShare: null,
       adjustedMedianDelta: 0,
       stabilityImpact: 0,
-      summary: "Role-security layer is not active for this profile yet.",
+      summary: competitionEvidence
+        ? "Current context identifies competition, but historical workload evidence is unavailable."
+        : "Historical workload evidence is unavailable, so no role adjustment is applied.",
       drivers: [],
     } satisfies CandidateRoleSecuritySnapshot;
   }
@@ -100,7 +110,7 @@ export function buildRoleSecuritySignal(input: {
     position === "RB" && nflverseStats.targetShare < 0.075 ? 8 : 0;
   const rbCarryPenalty =
     position === "RB" && nflverseStats.carries / games < 12 ? 6 : 0;
-  const securityScore = Math.round(
+  const rawSecurityScore = Math.round(
     clamp(
       (roleShare ?? 0.18) * 170 +
         touchesPerGame * (position === "QB" ? 1.05 : position === "RB" ? 2.1 : 2.6) +
@@ -114,12 +124,27 @@ export function buildRoleSecuritySignal(input: {
       96,
     ),
   );
-  const competitionPressure = Math.round(clamp(100 - securityScore + (position === "RB" ? 6 : 0), 8, 94));
+  const sampleReliability = clamp(games / 14, 0.35, 1);
+  const contextBonus = candidate.context?.currentRole === "locked-starter"
+    ? 8
+    : candidate.context?.currentRole === "projected-starter"
+      ? 3
+      : 0;
+  const trackRecordBonus = candidate.context?.trackRecord === "established" ? 6 : 0;
+  const securityScore = Math.round(clamp(
+    50 + (rawSecurityScore - 50) * sampleReliability + contextBonus + trackRecordBonus,
+    12,
+    96,
+  ));
+  const workloadUncertainty = Math.round(clamp(100 - securityScore, 8, 88));
+  const competitionPressure = competitionEvidence
+    ? Math.round(clamp(62 + (position === "RB" ? 8 : 0), 62, 86))
+    : null;
 
   let label: CandidateRoleSecuritySnapshot["label"] = "balanced";
-  if (securityScore >= 69 && competitionPressure <= 34) {
+  if (securityScore >= 69 && !competitionEvidence) {
     label = "secure";
-  } else if (securityScore <= 46 || competitionPressure >= 58) {
+  } else if (competitionEvidence || (securityScore <= 46 && games >= 12)) {
     label = "fragile";
   }
 
@@ -127,18 +152,18 @@ export function buildRoleSecuritySignal(input: {
     label === "secure"
       ? Number(clamp((securityScore - 58) * 0.11, 0.8, 4.2).toFixed(2))
       : label === "fragile"
-        ? Number((-clamp((competitionPressure - 48) * 0.12, 0.9, 4.8)).toFixed(2))
+        ? Number((-clamp(((competitionPressure ?? workloadUncertainty) - 48) * 0.12, 0.9, 4.8)).toFixed(2))
         : 0;
   const stabilityImpact =
     label === "secure"
-      ? Number(clamp((securityScore - competitionPressure) * 0.06, 0.8, 4.8).toFixed(2))
+      ? Number(clamp((securityScore - workloadUncertainty) * 0.06, 0.8, 4.8).toFixed(2))
       : label === "fragile"
-        ? Number((-clamp((competitionPressure - securityScore) * 0.07, 0.8, 5.4)).toFixed(2))
+        ? Number((-clamp(((competitionPressure ?? workloadUncertainty) - securityScore) * 0.07, 0.8, 5.4)).toFixed(2))
         : 0;
   const drivers = buildDrivers({
     position,
     label,
-    competitionPressure,
+    competitionEvidence,
     roleShare,
     games,
     rookie: candidate.player.rookie,
@@ -147,13 +172,18 @@ export function buildRoleSecuritySignal(input: {
     label === "secure"
       ? `${candidate.player.fullName} has relatively secure role evidence for this price range, so the weekly workload is less likely to evaporate.`
       : label === "fragile"
-        ? `${candidate.player.fullName} is carrying enough competition pressure that the median should not be treated like locked-in workload.`
-        : `${candidate.player.fullName} has a middling role-security read right now.`;
+        ? competitionEvidence
+          ? `${candidate.player.fullName} has current player-specific competition evidence, so the workload should not be treated as locked in.`
+          : `${candidate.player.fullName} has a fragile historical workload profile, though that is not itself evidence of current competition.`
+        : `${candidate.player.fullName} has a balanced historical workload-security read right now.`;
 
   return {
     label,
     securityScore,
+    workloadUncertainty,
     competitionPressure,
+    competitionEvidence,
+    evidenceGames: games,
     roleShare: roleShare === null ? null : Number(roleShare.toFixed(3)),
     adjustedMedianDelta,
     stabilityImpact,

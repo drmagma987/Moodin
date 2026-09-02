@@ -31,8 +31,10 @@ import { buildEvidenceConfidence } from "@/lib/fantasy/evidenceConfidence";
 import {
   applyPlayerContexts,
   assessPlayerSituation,
+  reconcileRookieIdentity,
   removeQualitativeContexts,
 } from "@/lib/fantasy/playerContext";
+import { buildRoleSecuritySignal } from "@/lib/fantasy/roleSecurity";
 import { getQualitativeContext } from "@/lib/fantasy/qualitativeContext";
 import { buildContextImpactBoard } from "@/lib/fantasy/contextImpact";
 import { buildDraftStressTestBoard } from "@/lib/fantasy/draftStressTest";
@@ -1611,6 +1613,111 @@ test("expected opportunity and role security layers separate secure-volume ancho
   );
 });
 
+test("rookie identity reconciliation corrects stale provider flags before calibration", () => {
+  const candidate = cloneFixtureCandidates()[0]!;
+  candidate.player.fullName = "Carnell Tate";
+  candidate.player.rookie = false;
+
+  const result = reconcileRookieIdentity([candidate], ["Carnell Tate"]);
+
+  assert.equal(result.appliedCount, 1);
+  assert.equal(result.candidates[0]?.player.rookie, true);
+});
+
+test("short historical samples do not invent current competition pressure", () => {
+  const candidate = cloneFixtureCandidates().find(
+    (item) => item.player.positions[0] === "TE",
+  ) ?? cloneFixtureCandidates()[0]!;
+  candidate.player.fullName = "Sam LaPorta";
+  candidate.player.positions = ["TE"];
+  candidate.player.rookie = false;
+  candidate.context = {
+    currentRole: "locked-starter",
+    healthStatus: "healthy",
+    trackRecord: "established",
+    roleContinuity: "stable",
+    environment: "strong",
+    source: "manager-reviewed",
+    asOf: "2026-09-02",
+    notes: [],
+  };
+
+  const signal = buildRoleSecuritySignal({
+    candidate,
+    nflverseStats: {
+      playerId: "mock-laporta",
+      playerName: "Sam LaPorta",
+      team: "DET",
+      position: "TE",
+      games: 9,
+      attempts: 0,
+      carries: 0,
+      targets: 36,
+      receptions: 27,
+      passingYards: 0,
+      rushingYards: 0,
+      receivingYards: 340,
+      passingTouchdowns: 0,
+      rushingTouchdowns: 0,
+      receivingTouchdowns: 3,
+      targetShare: 0.089,
+      airYardsShare: 0.11,
+      fantasyPointsPpr: 79,
+    },
+  });
+
+  assert.equal(signal.competitionEvidence, false);
+  assert.equal(signal.competitionPressure, null);
+  assert.notEqual(signal.label, "fragile");
+  assert.doesNotMatch(`${signal.summary} ${signal.drivers.join(" ")}`, /competition pressure/i);
+});
+
+test("profile completeness symmetrically limits player-specific calibration strength", () => {
+  const sparse = cloneFixtureCandidates()[0]!;
+  const complete = structuredClone(sparse);
+  complete.player.id = `${sparse.player.id}-complete`;
+  complete.player.externalIds.nflverse = "complete-profile";
+  complete.player.externalIds.sleeper = "complete-profile";
+  complete.context = {
+    currentRole: "locked-starter",
+    healthStatus: "healthy",
+    trackRecord: "established",
+    roleContinuity: "stable",
+    environment: "strong",
+    source: "manager-reviewed",
+    asOf: "2026-09-02",
+    notes: [],
+  };
+  const stats: NflversePlayerSeasonStats = {
+    playerId: "complete-profile",
+    playerName: complete.player.fullName,
+    team: complete.player.team,
+    position: complete.player.positions[0]!,
+    games: 17,
+    attempts: 500,
+    carries: 80,
+    targets: 0,
+    receptions: 0,
+    passingYards: 4100,
+    rushingYards: 520,
+    receivingYards: 0,
+    passingTouchdowns: 31,
+    rushingTouchdowns: 5,
+    receivingTouchdowns: 0,
+    targetShare: 0,
+    airYardsShare: 0,
+    fantasyPointsPpr: 355,
+  };
+  const calibrated = calibrateDraftCandidates([sparse, complete], yahooLeagueRules, {
+    nflverseByPlayerId: new Map([["complete-profile", stats]]),
+  });
+  const sparseSignals = calibrated.find((item) => item.player.id === sparse.player.id)!.signals!;
+  const completeSignals = calibrated.find((item) => item.player.id === complete.player.id)!.signals!;
+
+  assert.ok(sparseSignals.profileCompleteness.adjustmentScale < completeSignals.profileCompleteness.adjustmentScale);
+  assert.match(sparseSignals.profileCompleteness.summary, /adjustments apply at/);
+});
+
 test("position run modeling identifies stressed positions before the next wrap", () => {
   const candidates = cloneFixtureCandidates();
   const mhj = candidates.find((candidate) => candidate.player.fullName === "Marvin Harrison Jr.");
@@ -1832,7 +1939,11 @@ test("approved September refresh applies 14 bounded residuals and keeps 12 notes
   assert.equal(approvedRankingRefresh.length, 26);
   assert.equal(result.annotationsApplied, 26);
   assert.equal(result.numericalAdjustmentsApplied, 14);
-  assert.equal(Number((connerAfter!.projection.range.p50 - connerBefore.projection.range.p50).toFixed(2)), -4.34);
+  const connerScale = connerBefore.signals?.profileCompleteness?.adjustmentScale ?? 1;
+  assert.equal(
+    Number((connerAfter!.projection.range.p50 - connerBefore.projection.range.p50).toFixed(2)),
+    Number((-4.34 * connerScale).toFixed(2)),
+  );
   assert.equal(jacobsAfter!.projection.range.p50, jacobsBefore.projection.range.p50);
   assert.match(jacobsAfter!.signals?.refresh?.summary ?? "", /Annotation only/);
 });
