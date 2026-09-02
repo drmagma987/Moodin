@@ -51,6 +51,7 @@ import { leagueSourceOfTruth, leagueSourceOfTruthFingerprint } from "@/lib/fanta
 import { buildDraftRefreshCheckpoint, compareDraftRefreshCheckpoints, type DraftRefreshCheckpoint } from "@/lib/fantasy/draftRefreshControl";
 import { DraftRehearsalMode } from "@/components/fantasy/draft-rehearsal-mode";
 import { explainWarRoomRecommendation, warRoomDraftCall, type WarRoomDraftCall } from "@/lib/fantasy/warRoomPresentation";
+import { buildRankingsWorkbook, type RankingsExportRow } from "@/lib/fantasy/rankingsExport";
 
 type Workspace = "predraft" | "draft" | "rehearsal" | "setup";
 type BoardView = "all" | "favorites" | "targets" | "values" | "shadow";
@@ -105,6 +106,7 @@ const REFRESH_CHECKPOINT_KEY = "fantasy-command-center-refresh-checkpoint-v1";
 const SETUP_KEY = "fantasy-command-center-league-setup-v3";
 const MANUAL_NEWS_KEY = "fantasy-command-center-manual-news-v1";
 const PERSONAL_BOARD_KEY = "fantasy-command-center-personal-board-v1";
+const PERSONAL_BOARD_FADES_KEY = "fantasy-command-center-personal-board-fades-v1";
 const POSITIONS: Array<"ALL" | PlayerPosition> = ["ALL", "QB", "RB", "WR", "TE", "K", "DST"];
 
 const priorityMeta: Record<FavoritePriority, { label: string; short: string; color: string }> = {
@@ -269,6 +271,7 @@ export function DraftCommandCenter({
   const [draftBoardVjOnly, setDraftBoardVjOnly] = useState(false);
   const [draftBoardShowCount, setDraftBoardShowCount] = useState(40);
   const [personalBoardOrder, setPersonalBoardOrder] = useState<string[]>([]);
+  const [personalBoardFades, setPersonalBoardFades] = useState<string[]>([]);
   const [personalBoardQuery, setPersonalBoardQuery] = useState("");
   const [personalBoardPosition, setPersonalBoardPosition] = useState<"ALL" | PlayerPosition>("ALL");
   const [personalBoardShowCount, setPersonalBoardShowCount] = useState(40);
@@ -357,6 +360,9 @@ export function DraftCommandCenter({
       readJson<string[]>(PERSONAL_BOARD_KEY, []),
       initialModelOrder,
     ));
+    setPersonalBoardFades(readJson<string[]>(PERSONAL_BOARD_FADES_KEY, []).filter((playerId) => (
+      candidates.some((candidate) => candidate.player.id === playerId)
+    )));
     setHydrated(true);
     // Loading browser-only working state once is intentional.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -403,6 +409,11 @@ export function DraftCommandCenter({
     window.localStorage.setItem(PERSONAL_BOARD_KEY, JSON.stringify(personalBoardOrder));
   }, [hydrated, personalBoardOrder]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(PERSONAL_BOARD_FADES_KEY, JSON.stringify(personalBoardFades));
+  }, [hydrated, personalBoardFades]);
+
   const board = useMemo(() => buildRedraftBoard(candidates, draftState.league), [candidates, draftState.league]);
   const currentRefresh = useMemo(
     () => buildDraftRefreshCheckpoint(candidates, board, artifactCapturedAt),
@@ -424,6 +435,7 @@ export function DraftCommandCenter({
   const quickScoreById = useMemo(() => buildDraftQuickScoreBoard(candidates, board), [board, candidates]);
   const candidateById = useMemo(() => new Map(candidates.map((candidate) => [candidate.player.id, candidate])), [candidates]);
   const favoriteById = useMemo(() => new Map(favorites.map((favorite) => [favorite.playerId, favorite])), [favorites]);
+  const personalBoardFadeIds = useMemo(() => new Set(personalBoardFades), [personalBoardFades]);
   const boardSignalById = useMemo(
     () => new Map(
       candidates.flatMap((candidate) => {
@@ -662,6 +674,23 @@ export function DraftCommandCenter({
     setFavorites((current) => current.filter((favorite) => favorite.playerId !== playerId));
   }
 
+  function togglePersonalTarget(candidate: DraftCandidate) {
+    if (favoriteById.has(candidate.player.id)) {
+      removeFavorite(candidate.player.id);
+      return;
+    }
+    setPersonalBoardFades((current) => current.filter((playerId) => playerId !== candidate.player.id));
+    setFavorite(candidate, "like");
+  }
+
+  function togglePersonalFade(playerId: string) {
+    const isFade = personalBoardFadeIds.has(playerId);
+    setPersonalBoardFades((current) => isFade
+      ? current.filter((currentPlayerId) => currentPlayerId !== playerId)
+      : [...current, playerId]);
+    if (!isFade) removeFavorite(playerId);
+  }
+
   function updateFavoriteNote(playerId: string, note: string) {
     setFavorites((current) => current.map((favorite) => favorite.playerId === playerId ? { ...favorite, note } : favorite));
   }
@@ -831,6 +860,7 @@ export function DraftCommandCenter({
       acceptedRefresh,
       decisionJournal,
       favorites,
+      personalBoardFades,
       personalBoardOrder: effectivePersonalBoardOrder,
     }, null, 2);
     const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
@@ -841,13 +871,14 @@ export function DraftCommandCenter({
     URL.revokeObjectURL(url);
   }
 
-  function downloadRankingsExport() {
+  async function downloadRankingsExport() {
     const boardByPlayerId = new Map(board.map((entry) => [entry.playerId, entry] as const));
-    const rankings = effectivePersonalBoardOrder.map((playerId, index) => {
+    const rankings: RankingsExportRow[] = effectivePersonalBoardOrder.slice(0, 300).map((playerId, index) => {
       const candidate = candidateById.get(playerId);
       const boardEntry = boardByPlayerId.get(playerId);
       return {
         rank: index + 1,
+        status: favoriteById.has(playerId) ? "★ Target" : personalBoardFadeIds.has(playerId) ? "🚫 Fade" : null,
         playerId,
         fullName: candidate?.player.fullName ?? playerId,
         team: candidate?.player.team ?? null,
@@ -861,27 +892,18 @@ export function DraftCommandCenter({
         draftRound: myDraftRankBreaks.get(index + 1)?.round ?? null,
       };
     });
-    const headers = ["Personal Rank", "Draft Slot", "Draft Round", "Player ID", "Player", "Team", "Position", "Model Rank", "Yahoo XRank", "Yahoo ADP", "Aggregate Rank", "Rank Spread"];
-    const escapeCsv = (value: string | number | null) => {
-      const text = value == null ? "" : String(value);
-      return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-    };
-    const rows = rankings.map((ranking) => [ranking.rank, ranking.draftSlot, ranking.draftRound, ranking.playerId, ranking.fullName, ranking.team, ranking.position, ranking.modelRank, ranking.yahooXRank, ranking.yahooAdp, ranking.aggregateRank, ranking.rankSpread]);
-    const metadata: Array<Array<string | number | null>> = [
-      ["Moodin Fantasy Personal Rankings"],
-      ["Exported At", new Date().toISOString()],
-      ["League Config", leagueSourceOfTruth.version],
-      ["League Fingerprint", leagueSourceOfTruthFingerprint],
-      ["Board Fingerprint", currentRefresh.boardFingerprint],
-      [],
-    ];
-    const payload = [...metadata, headers, ...rows]
-      .map((row) => row.map(escapeCsv).join(","))
-      .join("\r\n");
-    const url = URL.createObjectURL(new Blob([`\uFEFF${payload}`], { type: "text/csv;charset=utf-8" }));
+    const exportedAt = new Date().toISOString();
+    const buffer = await buildRankingsWorkbook({
+      rankings,
+      exportedAt,
+      leagueConfigVersion: leagueSourceOfTruth.version,
+      leagueConfigFingerprint: leagueSourceOfTruthFingerprint,
+      boardFingerprint: currentRefresh.boardFingerprint,
+    });
+    const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `moodin-fantasy-rankings-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = `moodin-fantasy-rankings-${new Date().toISOString().slice(0, 10)}.xlsx`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -895,6 +917,7 @@ export function DraftCommandCenter({
         acceptedRefresh?: DraftRefreshCheckpoint | null;
         decisionJournal?: DraftDecisionJournalEntry[];
         favorites?: Favorite[];
+        personalBoardFades?: string[];
         personalBoardOrder?: string[];
       };
       if (![1, 2].includes(parsed.version ?? 0) || !parsed.session) throw new Error("Backup schema is missing or unsupported.");
@@ -913,6 +936,9 @@ export function DraftCommandCenter({
       setAcceptedRefresh(parsed.acceptedRefresh ?? null);
       setDecisionJournal(Array.isArray(parsed.decisionJournal) ? parsed.decisionJournal : []);
       if (restoredFavorites) setFavorites(restoredFavorites);
+      if (Array.isArray(parsed.personalBoardFades)) {
+        setPersonalBoardFades(parsed.personalBoardFades.filter((playerId) => candidateById.has(playerId)));
+      }
       if (Array.isArray(parsed.personalBoardOrder)) {
         setPersonalBoardOrder(normalizePersonalBoardOrder(parsed.personalBoardOrder, modelPlayerOrder));
       }
@@ -1454,9 +1480,9 @@ export function DraftCommandCenter({
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-200">Your draft order</p>
                     <h3 className="mt-1 text-xl font-black">Reorder the board around your preferences.</h3>
-                    <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Drag rows on desktop or use the arrow controls on mobile. Export this ordered file from Vercel when you are done so it can be applied to your localhost draft board.</p>
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">Drag rows on desktop or use the arrow controls on mobile. Star targets or mark fades with 🚫; the top-300 XLSX export shades those rows green or red for your localhost handoff.</p>
                   </div>
-                  <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={downloadRankingsExport}>Export CSV</Button><Button variant="outline" size="sm" onClick={resetPersonalBoard}>Reset to model order</Button></div>
+                  <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => void downloadRankingsExport()}>Export top 300 XLSX</Button><Button variant="outline" size="sm" onClick={resetPersonalBoard}>Reset to model order</Button></div>
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
                   <label className="relative">
@@ -1472,8 +1498,8 @@ export function DraftCommandCenter({
                   <p>{yahooRankCoverage} of {candidates.length} players currently have a Yahoo XRank; missing values stay visible as —.</p>
                 </div>
                 <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
-                  <div className="hidden grid-cols-[64px_minmax(180px,1fr)_60px_64px_72px_72px_86px_150px] gap-2 bg-black/30 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-slate-500 lg:grid">
-                    <span>Your rank</span><span>Player</span><span>Model</span><span>Yahoo</span><span>Y−M</span><span>Aggregate</span><span>Disagreement</span><span className="text-right">Move</span>
+                  <div className="hidden grid-cols-[64px_minmax(180px,1fr)_60px_64px_72px_72px_86px_230px] gap-2 bg-black/30 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-slate-500 lg:grid">
+                    <span>Your rank</span><span>Player</span><span>Model</span><span>Yahoo</span><span>Y−M</span><span>Aggregate</span><span>Disagreement</span><span className="text-right">Target · Fade · Move</span>
                   </div>
                   <div className="divide-y divide-white/[0.07]">
                     {personalBoardRows.slice(0, personalBoardShowCount).map((candidate) => {
@@ -1483,6 +1509,8 @@ export function DraftCommandCenter({
                       const difference = modelRank != null && yahooRank != null ? yahooRank - modelRank : null;
                       const drafted = !availableIds.has(candidate.player.id);
                       const draftBreak = myDraftRankBreaks.get(preferredRank);
+                      const isTarget = favoriteById.has(candidate.player.id);
+                      const isFade = personalBoardFadeIds.has(candidate.player.id);
                       return (
                         <Fragment key={candidate.player.id}>
                         {draftBreak ? <div className="border-y border-cyan-300/25 bg-cyan-300/[0.07] px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-cyan-100"><span>Your draft slot #{draftBreak.overallPick}</span><span className="ml-2 text-cyan-300/60">Round {draftBreak.round} · players above may be gone</span></div> : null}
@@ -1495,7 +1523,7 @@ export function DraftCommandCenter({
                             if (draggedPlayerId) movePersonalBoardPlayerBefore(draggedPlayerId, candidate.player.id);
                             setDraggedPlayerId(null);
                           }}
-                          className={cn("grid gap-2 bg-[#091524] p-3 transition lg:grid-cols-[64px_minmax(180px,1fr)_60px_64px_72px_72px_86px_150px] lg:items-center", draggedPlayerId === candidate.player.id && "opacity-45", drafted && "bg-slate-950/70 text-slate-500")}
+                          className={cn("grid gap-2 bg-[#091524] p-3 transition lg:grid-cols-[64px_minmax(180px,1fr)_60px_64px_72px_72px_86px_230px] lg:items-center", isTarget && "bg-emerald-300/[0.07]", isFade && "bg-rose-300/[0.07]", draggedPlayerId === candidate.player.id && "opacity-45", drafted && "bg-slate-950/70 text-slate-500")}
                         >
                           <span className="text-lg font-black text-amber-100"><span className="mr-2 text-[9px] uppercase text-slate-600 sm:hidden">Your rank</span>#{preferredRank}</span>
                           <span className="min-w-0"><span className="block truncate font-black">{candidate.player.fullName}{drafted ? " · Drafted" : ""}</span><span className="text-xs text-slate-500">{primaryPosition(candidate)} · {candidate.player.team} · Yahoo ADP {candidate.market.yahooAdp ?? "—"}</span></span>
@@ -1507,6 +1535,8 @@ export function DraftCommandCenter({
                           <span className="text-xs font-black text-slate-300"><span className="mr-2 text-[9px] uppercase text-slate-600 lg:hidden">Aggregate</span>{candidate.market.aggregateRank != null ? `#${candidate.market.aggregateRank.toFixed(1)}` : "—"}</span>
                           <span className={cn("text-[10px] font-black", (candidate.market.rankSpread ?? 0) >= 50 ? "text-rose-200" : (candidate.market.rankSpread ?? 0) >= 30 ? "text-amber-200" : "text-slate-400")}><span className="mr-2 text-[9px] uppercase text-slate-600 lg:hidden">Disagreement</span>{candidate.market.rankSpread == null ? "—" : candidate.market.rankSpread >= 50 ? `Wide · ${candidate.market.rankSpread}` : `Spread ${candidate.market.rankSpread}`}</span>
                           <span className="flex justify-end gap-1">
+                            <button aria-label={`${isTarget ? "Remove" : "Mark"} ${candidate.player.fullName} as a target`} title={isTarget ? "Remove target" : "Target"} onClick={() => togglePersonalTarget(candidate)} className={cn("rounded-lg border p-2", isTarget ? "border-emerald-300/50 bg-emerald-300/15 text-emerald-200" : "border-white/10 text-slate-500 hover:text-emerald-200")}><Star className={cn("h-3.5 w-3.5", isTarget && "fill-current")} /></button>
+                            <button aria-label={`${isFade ? "Remove" : "Mark"} ${candidate.player.fullName} as a fade`} title={isFade ? "Remove fade" : "Fade"} onClick={() => togglePersonalFade(candidate.player.id)} className={cn("rounded-lg border px-2 py-1 text-sm", isFade ? "border-rose-300/50 bg-rose-300/15" : "border-white/10 opacity-60 hover:opacity-100")}>🚫</button>
                             <button aria-label={`Move ${candidate.player.fullName} up ten spots`} title="Up 10" onClick={() => movePersonalBoardPlayer(candidate.player.id, -10)} className="rounded-lg border border-white/10 px-2 py-2 text-[10px] font-black text-slate-400 hover:text-white">10</button>
                             <button aria-label={`Move ${candidate.player.fullName} up one spot`} title="Up 1" onClick={() => movePersonalBoardPlayer(candidate.player.id, -1)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:text-white"><ArrowUp className="h-3.5 w-3.5" /></button>
                             <button aria-label={`Move ${candidate.player.fullName} down one spot`} title="Down 1" onClick={() => movePersonalBoardPlayer(candidate.player.id, 1)} className="rounded-lg border border-white/10 p-2 text-slate-400 hover:text-white"><ArrowDown className="h-3.5 w-3.5" /></button>

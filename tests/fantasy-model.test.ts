@@ -24,6 +24,7 @@ import {
   undoLastDraftPick,
 } from "@/lib/fantasy/draftState";
 import { resolveLeagueSetup } from "@/lib/fantasy/leagueSetup";
+import { buildRankingsWorkbook, type RankingsExportRow } from "@/lib/fantasy/rankingsExport";
 import { buildDraftPlanSnapshot } from "@/lib/fantasy/draftPlan";
 import { buildDraftMorningPack } from "@/lib/fantasy/draftMorning";
 import { buildMarketDisagreementBoard } from "@/lib/fantasy/marketDisagreement";
@@ -2124,6 +2125,42 @@ test("war-room presentation translates model signals into plain draft decisions"
   assert.equal(warRoomDraftCall("Target", signal), "Good Value");
   assert.equal(warRoomDraftCall("Fair", signal), "Fair Value");
   assert.equal(warRoomDraftCall("Avoid", signal), "Pass");
+});
+
+test("rankings workbook caps exports at 300 and shades targets and fades", async () => {
+  const rankings: RankingsExportRow[] = Array.from({ length: 302 }, (_, index) => ({
+    rank: index + 1,
+    status: index === 0 ? "★ Target" : index === 1 ? "🚫 Fade" : null,
+    draftSlot: index === 8 ? 9 : null,
+    draftRound: index === 8 ? 1 : null,
+    playerId: `player-${index + 1}`,
+    fullName: `Player ${index + 1}`,
+    team: "TST",
+    position: "WR",
+    modelRank: index + 1,
+    yahooXRank: index + 2,
+    yahooAdp: index + 2.5,
+    aggregateRank: index + 1.5,
+    rankSpread: 4,
+  }));
+  const bytes = await buildRankingsWorkbook({
+    rankings,
+    exportedAt: "2026-09-02T12:00:00.000Z",
+    leagueConfigVersion: "test-v1",
+    leagueConfigFingerprint: "league-test",
+    boardFingerprint: "board-test",
+  });
+  const excelJs = await import("exceljs");
+  const WorkbookConstructor = excelJs.Workbook ?? excelJs.default.Workbook;
+  const workbook = new WorkbookConstructor();
+  await workbook.xlsx.load(bytes as never);
+  const sheet = workbook.getWorksheet("Rankings");
+  assert.ok(sheet);
+  assert.equal(sheet.rowCount, 307);
+  assert.equal(sheet.getCell("B8").value, "★ Target");
+  assert.equal(sheet.getCell("B9").value, "🚫 Fade");
+  assert.equal((sheet.getRow(8).fill as { fgColor?: { argb?: string } }).fgColor?.argb, "FFE2F0D9");
+  assert.equal((sheet.getRow(9).fill as { fgColor?: { argb?: string } }).fgColor?.argb, "FFFCE8E6");
 });
 
 test("quick-read stars separate structural VOR, tier cliffs, and price action", () => {

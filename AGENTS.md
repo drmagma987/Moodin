@@ -950,3 +950,7 @@ If checks cannot be run, say so clearly.
   - the browser export now downloads a CSV containing the complete personal order, player identity, model/Yahoo/aggregate market context, draft-slot markers, and source fingerprints
   - the second quick-hit note for each top-five option now identifies the next comparable player and projected drop, or gives an exact market/range reference when no comparison is available
   - War Room and Rehearse use the same shared two-bullet recommendation explanation
+- Added conviction controls directly to the editable fantasy draft order:
+  - a star marks a player as a target and the 🚫 control marks a player as a fade at his current personal rank; the two states are mutually exclusive and browser-persisted
+  - target status continues into Rehearse through the existing shared favorite-player path, while fade status is included in audited draft backups
+  - rankings export now produces only the top 300 players as an XLSX workbook, with target rows shaded light green and fade rows shaded light red
