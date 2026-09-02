@@ -4278,6 +4278,68 @@ test("refresh checkpoints expose movers and bind a frozen room to one board", ()
   assert.throws(() => assertDraftRoomFreeze(freeze, initial, before.boardFingerprint), /player board changed/);
 });
 
+test("Draft Day Lock and portable backup reproduce the frozen board on a second device", () => {
+  const initial = createInitialDraftState(fixtureCandidates);
+  const frozenAt = "2026-08-23T10:00:00.000Z";
+  const frozenNewsSignals: RefreshSignal[] = [{
+    playerId: fixtureCandidates[0].player.id,
+    category: "role-up",
+    headline: "First-team role confirmed before the room lock",
+    summary: "Captured draft-day context.",
+    source: "manual",
+    publishedAt: "2026-08-23T01:00:00.000Z",
+    confidence: "high",
+    impact: 4,
+  }];
+  const browserACandidates = applyRefreshSignals(fixtureCandidates, frozenNewsSignals, { now: frozenAt }).candidates;
+  const frozenBoard = buildDraftRefreshCheckpoint(
+    browserACandidates,
+    buildRedraftBoard(browserACandidates, initial.league),
+    frozenAt,
+  );
+  const freeze = freezeDraftRoom({
+    state: initial,
+    candidateCount: browserACandidates.length,
+    artifactCapturedAt: frozenAt,
+    setupReady: true,
+    dataReady: true,
+    boardFingerprint: frozenBoard.boardFingerprint,
+    now: frozenAt,
+  });
+  const firstPick = appendDraftSessionPick(createDraftSession(initial), browserACandidates, initial, {
+    playerId: browserACandidates[0].player.id,
+    source: "manual",
+  });
+  const portable = JSON.parse(JSON.stringify({
+    version: 3,
+    session: firstPick.session,
+    roomFreeze: freeze,
+    frozenNewsSignals,
+  })) as { session: typeof firstPick.session; roomFreeze: typeof freeze; frozenNewsSignals: RefreshSignal[] };
+  const browserBCandidates = applyRefreshSignals(fixtureCandidates, portable.frozenNewsSignals, {
+    now: portable.roomFreeze.frozenAt,
+  }).candidates;
+  const browserBState = replayDraftSession(portable.session, browserBCandidates, initial);
+  const browserBBoard = buildDraftRefreshCheckpoint(
+    browserBCandidates,
+    buildRedraftBoard(browserBCandidates, browserBState.league),
+    frozenAt,
+  );
+  assert.equal(browserBState.currentPick, firstPick.state.currentPick);
+  assert.equal(browserBBoard.boardFingerprint, frozenBoard.boardFingerprint);
+  assert.doesNotThrow(() => assertDraftRoomFreeze(portable.roomFreeze, browserBState, browserBBoard.boardFingerprint));
+
+  const laterRecalculation = applyRefreshSignals(fixtureCandidates, frozenNewsSignals, {
+    now: "2026-08-27T10:00:00.000Z",
+  }).candidates;
+  const laterBoard = buildDraftRefreshCheckpoint(
+    laterRecalculation,
+    buildRedraftBoard(laterRecalculation, initial.league),
+    frozenAt,
+  );
+  assert.notEqual(laterBoard.boardFingerprint, frozenBoard.boardFingerprint);
+});
+
 test("draft session survives 200 out-of-order replay and correction rehearsals", () => {
   const initial = createInitialDraftState(fixtureCandidates);
   let seed = 20260823;

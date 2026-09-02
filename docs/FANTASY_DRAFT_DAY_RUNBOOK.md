@@ -81,6 +81,14 @@ Review the generated final-freeze receipt before committing it. Do not rerun the
 - Reload mismatch: stop entry, compare the session health/current pick against Yahoo, then reconcile from an exact snapshot or the visible Yahoo pick log.
 - Board/fingerprint/keeper mismatch: fail closed. Do not bypass the freeze guard.
 
+## Browser-only failover
+
+1. After setup review, activate Draft Day Lock. The lock pins the exact board and news inputs so a later passive refresh cannot invalidate live entry.
+2. Download the portable JSON backup and save it to iCloud Drive or another location available to the standby device.
+3. On the standby browser, open the deployed War Room, expand `Sync or recover missed picks`, choose `Import backup file`, and select the JSON backup. A successful restore must report the same current pick with Draft Day Lock active.
+4. Keep using the XLSX rankings export as a readable sheet only. The JSON backup is the authoritative recovery file because it contains the audited event session, frozen board inputs, targets, fades, personal order, and league setup.
+5. If the primary device fails after the last backup, restore the file first, then use the exact Yahoo pick log through the reviewed snapshot-recovery path to catch up before entering another pick.
+
 ## Evidence hygiene
 
 Committed release evidence consists of the merged v5 matrix, its four current shards, the three v5 targeted regression reports, readiness receipt, policy-certification report, and permanent regression fixtures. Worker PID/status/log files and mixed-wrap discovery reports are local diagnostics and are ignored by Git.

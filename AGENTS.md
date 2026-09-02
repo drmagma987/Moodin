@@ -954,3 +954,7 @@ If checks cannot be run, say so clearly.
   - a star marks a player as a target and the 🚫 control marks a player as a fade at his current personal rank; the two states are mutually exclusive and browser-persisted
   - target status continues into Rehearse through the existing shared favorite-player path, while fade status is included in audited draft backups
   - rankings export now produces only the top 300 players as an XLSX workbook, with target rows shaded light green and fade rows shaded light red
+- Hardened the fantasy War Room for browser-only draft use:
+  - portable JSON backups now include league setup and the exact frozen news-input set, and can be restored directly from a file picker without copying raw JSON
+  - Draft Day Lock pins refresh calculations to the original freeze timestamp so passive news, expiration, or recency decay cannot drift the board fingerprint after reload
+  - added a second-device round-trip regression covering frozen news inputs, one recorded pick, board identity, and resumed pick position

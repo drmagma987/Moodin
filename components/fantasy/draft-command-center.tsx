@@ -107,6 +107,7 @@ const SETUP_KEY = "fantasy-command-center-league-setup-v3";
 const MANUAL_NEWS_KEY = "fantasy-command-center-manual-news-v1";
 const PERSONAL_BOARD_KEY = "fantasy-command-center-personal-board-v1";
 const PERSONAL_BOARD_FADES_KEY = "fantasy-command-center-personal-board-fades-v1";
+const FROZEN_NEWS_KEY = "fantasy-command-center-frozen-news-v1";
 const POSITIONS: Array<"ALL" | PlayerPosition> = ["ALL", "QB", "RB", "WR", "TE", "K", "DST"];
 
 const priorityMeta: Record<FavoritePriority, { label: string; short: string; color: string }> = {
@@ -224,23 +225,26 @@ export function DraftCommandCenter({
 }: DraftCommandCenterProps) {
   const [newsSignals, setNewsSignals] = useState<RefreshSignal[]>([]);
   const [manualNewsSignals, setManualNewsSignals] = useState<RefreshSignal[]>([]);
+  const [roomFreeze, setRoomFreeze] = useState<DraftRoomFreeze | null>(null);
+  const [frozenNewsSignals, setFrozenNewsSignals] = useState<RefreshSignal[]>([]);
   const [manualNewsText, setManualNewsText] = useState("");
   const [manualNewsStatus, setManualNewsStatus] = useState<"idle" | "submitting">("idle");
   const [manualNewsResult, setManualNewsResult] = useState<ManualNewsSubmission | null>(null);
   const [newsStatus, setNewsStatus] = useState<"checking" | "live" | "off" | "error">("checking");
   const [newsCheckedAt, setNewsCheckedAt] = useState<string | null>(null);
-  const activeNewsSignals = useMemo(
+  const liveNewsSignals = useMemo(
     () => [...new Map([...manualNewsSignals, ...newsSignals].map((signal) => [
       signal.fingerprint ?? `${signal.playerId}|${signal.category}|${signal.headline}`,
       signal,
     ])).values()],
     [manualNewsSignals, newsSignals],
   );
+  const activeNewsSignals = roomFreeze ? frozenNewsSignals : liveNewsSignals;
   const candidates = useMemo(
     () => activeNewsSignals.length > 0
-      ? applyRefreshSignals(initialCandidates, activeNewsSignals).candidates
+      ? applyRefreshSignals(initialCandidates, activeNewsSignals, roomFreeze ? { now: roomFreeze.frozenAt } : undefined).candidates
       : initialCandidates,
-    [activeNewsSignals, initialCandidates],
+    [activeNewsSignals, initialCandidates, roomFreeze],
   );
   const seededFavorites = useMemo<Favorite[]>(
     () =>
@@ -259,7 +263,6 @@ export function DraftCommandCenter({
   const [draftState, setDraftState] = useState(initialDraftState);
   const [draftSession, setDraftSession] = useState<DraftSession>(() => createDraftSession(initialDraftState));
   const [decisionJournal, setDecisionJournal] = useState<DraftDecisionJournalEntry[]>([]);
-  const [roomFreeze, setRoomFreeze] = useState<DraftRoomFreeze | null>(null);
   const [acceptedRefresh, setAcceptedRefresh] = useState<DraftRefreshCheckpoint | null>(null);
   const [screenshotText, setScreenshotText] = useState("");
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
@@ -348,6 +351,7 @@ export function DraftCommandCenter({
     }
     setDecisionJournal(readJson<DraftDecisionJournalEntry[]>(JOURNAL_KEY, []));
     setRoomFreeze(readJson<DraftRoomFreeze | null>(FREEZE_KEY, null));
+    setFrozenNewsSignals(readJson<RefreshSignal[]>(FROZEN_NEWS_KEY, []));
     setAcceptedRefresh(readJson<DraftRefreshCheckpoint | null>(REFRESH_CHECKPOINT_KEY, null));
     setSetup({
       ...readJson(SETUP_KEY, setup),
@@ -393,6 +397,12 @@ export function DraftCommandCenter({
     if (roomFreeze) window.localStorage.setItem(FREEZE_KEY, JSON.stringify(roomFreeze));
     else window.localStorage.removeItem(FREEZE_KEY);
   }, [hydrated, roomFreeze]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (roomFreeze) window.localStorage.setItem(FROZEN_NEWS_KEY, JSON.stringify(frozenNewsSignals));
+    else window.localStorage.removeItem(FROZEN_NEWS_KEY);
+  }, [frozenNewsSignals, hydrated, roomFreeze]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -757,6 +767,7 @@ export function DraftCommandCenter({
     setDraftState(setupResolution.state);
     setDraftSession(createDraftSession(setupResolution.state));
     setRoomFreeze(null);
+    setFrozenNewsSignals([]);
     setDraftQuery("");
   }
 
@@ -801,19 +812,27 @@ export function DraftCommandCenter({
 
   function freezeReviewedRoom() {
     try {
+      const frozenAt = new Date().toISOString();
+      const pinnedCandidates = liveNewsSignals.length > 0
+        ? applyRefreshSignals(initialCandidates, liveNewsSignals, { now: frozenAt }).candidates
+        : initialCandidates;
+      const pinnedBoard = buildRedraftBoard(pinnedCandidates, draftState.league);
+      const pinnedRefresh = buildDraftRefreshCheckpoint(pinnedCandidates, pinnedBoard, artifactCapturedAt);
       const next = freezeDraftRoom({
         state: draftState,
-        candidateCount: candidates.length,
+        candidateCount: pinnedCandidates.length,
         artifactCapturedAt,
         setupReady: setupResolution.ready,
         dataReady: dataQuality.status === "ready",
         expectedKeeperFingerprint: setupResolution.state ? buildKeeperFingerprint(setupResolution.state.drafted) : undefined,
-        boardFingerprint: currentRefresh.boardFingerprint,
+        boardFingerprint: pinnedRefresh.boardFingerprint,
+        now: frozenAt,
       });
+      setFrozenNewsSignals(liveNewsSignals);
       setRoomFreeze(next);
-      setAcceptedRefresh(currentRefresh);
-      window.localStorage.setItem(REFRESH_CHECKPOINT_KEY, JSON.stringify(currentRefresh));
-      setSyncMessages([`Room frozen with ${next.keeperCount} keepers · ${next.keeperFingerprint}.`]);
+      setAcceptedRefresh(pinnedRefresh);
+      window.localStorage.setItem(REFRESH_CHECKPOINT_KEY, JSON.stringify(pinnedRefresh));
+      setSyncMessages([`Draft Day Lock active with ${next.keeperCount} keepers · board and news inputs pinned.`]);
     } catch (error) {
       setSyncMessages([error instanceof Error ? error.message : "The room could not be frozen."]);
     }
@@ -853,15 +872,17 @@ export function DraftCommandCenter({
 
   function downloadDraftBackup() {
     const payload = JSON.stringify({
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       session: draftSession,
       roomFreeze,
+      frozenNewsSignals,
       acceptedRefresh,
       decisionJournal,
       favorites,
       personalBoardFades,
       personalBoardOrder: effectivePersonalBoardOrder,
+      setup,
     }, null, 2);
     const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
     const anchor = document.createElement("a");
@@ -908,21 +929,38 @@ export function DraftCommandCenter({
     URL.revokeObjectURL(url);
   }
 
-  function restoreDraftBackup() {
+  function restoreDraftBackup(sourceText = backupText) {
     try {
-      const parsed = JSON.parse(backupText) as {
+      const parsed = JSON.parse(sourceText) as {
         version?: number;
         session?: DraftSession;
         roomFreeze?: DraftRoomFreeze | null;
+        frozenNewsSignals?: RefreshSignal[];
         acceptedRefresh?: DraftRefreshCheckpoint | null;
         decisionJournal?: DraftDecisionJournalEntry[];
         favorites?: Favorite[];
         personalBoardFades?: string[];
         personalBoardOrder?: string[];
+        setup?: LeagueIntake;
       };
-      if (![1, 2].includes(parsed.version ?? 0) || !parsed.session) throw new Error("Backup schema is missing or unsupported.");
-      const state = replayDraftSession(parsed.session, candidates, initialDraftState);
-      if (parsed.roomFreeze) assertDraftRoomFreeze(parsed.roomFreeze, state, currentRefresh.boardFingerprint);
+      if (![1, 2, 3].includes(parsed.version ?? 0) || !parsed.session) throw new Error("Backup schema is missing or unsupported.");
+      const backupFrozenSignals = Array.isArray(parsed.frozenNewsSignals)
+        ? parsed.frozenNewsSignals.filter((signal) => signal && typeof signal.playerId === "string")
+        : null;
+      const restoredFrozenSignals = parsed.roomFreeze
+        ? backupFrozenSignals ?? liveNewsSignals
+        : [];
+      const restoredCandidates = parsed.roomFreeze
+        ? restoredFrozenSignals.length > 0
+          ? applyRefreshSignals(initialCandidates, restoredFrozenSignals, { now: parsed.roomFreeze.frozenAt }).candidates
+          : initialCandidates
+        : liveNewsSignals.length > 0
+          ? applyRefreshSignals(initialCandidates, liveNewsSignals).candidates
+          : initialCandidates;
+      const state = replayDraftSession(parsed.session, restoredCandidates, initialDraftState);
+      const restoredBoard = buildRedraftBoard(restoredCandidates, state.league);
+      const restoredRefresh = buildDraftRefreshCheckpoint(restoredCandidates, restoredBoard, artifactCapturedAt);
+      if (parsed.roomFreeze) assertDraftRoomFreeze(parsed.roomFreeze, state, restoredRefresh.boardFingerprint);
       const restoredFavorites = Array.isArray(parsed.favorites)
         ? parsed.favorites.filter((favorite) => (
             candidateById.has(favorite.playerId)
@@ -932,8 +970,9 @@ export function DraftCommandCenter({
         : null;
       setDraftSession(parsed.session);
       setDraftState(state);
+      setFrozenNewsSignals(restoredFrozenSignals);
       setRoomFreeze(parsed.roomFreeze ?? null);
-      setAcceptedRefresh(parsed.acceptedRefresh ?? null);
+      setAcceptedRefresh(parsed.acceptedRefresh ?? (parsed.roomFreeze ? restoredRefresh : null));
       setDecisionJournal(Array.isArray(parsed.decisionJournal) ? parsed.decisionJournal : []);
       if (restoredFavorites) setFavorites(restoredFavorites);
       if (Array.isArray(parsed.personalBoardFades)) {
@@ -942,14 +981,35 @@ export function DraftCommandCenter({
       if (Array.isArray(parsed.personalBoardOrder)) {
         setPersonalBoardOrder(normalizePersonalBoardOrder(parsed.personalBoardOrder, modelPlayerOrder));
       }
+      if (parsed.setup && typeof parsed.setup.draftOrder === "string" && typeof parsed.setup.keepers === "string") {
+        setSetup({ ...parsed.setup, myDraftSlot: String(leagueSourceOfTruth.draft.mySlot) });
+      }
       setBackupText("");
-      setSyncMessages([`Restored audited session at Pick ${state.currentPick}${restoredFavorites ? ` with ${restoredFavorites.length} VJ targets` : ""}.`]);
+      setSyncMessages([`Restored portable backup at Pick ${state.currentPick}${parsed.roomFreeze ? " with Draft Day Lock active" : ""}${restoredFavorites ? ` and ${restoredFavorites.length} VJ targets` : ""}.`]);
     } catch (error) {
       setSyncMessages([error instanceof Error ? error.message : "The backup could not be restored."]);
     }
   }
 
+  async function importDraftBackupFile(file: File) {
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      setSyncMessages(["Choose a Moodin JSON backup file."]);
+      return;
+    }
+    try {
+      const text = await file.text();
+      setBackupText(text);
+      restoreDraftBackup(text);
+    } catch (error) {
+      setSyncMessages([error instanceof Error ? error.message : "The backup file could not be read."]);
+    }
+  }
+
   async function submitManualNews(textOverride?: string) {
+    if (roomFreeze) {
+      setManualNewsResult({ ok: false, error: "Draft Day Lock is active. Reapply setup before accepting new news." });
+      return;
+    }
     const text = (textOverride ?? manualNewsText).trim();
     if (!text) {
       setManualNewsResult({ ok: false, error: "Paste the Sleeper notification first." });
@@ -1055,7 +1115,9 @@ export function DraftCommandCenter({
               <div
                 className={cn(
                   "flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-bold",
-                  newsStatus === "live"
+                  roomFreeze
+                    ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100"
+                    : newsStatus === "live"
                     ? "border-cyan-300/25 bg-cyan-300/10 text-cyan-100"
                     : newsStatus === "error"
                       ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
@@ -1063,8 +1125,10 @@ export function DraftCommandCenter({
                 )}
                 title={newsCheckedAt ? `Last checked ${new Date(newsCheckedAt).toLocaleTimeString()}` : undefined}
               >
-                <span className={cn("h-2 w-2 rounded-full", newsStatus === "live" ? "bg-cyan-300" : newsStatus === "error" ? "bg-rose-400" : "bg-slate-500")} />
-                {newsStatus === "live"
+                <span className={cn("h-2 w-2 rounded-full", roomFreeze ? "bg-emerald-400" : newsStatus === "live" ? "bg-cyan-300" : newsStatus === "error" ? "bg-rose-400" : "bg-slate-500")} />
+                {roomFreeze
+                  ? `Draft Day Lock · ${frozenNewsSignals.length} news input${frozenNewsSignals.length === 1 ? "" : "s"} pinned`
+                  : newsStatus === "live"
                   ? `${newsSignals.length} passive signal${newsSignals.length === 1 ? "" : "s"}`
                   : newsStatus === "checking"
                     ? "Refreshing RotoWire"
@@ -1394,7 +1458,7 @@ export function DraftCommandCenter({
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   <div className={cn("rounded-xl border px-3 py-2 text-xs font-bold", sessionHealth.ok ? "border-emerald-300/20 bg-emerald-300/[0.07] text-emerald-100" : "border-rose-300/30 bg-rose-300/10 text-rose-100")}>{sessionHealth.message}</div>
-                  <div className={cn("rounded-xl border px-3 py-2 text-xs font-bold", roomFreeze ? "border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-100" : "border-amber-300/25 bg-amber-300/[0.08] text-amber-100")}>{roomFreeze ? `Room frozen ${new Date(roomFreeze.frozenAt).toLocaleString()} · ${roomFreeze.keeperCount} keepers` : "Live entry locked until setup is reviewed and frozen."}</div>
+                  <div className={cn("rounded-xl border px-3 py-2 text-xs font-bold", roomFreeze ? "border-emerald-300/25 bg-emerald-300/[0.08] text-emerald-100" : "border-amber-300/25 bg-amber-300/[0.08] text-amber-100")}>{roomFreeze ? `Draft Day Lock active · ${new Date(roomFreeze.frozenAt).toLocaleString()} · board/news pinned` : "Live entry locked until setup is reviewed and frozen."}</div>
                 </div>
               </section>
 
@@ -1585,7 +1649,7 @@ export function DraftCommandCenter({
                 <div className="mt-5 border-t border-white/10 pt-5">
                   <p className="text-sm font-black">Portable audited backup</p>
                   <p className="mt-1 text-xs text-slate-500">Download before the draft and after major corrections. Restore validates league, keeper, board, and event-log identity before changing anything.</p>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2"><Button variant="outline" onClick={downloadDraftBackup}>Download backup</Button><Button variant="outline" onClick={restoreDraftBackup} disabled={!backupText.trim()}>Validate & restore</Button></div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3"><Button variant="outline" onClick={downloadDraftBackup}>Download backup</Button><label className="flex min-h-10 cursor-pointer items-center justify-center rounded-xl border border-white/10 px-3 text-sm font-black text-slate-300 hover:border-cyan-300/30 hover:text-cyan-100">Import backup file<input type="file" accept="application/json,.json" className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importDraftBackupFile(file); event.currentTarget.value = ""; }} /></label><Button variant="outline" onClick={() => restoreDraftBackup()} disabled={!backupText.trim()}>Validate pasted JSON</Button></div>
                   <Textarea className="mt-3 min-h-24" value={backupText} onChange={(event) => setBackupText(event.target.value)} placeholder="Paste a Moodin draft backup JSON here to restore it." />
                 </div>
                 <div className="mt-5 border-t border-white/10 pt-5">
@@ -1646,12 +1710,12 @@ export function DraftCommandCenter({
               <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div><p className="text-sm font-black">Canonical setup receipt</p><p className="mt-1 text-xs text-slate-500">Review every match before replacing the saved draft room.</p></div>
-                  <div className="flex gap-2"><Button disabled={!setupResolution.ready} onClick={applyResolvedSetup}>Apply reviewed setup</Button><Button variant="outline" disabled={!setupResolution.ready || dataQuality.status !== "ready"} onClick={freezeReviewedRoom}><ShieldCheck className="mr-2 h-4 w-4" /> Freeze room</Button></div>
+                  <div className="flex gap-2"><Button disabled={!setupResolution.ready} onClick={applyResolvedSetup}>Apply reviewed setup</Button><Button variant="outline" disabled={!setupResolution.ready || dataQuality.status !== "ready"} onClick={freezeReviewedRoom}><ShieldCheck className="mr-2 h-4 w-4" /> Activate Draft Day Lock</Button></div>
                 </div>
                 {setupResolution.errors.length > 0 ? <div className="mt-3 space-y-1 text-xs text-rose-200">{setupResolution.errors.map((error) => <p key={error}>• {error}</p>)}</div> : null}
                 {setupResolution.receipts.length > 0 ? <div className="mt-3 space-y-1 text-xs text-emerald-100">{setupResolution.receipts.map((receipt) => <p key={receipt}>✓ {receipt}</p>)}</div> : null}
                 {setupResolution.ready ? <p className="mt-3 text-xs text-cyan-200">Ready: {setupResolution.teamNames.length} teams · you are {setupResolution.myTeamId} · {setupResolution.keeperCount} keepers resolved. Applying starts live tracking at the first unoccupied pick.</p> : null}
-                {roomFreeze ? <p className="mt-2 text-xs font-bold text-emerald-200">Frozen {new Date(roomFreeze.frozenAt).toLocaleString()} · artifact {roomFreeze.artifactCapturedAt} · {roomFreeze.keeperFingerprint}</p> : null}
+                {roomFreeze ? <p className="mt-2 text-xs font-bold text-emerald-200">Draft Day Lock active {new Date(roomFreeze.frozenAt).toLocaleString()} · rankings and {frozenNewsSignals.length} news input{frozenNewsSignals.length === 1 ? "" : "s"} pinned · {roomFreeze.keeperFingerprint}</p> : null}
               </div>
             </section>
             <aside className="space-y-4">
