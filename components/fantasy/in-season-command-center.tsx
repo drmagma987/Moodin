@@ -71,7 +71,12 @@ export function InSeasonCommandCenter({ dataset: initialDataset }: { dataset: In
     [dataset.players],
   );
   const tradeTargets = useMemo(
-    () => dataset.players.filter((player) => player.availability === "trade-target" || player.availability === "league-rostered"),
+    () => dataset.players.filter(
+      (player) =>
+        (player.availability === "trade-target" || player.availability === "league-rostered") &&
+        playerPosition(player) !== "K" &&
+        player.injuryStatus !== "IR",
+    ),
     [dataset.players],
   );
   const [sendId, setSendId] = useState(myRoster[0]?.player.id ?? "");
