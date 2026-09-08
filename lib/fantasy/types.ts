@@ -724,8 +724,33 @@ export type InSeasonPlayerSnapshot = {
   marketTrendCount: number;
   depthChartOrder?: number;
   injuryStatus?: string | null;
+  projectedReturnDate?: string | null;
   practiceParticipation?: string | null;
   liveStats?: Tank01LivePlayerSnapshot;
+};
+
+export type TradeOfferTierSnapshot = {
+  tier: "lowball" | "slight-advantage" | "even";
+  givePlayerIds: string[];
+  targetPlayerIds: string[];
+  marketValueDelta: number;
+  immediateStarterDelta: number;
+  restOfSeasonDelta: number;
+  counterpartyImmediateDelta: number;
+  summary: string;
+};
+
+export type TradeAnalysisSnapshot = {
+  verdict: "accept" | "consider" | "counter" | "decline";
+  balance: "advantage-you" | "even" | "advantage-them";
+  immediateStarterDelta: number;
+  restOfSeasonDelta: number;
+  playoffUpsideDelta: number;
+  counterpartyImmediateDelta: number;
+  counterpartyRestOfSeasonDelta: number;
+  marketValueDelta: number;
+  rosterFitSummary: string;
+  injuryNotes: string[];
 };
 
 export type BreakingNewsAlert = {
@@ -783,6 +808,12 @@ export type TradeIdeaSnapshot = {
   playoffUpsideDelta: number;
   riskDelta: number;
   counterpartyStarterDelta: number;
+  immediateStarterDelta: number;
+  restOfSeasonDelta: number;
+  counterpartyRestOfSeasonDelta: number;
+  marketValueDelta: number;
+  injuryNotes: string[];
+  offerTiers: TradeOfferTierSnapshot[];
   summary: string;
   rationale: string[];
   proposedTransaction: ProposedTransaction;

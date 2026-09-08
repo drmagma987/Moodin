@@ -28,6 +28,7 @@ export function applyYahooLeagueInventory(
       ?? byNameTeam.get(`${normalizeName(player.player.fullName)}|${player.player.team.toUpperCase()}`);
     if (!matched) return player;
     matchedCount += 1;
+    const yahooIr = /\b(IR|PUP|NFI)\b/i.test(matched.rosterStatusLabel ?? "");
     return {
       ...player,
       availability: matched.availability === "available"
@@ -38,6 +39,11 @@ export function applyYahooLeagueInventory(
             ? "league-rostered"
             : player.availability,
       rosterTeamId: matched.availability === "rostered" ? matched.fantasyTeamId : null,
+      injuryStatus: yahooIr
+        ? "IR"
+        : player.injuryStatus === "IR" && matched.rosterStatusLabel
+          ? null
+          : player.injuryStatus,
     } satisfies InSeasonPlayerSnapshot;
   });
   const missingPositions = REQUIRED_POSITIONS.filter((position) => !inventory.coverage.availablePositions.includes(position));

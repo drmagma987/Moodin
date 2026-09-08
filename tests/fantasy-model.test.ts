@@ -41,6 +41,7 @@ import { buildContextImpactBoard } from "@/lib/fantasy/contextImpact";
 import { buildDraftStressTestBoard } from "@/lib/fantasy/draftStressTest";
 import { fixtureCandidates } from "@/lib/fantasy/fixtures";
 import {
+  analyzeTradeProposal,
   buildOpportunityTrendSnapshots,
   getInSeasonCommandCenterDataset,
   buildTransactionQueue,
@@ -4039,6 +4040,46 @@ test("live in-season dataset never recommends an impossible rostered add or lops
     return /rare same-position exception/i.test(idea.constructionSummary);
   }), "same-position one-for-ones must be explicitly justified exceptions");
   assert.ok(dataset.waiverRecommendations.every((idea) => idea.dropPlayerId === null || playersById.get(idea.dropPlayerId)?.injuryStatus !== "IR"));
+});
+
+test("trade packages expose realistic offer bands without calling a major edge even", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const ladders = dataset.tradeIdeas.map((idea) => idea.offerTiers).filter((tiers) => tiers.length > 1);
+
+  assert.ok(ladders.length > 0, "at least one multi-player idea should expose an offer ladder");
+  assert.ok(ladders.every((tiers) => tiers.every((tier) => {
+    if (tier.tier === "lowball") return tier.marketValueDelta >= 30 && tier.marketValueDelta <= 65;
+    if (tier.tier === "slight-advantage") return tier.marketValueDelta >= 10 && tier.marketValueDelta < 30;
+    return Math.abs(tier.marketValueDelta) < 10;
+  })));
+});
+
+test("incoming trade analyzer values IR players by projected return instead of excluding them", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const injuredTarget = dataset.players.find((player) => player.player.fullName === "Jordyn Tyson");
+  const healthySend = dataset.players.find((player) => player.player.fullName === "Josh Downs");
+  assert.ok(injuredTarget?.injuryStatus === "IR" && healthySend?.availability === "my-roster");
+
+  const earlyReturn = analyzeTradeProposal(
+    dataset.players,
+    dataset.myTeam,
+    dataset.leagueTeams,
+    [healthySend.player.id],
+    [injuredTarget.player.id],
+    { [injuredTarget.player.id]: "2026-09-22" },
+  );
+  const lateReturn = analyzeTradeProposal(
+    dataset.players,
+    dataset.myTeam,
+    dataset.leagueTeams,
+    [healthySend.player.id],
+    [injuredTarget.player.id],
+    { [injuredTarget.player.id]: "2026-11-17" },
+  );
+
+  assert.ok(earlyReturn && lateReturn);
+  assert.ok(earlyReturn.marketValueDelta > lateReturn.marketValueDelta, "an earlier return should preserve more trade value");
+  assert.match(earlyReturn.injuryNotes.join(" "), /projected return 2026-09-22/);
 });
 
 test("waiver recommendations produce add-drop transactions and action queue entries", () => {

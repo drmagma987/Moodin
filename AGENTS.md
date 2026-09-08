@@ -541,6 +541,12 @@ If checks cannot be run, say so clearly.
   - package ranking models both managers' starting-lineup impact, limits repetitive offers to the same manager, and explains the roster-construction thesis
   - the custom analyzer now supports optional second players on both sides
   - added regression coverage for package structure and same-position exceptions
+- Expanded the Trade Lab with negotiation and injury-aware analysis:
+  - selected multi-player ideas now expose calibrated lowball, slight-advantage, and even offer bands when distinct packages satisfy those value ranges
+  - added an incoming-offer mode that grades one-for-one and two-for-two proposals using both teams' immediate and rest-of-season lineup effects
+  - IR players are available in trade selectors and recommendations, with return-date-adjusted ROS value, explicit uncertainty notes, and editable projected-return overrides
+  - Yahoo roster-slot labels now refresh IR/PUP/NFI status so new in-season injuries can enter stash-trade analysis
+  - added regressions for offer-band honesty and projected-return sensitivity
 
 ### 2026-08-12
 

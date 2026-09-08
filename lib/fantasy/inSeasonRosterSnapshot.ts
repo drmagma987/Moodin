@@ -77,6 +77,13 @@ function normalizeName(value: string) {
     .trim();
 }
 
+function normalizeProjectedReturn(value: string | undefined) {
+  if (!value) return null;
+  const [month, day, year] = value.split("/").map(Number);
+  if (!month || !day || !year) return null;
+  return `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+}
+
 function projectedUsage(candidate: DraftCandidate): UsageWindowSnapshot {
   const position = candidate.player.positions[0] ?? "WR";
   const stats = candidate.projection.stats;
@@ -127,6 +134,9 @@ export function buildPdfRosterInSeasonSnapshot() {
         injuryStatus: injuredReserveNames.has(normalizeName(candidate.player.fullName))
           ? "IR"
           : candidate.context?.healthStatus ?? null,
+        projectedReturnDate: normalizeProjectedReturn(
+          candidate.context?.qualitative?.evidence.find((evidence) => evidence.estimatedReturn)?.estimatedReturn,
+        ),
       } satisfies InSeasonPlayerSnapshot;
     });
 
