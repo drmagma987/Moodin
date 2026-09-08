@@ -29,6 +29,11 @@ function getYahooBridgeDebugState() {
 export async function GET() {
   const debugState = getYahooBridgeDebugState();
   const latestEnvelope = debugState.latestEnvelope;
+  const inventoryEnvelope = latestEnvelope?.payload.kind === "league-inventory"
+    ? latestEnvelope
+    : debugState.latestInventory?.payload.kind === "league-inventory"
+      ? debugState.latestInventory
+      : null;
   return NextResponse.json({
     ok: true,
     route: "/api/fantasy/yahoo-extension",
@@ -72,6 +77,9 @@ export async function GET() {
               coverage: debugState.latestInventory.payload.inventory.coverage,
             }
           : null,
+    inventorySnapshot: inventoryEnvelope?.payload.kind === "league-inventory"
+      ? inventoryEnvelope.payload.inventory
+      : null,
   });
 }
 

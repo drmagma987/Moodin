@@ -1,7 +1,11 @@
 import { DraftCommandCenter } from "@/components/fantasy/draft-command-center";
+import { InSeasonCommandCenter } from "@/components/fantasy/in-season-command-center";
 import { getBoardPlan, getDraftLabDataset } from "@/lib/fantasy/draftLab";
+import { getInSeasonCommandCenterDataset } from "@/lib/fantasy/inSeason";
 import { warRoomArtifact } from "@/lib/fantasy/warRoomArtifact";
 import type { DraftBoardMode } from "@/lib/fantasy/types";
+import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -9,11 +13,25 @@ export const revalidate = 0;
 const BOARD_MODES: DraftBoardMode[] = ["working", "draft-week", "final"];
 
 type FantasyFootballPageProps = {
-  searchParams?: Promise<{ board?: string }>;
+  searchParams?: Promise<{ board?: string; view?: string }>;
 };
 
 export default async function FantasyFootballPage({ searchParams }: FantasyFootballPageProps) {
   const params = (await searchParams) ?? {};
+  const view = params.view === "draft" ? "draft" : "season";
+  const sectionTabs = (
+    <div className="sticky top-0 z-50 border-b border-white/10 bg-[#06101d]/95 px-3 py-2 backdrop-blur sm:px-6">
+      <nav className="mx-auto flex max-w-[1440px] gap-1 rounded-2xl border border-white/10 bg-black/25 p-1" aria-label="Fantasy football tools">
+        <Link href="/fantasy-football" className={`flex min-h-11 flex-1 items-center justify-center rounded-xl px-3 text-sm font-black transition ${view === "season" ? "bg-emerald-400 text-slate-950" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>Season Agent</Link>
+        <Link href="/fantasy-football?view=draft" className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 text-sm font-black transition ${view === "draft" ? "bg-cyan-400 text-slate-950" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>Draft Archive <span className="rounded-full bg-black/15 px-2 py-0.5 text-[10px] uppercase">{leagueSourceOfTruth.season}</span></Link>
+      </nav>
+    </div>
+  );
+
+  if (view === "season") {
+    return <>{sectionTabs}<InSeasonCommandCenter dataset={getInSeasonCommandCenterDataset()} /></>;
+  }
+
   const boardMode = BOARD_MODES.includes(params.board as DraftBoardMode)
     ? (params.board as DraftBoardMode)
     : "working";
@@ -33,15 +51,19 @@ export default async function FantasyFootballPage({ searchParams }: FantasyFootb
   const dataQuality = liveDataset?.dataQuality ?? snapshot.dataQuality;
 
   return (
-    <DraftCommandCenter
-      boardMode={boardMode}
-      boardSummary={boardPlan.summary}
-      candidates={candidates}
-      initialDraftState={draftState}
-      sourceMode={sourceMode}
-      sourceMessage={sourceMessage}
-      dataQuality={dataQuality}
-      artifactCapturedAt={snapshot.capturedAt}
-    />
+    <>
+      {sectionTabs}
+      <div className="border-b border-amber-300/15 bg-amber-300/[0.07] px-4 py-2 text-center text-xs font-bold text-amber-100">Draft workspace archived after the 2026 draft. Your board, history, rehearsal, and setup remain available here.</div>
+      <DraftCommandCenter
+        boardMode={boardMode}
+        boardSummary={boardPlan.summary}
+        candidates={candidates}
+        initialDraftState={draftState}
+        sourceMode={sourceMode}
+        sourceMessage={sourceMessage}
+        dataQuality={dataQuality}
+        artifactCapturedAt={snapshot.capturedAt}
+      />
+    </>
   );
 }

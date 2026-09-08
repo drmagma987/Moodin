@@ -1,5 +1,4 @@
 import { yahooLeagueConfig } from "@/lib/fantasy/scoring";
-import { inSeasonFixtureLeagueTeams, inSeasonFixtureMyTeam, inSeasonFixturePlayers } from "@/lib/fantasy/inSeasonFixtures";
 import { getTank01ProviderStatus } from "@/lib/fantasy/tank01";
 import type {
   FaabRangeSnapshot,
@@ -14,6 +13,7 @@ import type {
   WaiverRecommendationSnapshot,
 } from "@/lib/fantasy/types";
 import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
+import { buildPdfRosterInSeasonSnapshot, inSeasonRosterSnapshotMeta } from "@/lib/fantasy/inSeasonRosterSnapshot";
 
 const protectedFoundationNames = new Set<string>(
   leagueSourceOfTruth.keepers.myDeclaredPlayers,
@@ -167,7 +167,7 @@ function fillStartingLineup(
 ) {
   const pool = team.playerIds
     .map((playerId) => playersById.get(playerId))
-    .filter((player): player is InSeasonPlayerSnapshot => player !== undefined);
+    .filter((player): player is InSeasonPlayerSnapshot => player !== undefined && player.injuryStatus !== "IR");
   const starters: InSeasonPlayerSnapshot[] = [];
   const used = new Set<string>();
 
@@ -246,7 +246,7 @@ function fillFutureValueLineup(
 ) {
   const pool = team.playerIds
     .map((playerId) => playersById.get(playerId))
-    .filter((player): player is InSeasonPlayerSnapshot => player !== undefined);
+    .filter((player): player is InSeasonPlayerSnapshot => player !== undefined && player.injuryStatus !== "IR");
   const starters: InSeasonPlayerSnapshot[] = [];
   const used = new Set<string>();
 
@@ -315,9 +315,16 @@ export function buildTradeIdeaSnapshots(
     .map((playerId) => playersById.get(playerId))
     .filter((player): player is InSeasonPlayerSnapshot => player !== undefined);
   const myTradeable = myRoster.filter(
-    (player) => !protectedFoundationNames.has(player.player.fullName),
+    (player) =>
+      !protectedFoundationNames.has(player.player.fullName) &&
+      primaryPosition(player) !== "K" &&
+      player.injuryStatus !== "IR",
   );
-  const targets = players.filter((player) => player.availability === "trade-target");
+  const targets = players.filter(
+    (player) =>
+      (player.availability === "trade-target" || player.availability === "league-rostered") &&
+      primaryPosition(player) !== "K",
+  );
   const baseline = fillStartingLineup(myTeam, playersById);
 
   return myTradeable
@@ -348,10 +355,12 @@ export function buildTradeIdeaSnapshots(
         const playoffUpsideDelta = Number((myAfter.upsideTotal - baseline.upsideTotal).toFixed(2));
         const riskDelta = Number((baseline.riskTotal - myAfter.riskTotal).toFixed(2));
         const opponentStarterDelta = Number((otherAfter.starterTotal - otherBefore.starterTotal).toFixed(2));
+        const marketValueGap = targetPlayer.rosProjection.p50 - givePlayer.rosProjection.p50;
         const verdict =
-          starterDelta >= 4 || (starterDelta >= 1.5 && playoffUpsideDelta >= 8 && opponentStarterDelta <= 3)
+          (starterDelta >= 8 && opponentStarterDelta >= 2 && marketValueGap <= 35) ||
+          (starterDelta >= 2 && opponentStarterDelta >= 2 && marketValueGap <= 10)
             ? "pursue"
-            : starterDelta >= 0.5 || playoffUpsideDelta >= 4
+            : starterDelta >= 1 && opponentStarterDelta >= -1.5 && marketValueGap <= 20
               ? "consider"
               : "pass";
 
@@ -364,6 +373,7 @@ export function buildTradeIdeaSnapshots(
           starterDelta,
           playoffUpsideDelta,
           riskDelta,
+          counterpartyStarterDelta: opponentStarterDelta,
           summary:
             verdict === "pursue"
               ? `Trading ${givePlayer.player.fullName} for ${targetPlayer.player.fullName} materially improves your usable starter range.`
@@ -451,7 +461,7 @@ export function buildWaiverRecommendationSnapshots(
   const dropCandidates = myTeam.playerIds
     .map((playerId) => playersById.get(playerId))
     .filter((player): player is InSeasonPlayerSnapshot => player !== undefined)
-    .filter((player) => !protectedFoundationNames.has(player.player.fullName));
+    .filter((player) => !protectedFoundationNames.has(player.player.fullName) && player.injuryStatus !== "IR");
   const baseline = fillFutureValueLineup(myTeam, playersById, trendsByPlayerId);
 
   return freeAgents
@@ -621,28 +631,31 @@ export function buildTransactionQueue(
 }
 
 export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset {
-  const opportunityTrends = buildOpportunityTrendSnapshots(inSeasonFixturePlayers);
+  const rosterSnapshot = buildPdfRosterInSeasonSnapshot();
+  const opportunityTrends = buildOpportunityTrendSnapshots(rosterSnapshot.players);
   const tradeIdeas = buildTradeIdeaSnapshots(
-    inSeasonFixturePlayers,
-    inSeasonFixtureMyTeam,
-    inSeasonFixtureLeagueTeams,
+    rosterSnapshot.players,
+    rosterSnapshot.myTeam,
+    rosterSnapshot.teams,
   );
   const waiverRecommendations = buildWaiverRecommendationSnapshots(
-    inSeasonFixturePlayers,
-    inSeasonFixtureMyTeam,
+    rosterSnapshot.players,
+    rosterSnapshot.myTeam,
   );
 
   return {
-    players: inSeasonFixturePlayers,
-    myTeam: inSeasonFixtureMyTeam,
-    leagueTeams: inSeasonFixtureLeagueTeams,
+    players: rosterSnapshot.players,
+    myTeam: rosterSnapshot.myTeam,
+    leagueTeams: rosterSnapshot.teams,
     opportunityTrends,
     tradeIdeas,
     waiverRecommendations,
     actionQueue: buildTransactionQueue(waiverRecommendations, tradeIdeas),
     tank01Status: getTank01ProviderStatus(),
     scenarioNotes: [
-      "This first in-season slice is provider-neutral and fixture-backed so the opportunity and trade logic can be tested before live league sync is required.",
+      `League ownership comes from the ${inSeasonRosterSnapshotMeta.source} captured ${inSeasonRosterSnapshotMeta.capturedAt}.`,
+      `${rosterSnapshot.unmatchedRosterPlayers.length} roster entries could not be matched to the current modeled player board.`,
+      "Week 1 has no regular-season usage sample yet, so opportunity corrections remain neutral until real snaps, routes, carries, and targets arrive.",
       "Tank01 is treated as an experimental live-state provider seam, not a core dependency, until live value is proven.",
       "Trade ideas are evaluated by starter-range and playoff-upside impact, not generic name value.",
       "Waiver recommendations lean on trend-adjusted future value so quiet usage breakouts can outrank stale median projections before the market fully catches up.",

@@ -42,10 +42,12 @@ import { buildDraftStressTestBoard } from "@/lib/fantasy/draftStressTest";
 import { fixtureCandidates } from "@/lib/fantasy/fixtures";
 import {
   buildOpportunityTrendSnapshots,
+  getInSeasonCommandCenterDataset,
   buildTransactionQueue,
   buildTradeIdeaSnapshots,
   buildWaiverRecommendationSnapshots,
 } from "@/lib/fantasy/inSeason";
+import { buildPdfRosterInSeasonSnapshot } from "@/lib/fantasy/inSeasonRosterSnapshot";
 import {
   inSeasonFixtureLeagueTeams,
   inSeasonFixtureMyTeam,
@@ -3983,7 +3985,7 @@ test("in-season opportunity trends distinguish quiet risers from hype without us
   assert.equal(chaseBrown.recommendation, "avoid");
 });
 
-test("in-season trade ideas are driven by lineup impact", () => {
+test("in-season trade ideas are driven by two-team lineup impact", () => {
   const ideas = buildTradeIdeaSnapshots(
     inSeasonFixturePlayers,
     inSeasonFixtureMyTeam,
@@ -3991,9 +3993,10 @@ test("in-season trade ideas are driven by lineup impact", () => {
   );
 
   assert.ok(ideas.length > 0, "trade idea list should not be empty");
+  assert.ok(ideas.every((idea) => typeof idea.counterpartyStarterDelta === "number"));
   assert.ok(
-    ideas.some((idea) => idea.verdict === "pursue" || idea.verdict === "consider"),
-    "at least one trade idea should be actionable",
+    ideas.filter((idea) => idea.verdict !== "pass").every((idea) => idea.counterpartyStarterDelta >= -1.5),
+    "actionable trades must be plausible for the other manager's starting lineup",
   );
   assert.ok(
     ideas.every((idea) => idea.rationale.length >= 2),
@@ -4003,6 +4006,28 @@ test("in-season trade ideas are driven by lineup impact", () => {
     ideas.every((idea) => idea.proposedTransaction.kind === "trade-proposal"),
     "trade ideas should map cleanly into provider-neutral trade proposals",
   );
+});
+
+test("PDF roster snapshot matches all 10 Yahoo teams without ownership gaps", () => {
+  const snapshot = buildPdfRosterInSeasonSnapshot();
+  const rosteredIds = snapshot.teams.flatMap((team) => team.playerIds);
+
+  assert.equal(snapshot.teams.length, 10);
+  assert.equal(snapshot.myTeam.name, "FC Netanyah00");
+  assert.equal(snapshot.myTeam.playerIds.length, 17);
+  assert.equal(snapshot.unmatchedRosterPlayers.length, 0);
+  assert.equal(new Set(rosteredIds).size, rosteredIds.length, "a player cannot appear on two teams");
+  assert.ok(snapshot.players.length >= 220, "the in-season pool must remain a full league-quality player universe");
+});
+
+test("live in-season dataset never recommends an impossible rostered add or lopsided trade", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const playersById = new Map(dataset.players.map((player) => [player.player.id, player] as const));
+
+  assert.ok(dataset.actionQueue.length > 0);
+  assert.ok(dataset.waiverRecommendations.every((idea) => playersById.get(idea.addPlayerId)?.availability === "free-agent"));
+  assert.ok(dataset.tradeIdeas.filter((idea) => idea.verdict !== "pass").every((idea) => idea.counterpartyStarterDelta >= -1.5));
+  assert.ok(dataset.waiverRecommendations.every((idea) => idea.dropPlayerId === null || playersById.get(idea.dropPlayerId)?.injuryStatus !== "IR"));
 });
 
 test("waiver recommendations produce add-drop transactions and action queue entries", () => {

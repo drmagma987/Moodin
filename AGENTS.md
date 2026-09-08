@@ -522,6 +522,20 @@ npx tsc --noEmit
 
 If checks cannot be run, say so clearly.
 
+### 2026-09-08
+
+- Shifted the Fantasy Football Supertool into its in-season phase:
+  - `/fantasy-football` now opens to a mid-season agent command center
+  - the completed 2026 draft tool remains available in a clearly labeled Draft Archive tab
+  - surfaced the existing action queue, weakness-aware trade ideas, waiver recommendations, and opportunity/market correction signals
+  - added a functional one-for-one trade analyzer and manual injury/news intake
+  - wired fresh, complete Yahoo inventory through the existing ownership adapter so modeled recommendations rebuild from live roster/free-agent status
+  - added Yahoo inventory refresh status plus a device-local manual roster paste fallback when the Chrome bridge is unavailable
+  - replaced the 10-player in-season demo with the complete 10-team Yahoo starting-roster PDF captured at 9:42 AM
+  - matched all 162 rostered players to the 473-player model pool and treated the remaining modeled players as available
+  - tightened trade screening so actionable offers account for both managers' starting-lineup impact and suppress obviously lopsided proposals
+  - protected IR players from lineup, trade-away, and waiver-drop recommendations
+
 ### 2026-08-12
 
 - Began the `Fantasy Football Supertool` kickoff as a separate foundation slice without replacing existing Moodin experiences.

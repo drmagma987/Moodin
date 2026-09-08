@@ -778,6 +778,7 @@ export type TradeIdeaSnapshot = {
   starterDelta: number;
   playoffUpsideDelta: number;
   riskDelta: number;
+  counterpartyStarterDelta: number;
   summary: string;
   rationale: string[];
   proposedTransaction: ProposedTransaction;
