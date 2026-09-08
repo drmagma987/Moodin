@@ -990,3 +990,16 @@ If checks cannot be run, say so clearly.
   - portable JSON backups now include league setup and the exact frozen news-input set, and can be restored directly from a file picker without copying raw JSON
   - Draft Day Lock pins refresh calculations to the original freeze timestamp so passive news, expiration, or recency decay cannot drift the board fingerprint after reload
   - added a second-device round-trip regression covering frozen news inputs, one recorded pick, board identity, and resumed pick position
+
+### 2026-09-08
+
+- Added the in-season League Opportunity Dashboard as the default Fantasy Football Supertool view while preserving Agent Brief, Trade Lab, Buy Low / Sell High, League Sync, Yahoo refresh/manual fallback, and Draft Archive.
+- Added `lib/fantasy/leagueOpportunity.ts` as the derived roster-construction layer:
+  - allocates the canonical 1 QB / 2 RB / 3 WR / 1 TE / 2 FLEX lineup without double-counting FLEX players
+  - grades QB, RB, WR, TE, FLEX, and bench by league-relative starter strength, depth, ceiling, health, and surplus percentiles
+  - diagnoses FC Netanyah00, screens all opponents for structural compatibility, and generates guarded 1-for-1, 2-for-2, 2-for-1, and 1-for-2 opportunities
+  - calculates exact current/future marginal lineup replacements and preserves anchor quality, package ceiling, and return-adjusted IR value
+- Added device-local player intent/outlook controls and win-now/balanced/patient strategy weighting. Preferences change proposal order and warnings only; source projections, market tiers, injuries, and Yahoo facts remain unchanged.
+- Added an explainable weekly board and opponent drill-down with explicit empty states when a trade format or usage-backed buy-low/sell-high signal does not exist.
+- Added regressions for league-relative grading, unique FLEX allocation, compatibility/non-viability, 1-for-1 visibility, anchor preservation, untouchable preferences, IR stash value, and marginal lineup replacement.
+- Verified canonical league integrity, 137/137 fantasy tests, lint (existing bachelor-party font warning only), TypeScript, production build, and local browser rendering/interactions.

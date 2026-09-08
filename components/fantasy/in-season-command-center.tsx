@@ -15,8 +15,9 @@ import { applyYahooLeagueInventory } from "@/lib/fantasy/yahooInventory";
 import type { YahooLeagueInventorySnapshot } from "@/lib/fantasy/yahooBridge";
 import { analyzeTradeProposal, buildOpportunityTrendSnapshots, buildTradeIdeaSnapshots, buildTransactionQueue, buildWaiverRecommendationSnapshots } from "@/lib/fantasy/inSeason";
 import { cn } from "@/lib/utils";
+import { LeagueOpportunityDashboard } from "@/components/fantasy/league-opportunity-dashboard";
 
-type View = "today" | "trades" | "market" | "sync";
+type View = "opportunity" | "today" | "trades" | "market" | "sync";
 type AnalyzerMode = "outgoing" | "incoming";
 type YahooStatus = {
   state: "idle" | "checking" | "connected" | "empty" | "error" | "manual";
@@ -65,7 +66,7 @@ function actionTitle(action: InSeasonCommandCenterDataset["actionQueue"][number]
 
 export function InSeasonCommandCenter({ dataset: initialDataset }: { dataset: InSeasonCommandCenterDataset }) {
   const [dataset, setDataset] = useState(initialDataset);
-  const [view, setView] = useState<View>("today");
+  const [view, setView] = useState<View>("opportunity");
   const [yahoo, setYahoo] = useState<YahooStatus>({ state: "idle", message: "Ready to read the latest league inventory from the Yahoo Chrome bridge." });
   const [manualRosterText, setManualRosterText] = useState("");
   const [newsText, setNewsText] = useState("");
@@ -190,7 +191,7 @@ export function InSeasonCommandCenter({ dataset: initialDataset }: { dataset: In
   }
 
   const nav: Array<[View, string, typeof Activity]> = [
-    ["today", "Agent Brief", Sparkles], ["trades", "Trade Lab", BadgeDollarSign],
+    ["opportunity", "Opportunity", Users], ["today", "Agent Brief", Sparkles], ["trades", "Trade Lab", BadgeDollarSign],
     ["market", "Buy Low / Sell High", TrendingUp], ["sync", "League Sync", RefreshCw],
   ];
 
@@ -215,6 +216,8 @@ export function InSeasonCommandCenter({ dataset: initialDataset }: { dataset: In
             {nav.map(([id, label, Icon]) => <button key={id} onClick={() => setView(id)} className={cn("flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-sm font-black transition", view === id ? "bg-emerald-400 text-slate-950" : "text-slate-400 hover:bg-white/5 hover:text-white")}><Icon className="h-4 w-4" /> {label}</button>)}
           </nav>
         </section>
+
+        {view === "opportunity" ? <LeagueOpportunityDashboard dataset={dataset} /> : null}
 
         {view === "today" ? <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_390px]">
           <section className="rounded-[28px] border border-white/10 bg-[#0a1727]/92 p-4 sm:p-6">

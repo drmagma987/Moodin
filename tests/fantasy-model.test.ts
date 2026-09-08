@@ -50,6 +50,13 @@ import {
 } from "@/lib/fantasy/inSeason";
 import { buildPdfRosterInSeasonSnapshot } from "@/lib/fantasy/inSeasonRosterSnapshot";
 import {
+  allocateLeagueLineup,
+  buildLeagueOpportunityDashboard,
+  buildLeaguePositionGrades,
+  calculateMarginalLineupEffects,
+  defaultOpportunityPreferences,
+} from "@/lib/fantasy/leagueOpportunity";
+import {
   inSeasonFixtureLeagueTeams,
   inSeasonFixtureMyTeam,
   inSeasonFixturePlayers,
@@ -4125,6 +4132,79 @@ test("incoming trade analyzer values IR players by projected return instead of e
   assert.ok(earlyReturn && lateReturn);
   assert.ok(earlyReturn.marketValueDelta > lateReturn.marketValueDelta, "an earlier return should preserve more trade value");
   assert.match(earlyReturn.injuryNotes.join(" "), /projected return 2026-09-22/);
+});
+
+test("league opportunity grades honor the three-WR, two-FLEX lineup without double counting", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const byId = new Map(dataset.players.map((player) => [player.player.id, player] as const));
+  const lineup = allocateLeagueLineup(dataset.myTeam, byId);
+  const grades = buildLeaguePositionGrades(dataset.players, dataset.leagueTeams);
+  const myProfile = grades.find((team) => team.teamId === dataset.myTeam.teamId);
+
+  assert.ok(myProfile);
+  assert.equal(lineup.assignments.filter((assignment) => assignment.slot === "WR").length, 3);
+  assert.equal(lineup.assignments.filter((assignment) => assignment.slot === "FLEX").length, 2);
+  assert.equal(new Set(lineup.assignments.map((assignment) => assignment.playerId)).size, lineup.assignments.length);
+  assert.ok(Object.values(myProfile.groups).every((group) => group.grade >= 0 && group.grade <= 100));
+  assert.equal(myProfile.strongestGroup, "WR", "FC Netanyah00's league-relative roster strength should surface at WR");
+  assert.ok(myProfile.groups.WR.percentiles.surplus > myProfile.groups.RB.percentiles.surplus);
+});
+
+test("opportunity dashboard diagnoses roster construction and refuses to invent trade formats", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const dashboard = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
+  const oneForOneBoard = dashboard.weeklyBoard.find((item) => item.label === "Best clean 1-for-1");
+
+  assert.equal(dashboard.diagnosis.strongestGroup, "WR");
+  assert.equal(dashboard.diagnosis.bestUpgradeGroup, "RB");
+  assert.ok(dashboard.partners.some((partner) => partner.viable));
+  assert.ok(dashboard.partners.some((partner) => !partner.viable), "not every opponent should be presented as a viable partner");
+  assert.ok(oneForOneBoard, "the 1-for-1 category remains visible even when no deal clears the safeguards");
+  if (!oneForOneBoard.available) assert.match(oneForOneBoard.value, /No worthwhile structure/);
+  assert.equal(dashboard.usageEvidenceAvailable, false);
+  assert.ok(dashboard.weeklyBoard.filter((item) => /buy-low|sell-high/i.test(item.label)).every((item) => !item.available));
+});
+
+test("opportunity proposals preserve elite anchors and device preferences can block an outgoing player", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const byId = new Map(dataset.players.map((player) => [player.player.id, player] as const));
+  const baseline = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
+  const proposals = baseline.partners.flatMap((partner) => partner.proposals);
+  assert.ok(proposals.length > 0);
+  assert.ok(proposals.every((proposal) => {
+    const outgoingTier = Math.min(...proposal.sendPlayerIds.map((id) => byId.get(id)?.marketTier ?? 99));
+    if (outgoingTier > 3) return true;
+    return proposal.receivePlayerIds.some((id) => (byId.get(id)?.marketTier ?? 99) <= outgoingTier);
+  }), "an elite outgoing anchor must return a comparable centerpiece");
+
+  const blockedId = proposals[0].sendPlayerIds[0];
+  const adjusted = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams, {
+    ...defaultOpportunityPreferences,
+    players: { [blockedId]: { intent: "untouchable", outlook: "neutral" } },
+  });
+  assert.ok(adjusted.partners.flatMap((partner) => partner.proposals).every((proposal) => !proposal.sendPlayerIds.includes(blockedId)));
+});
+
+test("marginal lineup effects distinguish current replacements from return-adjusted IR value", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const byName = new Map(dataset.players.map((player) => [player.player.fullName, player] as const));
+  const pacheco = byName.get("Isiah Pacheco");
+  const swift = byName.get("D'Andre Swift");
+  const targetTeam = dataset.leagueTeams.find((team) => team.teamId === swift?.rosterTeamId);
+  assert.ok(pacheco?.injuryStatus === "IR" && swift && targetTeam);
+
+  const effects = calculateMarginalLineupEffects(dataset.players, dataset.myTeam, targetTeam, [pacheco.player.id], [swift.player.id]);
+  assert.ok(effects.myEffect.incomingStarters.includes(swift.player.id), "the acquisition must receive credit only if it enters the usable lineup");
+  assert.ok(effects.myEffect.replacements.some((replacement) => replacement.incomingPlayerId === swift.player.id));
+  const tyson = byName.get("Jordyn Tyson");
+  const downs = byName.get("Josh Downs");
+  const tysonTeam = dataset.leagueTeams.find((team) => team.teamId === tyson?.rosterTeamId);
+  assert.ok(tyson?.injuryStatus === "IR" && downs && tysonTeam);
+  const stashEffects = calculateMarginalLineupEffects(dataset.players, dataset.myTeam, tysonTeam, [downs.player.id], [tyson.player.id]);
+  assert.ok(stashEffects.myEffect.unusedIncomingValue > 0, "IR return value must be retained even when the player remains outside the current lineup");
+  assert.ok(!stashEffects.myEffect.incomingStarters.includes(tyson.player.id), "an unavailable player must not receive immediate starter credit");
+  const dashboard = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
+  assert.ok(dashboard.diagnosis.injuredKeepPlayerIds.includes(pacheco.player.id), "an injured roster asset must not be mislabeled as expendable");
 });
 
 test("waiver recommendations produce add-drop transactions and action queue entries", () => {
