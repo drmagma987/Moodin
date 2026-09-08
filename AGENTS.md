@@ -535,6 +535,12 @@ If checks cannot be run, say so clearly.
   - matched all 162 rostered players to the 473-player model pool and treated the remaining modeled players as available
   - tightened trade screening so actionable offers account for both managers' starting-lineup impact and suppress obviously lopsided proposals
   - protected IR players from lineup, trade-away, and waiver-drop recommendations
+- Reworked the in-season Trade Lab around realistic roster construction:
+  - same-position one-for-one recommendations are suppressed unless they materially reduce risk or correlated NFL-team exposure
+  - the engine now searches balanced two-for-two packages that trade depth at one position for a starting-lineup upgrade at another
+  - package ranking models both managers' starting-lineup impact, limits repetitive offers to the same manager, and explains the roster-construction thesis
+  - the custom analyzer now supports optional second players on both sides
+  - added regression coverage for package structure and same-position exceptions
 
 ### 2026-08-12
 

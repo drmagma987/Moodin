@@ -301,8 +301,51 @@ function fillFutureValueLineup(
   };
 }
 
+function swapPlayerGroups(ids: string[], removeIds: string[], addIds: string[]) {
+  const removed = new Set(removeIds);
+  return Array.from(new Set(ids.filter((id) => !removed.has(id)).concat(addIds)));
+}
+
 function swapPlayers(ids: string[], removeId: string, addId: string) {
-  return Array.from(new Set(ids.filter((id) => id !== removeId).concat(addId)));
+  return swapPlayerGroups(ids, [removeId], [addId]);
+}
+
+function pairs<T>(items: T[]) {
+  const result: Array<[T, T]> = [];
+  for (let first = 0; first < items.length; first += 1) {
+    for (let second = first + 1; second < items.length; second += 1) {
+      result.push([items[first], items[second]]);
+    }
+  }
+  return result;
+}
+
+function positionSignature(group: InSeasonPlayerSnapshot[]) {
+  return group.map(primaryPosition).sort().join("+");
+}
+
+function packageConstructionSummary(
+  send: InSeasonPlayerSnapshot[],
+  receive: InSeasonPlayerSnapshot[],
+) {
+  const positions = Array.from(new Set([...send, ...receive].map(primaryPosition)));
+  const deltas = positions.map((position) => ({
+    position,
+    value:
+      receive
+        .filter((player) => primaryPosition(player) === position)
+        .reduce((sum, player) => sum + player.rosProjection.p50, 0) -
+      send
+        .filter((player) => primaryPosition(player) === position)
+        .reduce((sum, player) => sum + player.rosProjection.p50, 0),
+  }));
+  const upgrade = [...deltas].sort((a, b) => b.value - a.value)[0];
+  const concession = [...deltas].sort((a, b) => a.value - b.value)[0];
+
+  if (upgrade && concession && upgrade.position !== concession.position && upgrade.value > 0 && concession.value < 0) {
+    return `Spend ${concession.position} depth to upgrade ${upgrade.position} and rebalance the starting lineup.`;
+  }
+  return "Repackages depth across positions so both managers solve a different roster need.";
 }
 
 export function buildTradeIdeaSnapshots(
@@ -320,105 +363,150 @@ export function buildTradeIdeaSnapshots(
       primaryPosition(player) !== "K" &&
       player.injuryStatus !== "IR",
   );
-  const targets = players.filter(
-    (player) =>
-      (player.availability === "trade-target" || player.availability === "league-rostered") &&
-      primaryPosition(player) !== "K",
-  );
   const baseline = fillStartingLineup(myTeam, playersById);
+  const myNflTeamCounts = myRoster.reduce((counts, player) => {
+    counts.set(player.player.team, (counts.get(player.player.team) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+  const ideas: TradeIdeaSnapshot[] = [];
 
-  return myTradeable
-    .flatMap((givePlayer) =>
-      targets.flatMap((targetPlayer) => {
-        const targetTeam = leagueTeams.find((team) => team.teamId === targetPlayer.rosterTeamId);
-        if (!targetTeam) {
-          return [];
-        }
+  function evaluate(
+    send: InSeasonPlayerSnapshot[],
+    receive: InSeasonPlayerSnapshot[],
+    targetTeam: InSeasonTeamSnapshot,
+  ) {
+    const format = send.length === 2 ? "two-for-two" : "one-for-one";
+    const myAfter = fillStartingLineup({
+      ...myTeam,
+      playerIds: swapPlayerGroups(myTeam.playerIds, send.map((player) => player.player.id), receive.map((player) => player.player.id)),
+    }, playersById);
+    const otherBefore = fillStartingLineup(targetTeam, playersById);
+    const otherAfter = fillStartingLineup({
+      ...targetTeam,
+      playerIds: swapPlayerGroups(targetTeam.playerIds, receive.map((player) => player.player.id), send.map((player) => player.player.id)),
+    }, playersById);
+    const starterDelta = Number((myAfter.starterTotal - baseline.starterTotal).toFixed(2));
+    const playoffUpsideDelta = Number((myAfter.upsideTotal - baseline.upsideTotal).toFixed(2));
+    const riskDelta = Number((baseline.riskTotal - myAfter.riskTotal).toFixed(2));
+    const opponentStarterDelta = Number((otherAfter.starterTotal - otherBefore.starterTotal).toFixed(2));
+    const marketValueGap =
+      receive.reduce((sum, player) => sum + player.rosProjection.p50, 0) -
+      send.reduce((sum, player) => sum + player.rosProjection.p50, 0);
+    const samePositionOneForOne = format === "one-for-one" && primaryPosition(send[0]) === primaryPosition(receive[0]);
+    const correlationRelief = samePositionOneForOne &&
+      (myNflTeamCounts.get(send[0].player.team) ?? 0) >= 2 &&
+      send[0].player.team !== receive[0].player.team && riskDelta >= 0;
+    const meaningfulRiskUpgrade = samePositionOneForOne && riskDelta >= 12 && starterDelta >= 1;
+    if (samePositionOneForOne && !correlationRelief && !meaningfulRiskUpgrade) return;
 
-        const myAfter = fillStartingLineup(
-          {
-            ...myTeam,
-            playerIds: swapPlayers(myTeam.playerIds, givePlayer.player.id, targetPlayer.player.id),
-          },
-          playersById,
-        );
-        const otherBefore = fillStartingLineup(targetTeam, playersById);
-        const otherAfter = fillStartingLineup(
-          {
-            ...targetTeam,
-            playerIds: swapPlayers(targetTeam.playerIds, targetPlayer.player.id, givePlayer.player.id),
-          },
-          playersById,
-        );
+    const pursue = format === "two-for-two"
+      ? starterDelta >= 3 && opponentStarterDelta >= 1 && Math.abs(marketValueGap) <= 30
+      : starterDelta >= 2 && opponentStarterDelta >= 1 && Math.abs(marketValueGap) <= 18;
+    const consider = format === "two-for-two"
+      ? starterDelta >= 1.5 && opponentStarterDelta >= -0.5 && Math.abs(marketValueGap) <= 22
+      : starterDelta >= 1 && opponentStarterDelta >= -0.5 && Math.abs(marketValueGap) <= 14;
+    const verdict = pursue ? "pursue" : consider ? "consider" : "pass";
+    if (verdict === "pass") return;
 
-        const starterDelta = Number((myAfter.starterTotal - baseline.starterTotal).toFixed(2));
-        const playoffUpsideDelta = Number((myAfter.upsideTotal - baseline.upsideTotal).toFixed(2));
-        const riskDelta = Number((baseline.riskTotal - myAfter.riskTotal).toFixed(2));
-        const opponentStarterDelta = Number((otherAfter.starterTotal - otherBefore.starterTotal).toFixed(2));
-        const marketValueGap = targetPlayer.rosProjection.p50 - givePlayer.rosProjection.p50;
-        const verdict =
-          (starterDelta >= 8 && opponentStarterDelta >= 2 && marketValueGap <= 35) ||
-          (starterDelta >= 2 && opponentStarterDelta >= 2 && marketValueGap <= 10)
-            ? "pursue"
-            : starterDelta >= 1 && opponentStarterDelta >= -1.5 && marketValueGap <= 20
-              ? "consider"
-              : "pass";
+    const sendNames = send.map((player) => player.player.fullName).join(" + ");
+    const receiveNames = receive.map((player) => player.player.fullName).join(" + ");
+    const constructionSummary = format === "two-for-two"
+      ? packageConstructionSummary(send, receive)
+      : samePositionOneForOne
+        ? correlationRelief
+          ? "A rare same-position exception that reduces correlated NFL-team exposure."
+          : "A rare same-position exception that materially improves the roster's risk profile."
+        : `Moves value from ${primaryPosition(send[0])} into ${primaryPosition(receive[0])} to improve the starting lineup.`;
+    const toTransactionPlayer = (player: InSeasonPlayerSnapshot) => ({
+      playerId: player.player.id,
+      yahooPlayerId: player.player.externalIds.yahoo,
+      fullName: player.player.fullName,
+      team: player.player.team,
+      positions: player.player.positions,
+    });
 
-        return [{
-          targetPlayerId: targetPlayer.player.id,
-          givePlayerId: givePlayer.player.id,
-          counterpartyTeamId: targetTeam.teamId,
-          counterpartyTeamName: targetTeam.name,
-          verdict,
-          starterDelta,
-          playoffUpsideDelta,
-          riskDelta,
-          counterpartyStarterDelta: opponentStarterDelta,
-          summary:
-            verdict === "pursue"
-              ? `Trading ${givePlayer.player.fullName} for ${targetPlayer.player.fullName} materially improves your usable starter range.`
-              : verdict === "consider"
-                ? `${targetPlayer.player.fullName} is a plausible buy if the price stays around ${givePlayer.player.fullName}.`
-                : `${targetPlayer.player.fullName} does not improve your actual lineup enough for ${givePlayer.player.fullName}.`,
-          rationale: [
-            `Starter delta: ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)} ROS points.`,
-            `Playoff upside delta: ${playoffUpsideDelta >= 0 ? "+" : ""}${playoffUpsideDelta.toFixed(1)}.`,
-            `Opponent starter delta: ${opponentStarterDelta >= 0 ? "+" : ""}${opponentStarterDelta.toFixed(1)}.`,
-          ],
-          proposedTransaction: {
-            kind: "trade-proposal",
-            send: [
-              {
-                playerId: givePlayer.player.id,
-                yahooPlayerId: givePlayer.player.externalIds.yahoo,
-                fullName: givePlayer.player.fullName,
-                team: givePlayer.player.team,
-                positions: givePlayer.player.positions,
-              },
-            ],
-            receive: [
-              {
-                playerId: targetPlayer.player.id,
-                yahooPlayerId: targetPlayer.player.externalIds.yahoo,
-                fullName: targetPlayer.player.fullName,
-                team: targetPlayer.player.team,
-                positions: targetPlayer.player.positions,
-              },
-            ],
-            counterpartyTeamId: targetTeam.teamId,
-            counterpartyTeamName: targetTeam.name,
-            rationale: `Targeting ${targetPlayer.player.fullName} for ${givePlayer.player.fullName} improves the active lineup by ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)} starter points.`,
-          } satisfies ProposedTransaction,
-        } satisfies TradeIdeaSnapshot];
-      }),
-    )
-    .sort(
+    ideas.push({
+      targetPlayerId: receive[0].player.id,
+      givePlayerId: send[0].player.id,
+      targetPlayerIds: receive.map((player) => player.player.id),
+      givePlayerIds: send.map((player) => player.player.id),
+      format,
+      constructionSummary,
+      counterpartyTeamId: targetTeam.teamId,
+      counterpartyTeamName: targetTeam.name,
+      verdict,
+      starterDelta,
+      playoffUpsideDelta,
+      riskDelta,
+      counterpartyStarterDelta: opponentStarterDelta,
+      summary: verdict === "pursue"
+        ? `${constructionSummary} The modeled starter gain is strong enough to actively shop this offer.`
+        : `${constructionSummary} Keep the price to this exact structure or use it as a counteroffer.`,
+      rationale: [
+        `Starter delta: ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)} ROS points.`,
+        `Playoff upside delta: ${playoffUpsideDelta >= 0 ? "+" : ""}${playoffUpsideDelta.toFixed(1)}.`,
+        `Opponent starter delta: ${opponentStarterDelta >= 0 ? "+" : ""}${opponentStarterDelta.toFixed(1)}.`,
+        `Package value gap: ${marketValueGap >= 0 ? "+" : ""}${marketValueGap.toFixed(1)} ROS points.`,
+      ],
+      proposedTransaction: {
+        kind: "trade-proposal",
+        send: send.map(toTransactionPlayer),
+        receive: receive.map(toTransactionPlayer),
+        counterpartyTeamId: targetTeam.teamId,
+        counterpartyTeamName: targetTeam.name,
+        rationale: `Offering ${sendNames} for ${receiveNames} changes your active-lineup value by ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)} and theirs by ${opponentStarterDelta >= 0 ? "+" : ""}${opponentStarterDelta.toFixed(1)}.`,
+      } satisfies ProposedTransaction,
+    });
+  }
+
+  for (const targetTeam of leagueTeams.filter((team) => team.teamId !== myTeam.teamId)) {
+    const targetRoster = targetTeam.playerIds
+      .map((playerId) => playersById.get(playerId))
+      .filter((player): player is InSeasonPlayerSnapshot => player !== undefined && primaryPosition(player) !== "K" && player.injuryStatus !== "IR")
+      .sort((a, b) => b.rosProjection.p50 - a.rosProjection.p50)
+      .slice(0, 14);
+    const sendPool = [...myTradeable]
+      .sort((a, b) => b.rosProjection.p50 - a.rosProjection.p50)
+      .slice(0, 14);
+
+    for (const givePlayer of sendPool) {
+      for (const targetPlayer of targetRoster) evaluate([givePlayer], [targetPlayer], targetTeam);
+    }
+    for (const sendPair of pairs(sendPool)) {
+      if (primaryPosition(sendPair[0]) === primaryPosition(sendPair[1])) continue;
+      for (const receivePair of pairs(targetRoster)) {
+        if (positionSignature(sendPair) !== positionSignature(receivePair)) continue;
+        const positionDeltas = sendPair.map((sent) => {
+          const received = receivePair.find((candidate) => primaryPosition(candidate) === primaryPosition(sent));
+          return (received?.rosProjection.p50 ?? 0) - sent.rosProjection.p50;
+        });
+        if (!positionDeltas.some((delta) => delta > 0) || !positionDeltas.some((delta) => delta < 0)) continue;
+        evaluate(sendPair, receivePair, targetTeam);
+      }
+    }
+  }
+
+  const rankedIdeas = ideas.sort(
       (a, b) =>
         (b.verdict === "pursue" ? 2 : b.verdict === "consider" ? 1 : 0) -
           (a.verdict === "pursue" ? 2 : a.verdict === "consider" ? 1 : 0) ||
+        (b.format === "two-for-two" ? 1 : 0) - (a.format === "two-for-two" ? 1 : 0) ||
+        b.counterpartyStarterDelta - a.counterpartyStarterDelta ||
         b.starterDelta - a.starterDelta,
-    )
-    .slice(0, 5);
+    );
+  const selected: TradeIdeaSnapshot[] = [];
+  const ideasPerTeam = new Map<string, number>();
+  const seenReceivePackages = new Set<string>();
+  for (const idea of rankedIdeas) {
+    if ((ideasPerTeam.get(idea.counterpartyTeamId) ?? 0) >= 2) continue;
+    const receiveKey = idea.targetPlayerIds.slice().sort().join("|");
+    if (seenReceivePackages.has(receiveKey)) continue;
+    selected.push(idea);
+    seenReceivePackages.add(receiveKey);
+    ideasPerTeam.set(idea.counterpartyTeamId, (ideasPerTeam.get(idea.counterpartyTeamId) ?? 0) + 1);
+    if (selected.length === 8) break;
+  }
+  return selected;
 }
 
 function buildFaabRange(
@@ -611,10 +699,10 @@ export function buildTransactionQueue(
   const tradeEntries = tradeIdeas
     .filter((idea) => idea.verdict !== "pass")
     .map((idea) => ({
-      id: `trade-${idea.givePlayerId}-${idea.targetPlayerId}`,
+      id: `trade-${idea.givePlayerIds.join("-")}-${idea.targetPlayerIds.join("-")}`,
       kind: "trade",
       priority: idea.verdict === "pursue" ? "this-week" : "monitor",
-      title: `Offer ${idea.givePlayerId} for ${idea.targetPlayerId}`,
+      title: `Offer ${idea.givePlayerIds.join(" + ")} for ${idea.targetPlayerIds.join(" + ")}`,
       summary: idea.summary,
       proposedTransaction: idea.proposedTransaction,
       faabRange: null,

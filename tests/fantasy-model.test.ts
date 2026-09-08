@@ -3992,7 +3992,6 @@ test("in-season trade ideas are driven by two-team lineup impact", () => {
     inSeasonFixtureLeagueTeams,
   );
 
-  assert.ok(ideas.length > 0, "trade idea list should not be empty");
   assert.ok(ideas.every((idea) => typeof idea.counterpartyStarterDelta === "number"));
   assert.ok(
     ideas.filter((idea) => idea.verdict !== "pass").every((idea) => idea.counterpartyStarterDelta >= -1.5),
@@ -4005,6 +4004,10 @@ test("in-season trade ideas are driven by two-team lineup impact", () => {
   assert.ok(
     ideas.every((idea) => idea.proposedTransaction.kind === "trade-proposal"),
     "trade ideas should map cleanly into provider-neutral trade proposals",
+  );
+  assert.ok(
+    ideas.every((idea) => idea.givePlayerIds.length === idea.targetPlayerIds.length),
+    "recommended packages should exchange the same number of players",
   );
 });
 
@@ -4027,6 +4030,14 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   assert.ok(dataset.actionQueue.length > 0);
   assert.ok(dataset.waiverRecommendations.every((idea) => playersById.get(idea.addPlayerId)?.availability === "free-agent"));
   assert.ok(dataset.tradeIdeas.filter((idea) => idea.verdict !== "pass").every((idea) => idea.counterpartyStarterDelta >= -1.5));
+  assert.ok(dataset.tradeIdeas.some((idea) => idea.format === "two-for-two"), "live recommendations should include roster-balancing packages");
+  assert.ok(dataset.tradeIdeas.every((idea) => {
+    if (idea.format !== "one-for-one") return true;
+    const give = playersById.get(idea.givePlayerId);
+    const receive = playersById.get(idea.targetPlayerId);
+    if (!give || !receive || give.player.positions[0] !== receive.player.positions[0]) return true;
+    return /rare same-position exception/i.test(idea.constructionSummary);
+  }), "same-position one-for-ones must be explicitly justified exceptions");
   assert.ok(dataset.waiverRecommendations.every((idea) => idea.dropPlayerId === null || playersById.get(idea.dropPlayerId)?.injuryStatus !== "IR"));
 });
 

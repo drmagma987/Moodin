@@ -772,6 +772,10 @@ export type InSeasonTeamSnapshot = {
 export type TradeIdeaSnapshot = {
   targetPlayerId: string;
   givePlayerId: string;
+  targetPlayerIds: string[];
+  givePlayerIds: string[];
+  format: "one-for-one" | "two-for-two";
+  constructionSummary: string;
   counterpartyTeamId: string;
   counterpartyTeamName: string;
   verdict: "pursue" | "consider" | "pass";
