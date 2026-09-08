@@ -406,6 +406,50 @@ function packageConstructionSummary(
   return "Repackages depth across positions so both managers solve a different roster need.";
 }
 
+function packageQualityGuard(
+  send: InSeasonPlayerSnapshot[],
+  receive: InSeasonPlayerSnapshot[],
+) {
+  if (send.length !== 2 || receive.length !== 2 || positionSignature(send) !== positionSignature(receive)) {
+    return { passes: true, summary: "No multi-player anchor dilution detected." };
+  }
+  const rankedPlayers = [...send, ...receive].filter((player) => Number.isFinite(player.marketRank));
+  if (rankedPlayers.length !== 4) {
+    return { passes: true, summary: "Market-tier coverage is incomplete, so the package is governed by projection and lineup impact only." };
+  }
+
+  const legRankDeltas = send.map((sent) => {
+    const incoming = receive.find((candidate) => primaryPosition(candidate) === primaryPosition(sent));
+    return {
+      position: primaryPosition(sent),
+      delta: (sent.marketRank ?? 999) - (incoming?.marketRank ?? 999),
+    };
+  });
+  const bestUpgrade = Math.max(0, ...legRankDeltas.map((leg) => leg.delta));
+  const largestDowngrade = Math.max(0, ...legRankDeltas.map((leg) => -leg.delta));
+  const outgoingAnchor = [...send].sort((a, b) => (a.marketRank ?? 999) - (b.marketRank ?? 999))[0];
+  const incomingAnchor = [...receive].sort((a, b) => (a.marketRank ?? 999) - (b.marketRank ?? 999))[0];
+  const outgoingEliteTier = outgoingAnchor.marketTier !== null && outgoingAnchor.marketTier !== undefined && outgoingAnchor.marketTier <= 3;
+  const equivalentEliteReturns = !outgoingEliteTier || receive.some((player) =>
+    player.marketTier !== null && player.marketTier !== undefined && player.marketTier <= (outgoingAnchor.marketTier ?? 3),
+  );
+  const legBalancePasses = largestDowngrade <= 8 || bestUpgrade >= largestDowngrade * 1.1;
+  const packageCeilingDelta =
+    receive.reduce((sum, player) => sum + tradeValue(player).p90, 0) -
+    send.reduce((sum, player) => sum + tradeValue(player).p90, 0);
+  const ceilingPasses = packageCeilingDelta >= -10;
+  const passes = equivalentEliteReturns && legBalancePasses && ceilingPasses;
+  const summary = !equivalentEliteReturns
+    ? `${outgoingAnchor.player.fullName} is an elite-tier anchor, but the return does not include an equally strong market-tier centerpiece.`
+    : !legBalancePasses
+      ? `The ${legRankDeltas.sort((a, b) => a.delta - b.delta)[0]?.position ?? "primary"} downgrade is larger than the best positional upgrade, so the package relies too heavily on depth aggregation.`
+      : !ceilingPasses
+        ? "The package gives away too much ceiling even though its median lineup math is competitive."
+        : `${incomingAnchor.player.fullName} preserves the package's anchor quality, and the strongest positional upgrade clears the downgrade premium.`;
+
+  return { passes, summary };
+}
+
 function buildOfferTiers(
   idea: TradeIdeaSnapshot,
   candidates: TradeIdeaSnapshot[],
@@ -533,21 +577,25 @@ export function analyzeTradeProposal(
   if (!targetTeam) return null;
 
   const impact = evaluateTradeImpact(playersById, myTeam, targetTeam, send, receive, returnDateOverrides);
+  const quality = packageQualityGuard(send, receive);
   const balance = impact.marketValueDelta >= 10
     ? "advantage-you"
     : impact.marketValueDelta <= -10
       ? "advantage-them"
       : "even";
   const hasIncomingIr = receive.some((player) => player.injuryStatus === "IR");
-  const verdict =
-    impact.restOfSeasonDelta >= 3 && impact.marketValueDelta >= -8 && impact.immediateStarterDelta >= (hasIncomingIr ? -35 : 0)
+  const verdict = !quality.passes
+    ? "counter"
+    : impact.restOfSeasonDelta >= 3 && impact.marketValueDelta >= -8 && impact.immediateStarterDelta >= (hasIncomingIr ? -35 : 0)
       ? "accept"
       : impact.restOfSeasonDelta >= 0 && impact.marketValueDelta >= -16
         ? "consider"
         : impact.counterpartyImmediateDelta > 0 && impact.restOfSeasonDelta > -8
           ? "counter"
           : "decline";
-  const rosterFitSummary = hasIncomingIr
+  const rosterFitSummary = !quality.passes
+    ? quality.summary
+    : hasIncomingIr
     ? impact.restOfSeasonDelta > 0
       ? "This is a patience trade: you give the other manager usable points now and bank the stronger post-return lineup."
       : "The injured-player discount is not large enough to compensate for the points you surrender now."
@@ -567,6 +615,7 @@ export function analyzeTradeProposal(
     counterpartyRestOfSeasonDelta: impact.counterpartyRestOfSeasonDelta,
     marketValueDelta: impact.marketValueDelta,
     rosterFitSummary,
+    qualityWarning: quality.passes ? null : quality.summary,
     injuryNotes: impact.injuryNotes,
   };
 }
@@ -599,6 +648,7 @@ export function buildTradeIdeaSnapshots(
   ) {
     const format = send.length === 2 ? "two-for-two" : "one-for-one";
     const impact = evaluateTradeImpact(playersById, myTeam, targetTeam, send, receive);
+    const quality = packageQualityGuard(send, receive);
     const starterDelta = impact.restOfSeasonDelta;
     const playoffUpsideDelta = impact.playoffUpsideDelta;
     const riskDelta = impact.riskDelta;
@@ -613,12 +663,12 @@ export function buildTradeIdeaSnapshots(
     if (samePositionOneForOne && !correlationRelief && !meaningfulRiskUpgrade) return;
 
     const incomingIr = receive.some((player) => player.injuryStatus === "IR");
-    const pursue = format === "two-for-two"
+    const pursue = quality.passes && (format === "two-for-two"
       ? starterDelta >= 3 && opponentBenefit >= 1 && Math.abs(marketValueGap) <= 30 && impact.immediateStarterDelta >= (incomingIr ? -35 : 0)
-      : starterDelta >= 2 && opponentBenefit >= 1 && Math.abs(marketValueGap) <= 18 && impact.immediateStarterDelta >= (incomingIr ? -30 : 0);
-    const consider = format === "two-for-two"
+      : starterDelta >= 2 && opponentBenefit >= 1 && Math.abs(marketValueGap) <= 18 && impact.immediateStarterDelta >= (incomingIr ? -30 : 0));
+    const consider = quality.passes && (format === "two-for-two"
       ? starterDelta >= 1.5 && opponentBenefit >= -0.5 && Math.abs(marketValueGap) <= 22 && impact.immediateStarterDelta >= (incomingIr ? -45 : -2)
-      : starterDelta >= 1 && opponentBenefit >= -0.5 && Math.abs(marketValueGap) <= 14 && impact.immediateStarterDelta >= (incomingIr ? -40 : -2);
+      : starterDelta >= 1 && opponentBenefit >= -0.5 && Math.abs(marketValueGap) <= 14 && impact.immediateStarterDelta >= (incomingIr ? -40 : -2));
     const verdict = pursue ? "pursue" : consider ? "consider" : "pass";
 
     const sendNames = send.map((player) => player.player.fullName).join(" + ");
@@ -647,6 +697,7 @@ export function buildTradeIdeaSnapshots(
       givePlayerIds: send.map((player) => player.player.id),
       format,
       constructionSummary,
+      qualitySummary: quality.summary,
       counterpartyTeamId: targetTeam.teamId,
       counterpartyTeamName: targetTeam.name,
       verdict,
@@ -669,6 +720,7 @@ export function buildTradeIdeaSnapshots(
         `Playoff upside delta: ${playoffUpsideDelta >= 0 ? "+" : ""}${playoffUpsideDelta.toFixed(1)}.`,
         `Opponent now/future delta: ${impact.counterpartyImmediateDelta >= 0 ? "+" : ""}${impact.counterpartyImmediateDelta.toFixed(1)} / ${impact.counterpartyRestOfSeasonDelta >= 0 ? "+" : ""}${impact.counterpartyRestOfSeasonDelta.toFixed(1)}.`,
         `Package value gap: ${marketValueGap >= 0 ? "+" : ""}${marketValueGap.toFixed(1)} ROS points.`,
+        quality.summary,
       ],
       proposedTransaction: {
         kind: "trade-proposal",
@@ -679,7 +731,7 @@ export function buildTradeIdeaSnapshots(
         rationale: `Offering ${sendNames} for ${receiveNames} changes your active-lineup value by ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)} and theirs by ${opponentStarterDelta >= 0 ? "+" : ""}${opponentStarterDelta.toFixed(1)}.`,
       } satisfies ProposedTransaction,
     } satisfies TradeIdeaSnapshot;
-    structuredCandidates.push(candidate);
+    if (quality.passes) structuredCandidates.push(candidate);
     if (verdict !== "pass") ideas.push(candidate);
   }
 

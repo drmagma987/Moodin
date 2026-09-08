@@ -4042,6 +4042,51 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   assert.ok(dataset.waiverRecommendations.every((idea) => idea.dropPlayerId === null || playersById.get(idea.dropPlayerId)?.injuryStatus !== "IR"));
 });
 
+test("trade recommendations reject depth aggregation that dilutes the best asset", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const playersById = new Map(dataset.players.map((player) => [player.player.id, player.player.fullName] as const));
+  const signatures = dataset.tradeIdeas.map((idea) => ({
+    send: idea.givePlayerIds.map((playerId) => playersById.get(playerId) ?? playerId).sort().join(" + "),
+    receive: idea.targetPlayerIds.map((playerId) => playersById.get(playerId) ?? playerId).sort().join(" + "),
+  }));
+
+  assert.ok(!signatures.some((trade) =>
+    trade.send === ["Jadarian Price", "Rome Odunze"].sort().join(" + ") &&
+    trade.receive === ["D'Andre Swift", "Michael Wilson"].sort().join(" + ")
+  ), "a modest RB upgrade cannot excuse a substantially larger WR downgrade");
+  assert.ok(!signatures.some((trade) =>
+    trade.send === ["Chris Olave", "Jadarian Price"].sort().join(" + ") &&
+    trade.receive === ["Derrick Henry", "Michael Wilson"].sort().join(" + ")
+  ), "an elite-tier centerpiece must return an equivalent anchor");
+  assert.ok(dataset.tradeIdeas.every((idea) => idea.qualitySummary.length > 0));
+});
+
+test("incoming analyzer counters packages that fail leg balance or elite anchor replacement", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const byName = new Map(dataset.players.map((player) => [player.player.fullName, player] as const));
+  const analyze = (sendNames: string[], receiveNames: string[]) => analyzeTradeProposal(
+    dataset.players,
+    dataset.myTeam,
+    dataset.leagueTeams,
+    sendNames.map((name) => byName.get(name)!.player.id),
+    receiveNames.map((name) => byName.get(name)!.player.id),
+  );
+
+  const unbalancedLegs = analyze(
+    ["Rome Odunze", "Jadarian Price"],
+    ["D'Andre Swift", "Michael Wilson"],
+  );
+  const dilutedAnchor = analyze(
+    ["Chris Olave", "Jadarian Price"],
+    ["Derrick Henry", "Michael Wilson"],
+  );
+
+  assert.equal(unbalancedLegs?.verdict, "counter");
+  assert.match(unbalancedLegs?.qualityWarning ?? "", /downgrade is larger than the best positional upgrade/i);
+  assert.equal(dilutedAnchor?.verdict, "counter");
+  assert.match(dilutedAnchor?.qualityWarning ?? "", /elite-tier anchor/i);
+});
+
 test("trade packages expose realistic offer bands without calling a major edge even", () => {
   const dataset = getInSeasonCommandCenterDataset();
   const ladders = dataset.tradeIdeas.map((idea) => idea.offerTiers).filter((tiers) => tiers.length > 1);

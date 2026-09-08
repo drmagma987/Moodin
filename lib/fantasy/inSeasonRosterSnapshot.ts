@@ -131,6 +131,8 @@ export function buildPdfRosterInSeasonSnapshot() {
         recentUsage: { ...baselineUsage },
         marketTrend: "steady",
         marketTrendCount: 0,
+        marketRank: candidate.market.aggregateRank ?? candidate.market.yahooXRank ?? candidate.market.ecr ?? candidate.market.adp ?? null,
+        marketTier: candidate.market.tier ?? null,
         injuryStatus: injuredReserveNames.has(normalizeName(candidate.player.fullName))
           ? "IR"
           : candidate.context?.healthStatus ?? null,

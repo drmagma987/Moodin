@@ -722,6 +722,8 @@ export type InSeasonPlayerSnapshot = {
   recentUsage: UsageWindowSnapshot;
   marketTrend: "add" | "drop" | "steady";
   marketTrendCount: number;
+  marketRank?: number | null;
+  marketTier?: number | null;
   depthChartOrder?: number;
   injuryStatus?: string | null;
   projectedReturnDate?: string | null;
@@ -750,6 +752,7 @@ export type TradeAnalysisSnapshot = {
   counterpartyRestOfSeasonDelta: number;
   marketValueDelta: number;
   rosterFitSummary: string;
+  qualityWarning: string | null;
   injuryNotes: string[];
 };
 
@@ -801,6 +804,7 @@ export type TradeIdeaSnapshot = {
   givePlayerIds: string[];
   format: "one-for-one" | "two-for-two";
   constructionSummary: string;
+  qualitySummary: string;
   counterpartyTeamId: string;
   counterpartyTeamName: string;
   verdict: "pursue" | "consider" | "pass";

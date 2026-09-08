@@ -547,6 +547,12 @@ If checks cannot be run, say so clearly.
   - IR players are available in trade selectors and recommendations, with return-date-adjusted ROS value, explicit uncertainty notes, and editable projected-return overrides
   - Yahoo roster-slot labels now refresh IR/PUP/NFI status so new in-season injuries can enter stash-trade analysis
   - added regressions for offer-band honesty and projected-return sensitivity
+- Added package-quality safeguards to the in-season trade model:
+  - two-for-two recommendations now compare each same-position leg so a large downgrade cannot be hidden by a smaller upgrade elsewhere
+  - sending an elite market-tier anchor requires an equivalently strong incoming centerpiece instead of depth aggregation
+  - package ceiling must remain intact, while genuinely useful cross-position balancing trades and injury-discount opportunities can still pass
+  - the incoming analyzer now counters failed anchor-quality packages and explains the specific warning
+  - added regressions for the rejected Odunze/Price and Olave/Price package examples
 
 ### 2026-08-12
 
