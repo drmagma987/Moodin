@@ -729,6 +729,59 @@ export type InSeasonPlayerSnapshot = {
   projectedReturnDate?: string | null;
   practiceParticipation?: string | null;
   liveStats?: Tank01LivePlayerSnapshot;
+  advancedUsage?: InSeasonAdvancedUsageSnapshot;
+};
+
+export type AdvancedMetricStatus = "verified" | "pending-source" | "insufficient-sample";
+
+export type InSeasonAdvancedUsageSnapshot = {
+  week: number;
+  games: number;
+  routes: number | null;
+  targetsPerRouteRun: number | null;
+  yardsPerRouteRun: number | null;
+  airYards: number | null;
+  airYardsShare: number | null;
+  rushingYardsOverExpected: number | null;
+  rushingYardsOverExpectedPerAttempt: number | null;
+  forcedMissedTackles: number | null;
+  forcedMissedTackleRate: number | null;
+  cpoe: number | null;
+  teamProe: number | null;
+  statuses: {
+    routes: AdvancedMetricStatus;
+    airYards: AdvancedMetricStatus;
+    rushingYardsOverExpected: AdvancedMetricStatus;
+    forcedMissedTackles: AdvancedMetricStatus;
+    quarterbackEnvironment: AdvancedMetricStatus;
+  };
+  sources: string[];
+};
+
+export type AdvancedMetricSignalSnapshot = {
+  playerId: string;
+  playerName: string;
+  position: PlayerPosition;
+  rosterContext: string;
+  classification: "elite-target" | "air-yards-watch" | "runner-creation" | "runner-warning" | "qb-environment";
+  confidence: "low" | "medium" | "high";
+  score: number;
+  headline: string;
+  metrics: string[];
+  analysis: string;
+};
+
+export type TeamOffenseEnvironmentSnapshot = {
+  team: string;
+  week: number;
+  plays: number;
+  proe: number;
+  quarterbacks: Array<{
+    playerName: string;
+    attempts: number;
+    cpoe: number;
+    status: AdvancedMetricStatus;
+  }>;
 };
 
 export type TradeOfferTierSnapshot = {
@@ -861,6 +914,28 @@ export type Tank01ProviderStatus = {
   message: string;
 };
 
+export type CompletedGameReviewSnapshot = {
+  playerName: string;
+  team: string;
+  rosterContext: string;
+  action: string;
+  confidence: "low" | "medium" | "high";
+  statLine: string;
+  usageLine: string;
+  analysis: string;
+};
+
+export type InSeasonEvidenceStatusSnapshot = {
+  week: number;
+  completedGames: number;
+  scheduledGames: number;
+  capturedAt: string;
+  latestGame: string;
+  evidenceWeight: number;
+  matchedPlayers: number;
+  sources: Array<{ label: string; url: string }>;
+};
+
 export type InSeasonCommandCenterDataset = {
   players: InSeasonPlayerSnapshot[];
   myTeam: InSeasonTeamSnapshot;
@@ -870,6 +945,10 @@ export type InSeasonCommandCenterDataset = {
   waiverRecommendations: WaiverRecommendationSnapshot[];
   actionQueue: TransactionQueueEntry[];
   tank01Status: Tank01ProviderStatus;
+  evidenceStatus: InSeasonEvidenceStatusSnapshot;
+  completedGameReviews: CompletedGameReviewSnapshot[];
+  advancedMetricSignals: AdvancedMetricSignalSnapshot[];
+  teamOffenseEnvironments: TeamOffenseEnvironmentSnapshot[];
   scenarioNotes: string[];
 };
 

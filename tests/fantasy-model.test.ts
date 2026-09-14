@@ -49,6 +49,12 @@ import {
   buildWaiverRecommendationSnapshots,
 } from "@/lib/fantasy/inSeason";
 import { buildPdfRosterInSeasonSnapshot } from "@/lib/fantasy/inSeasonRosterSnapshot";
+import { applyCompletedGameEvidence } from "@/lib/fantasy/completedGameEvidence";
+import {
+  buildForcedMissedTackleMetricsFromCsv,
+  buildNgsRushingMetricsFromCsv,
+  buildPbpAdvancedMetricsFromCsv,
+} from "@/lib/fantasy/inSeasonAdvancedMetrics";
 import {
   allocateLeagueLineup,
   buildLeagueOpportunityDashboard,
@@ -4031,11 +4037,91 @@ test("PDF roster snapshot matches all 10 Yahoo teams without ownership gaps", ()
   assert.ok(snapshot.players.length >= 220, "the in-season pool must remain a full league-quality player universe");
 });
 
+test("completed Week 1 evidence updates the full Sunday afternoon slate with conservative weight", () => {
+  const snapshot = buildPdfRosterInSeasonSnapshot();
+  const evidence = applyCompletedGameEvidence(snapshot.players);
+  const byName = new Map(evidence.players.map((player) => [player.player.fullName, player] as const));
+  const price = byName.get("Jadarian Price");
+  const brown = byName.get("A.J. Brown");
+  const mccaffrey = byName.get("Christian McCaffrey");
+  const black = byName.get("Kaelon Black");
+  const gibbs = byName.get("Jahmyr Gibbs");
+  const schultz = byName.get("Dalton Schultz");
+  const murray = byName.get("Kyler Murray");
+  const nix = byName.get("Bo Nix");
+
+  assert.equal(evidence.matchedPlayers, 242);
+  assert.equal(price?.recentUsage.games, 1);
+  assert.ok((price?.recentUsage.snapShare ?? 0) < (price?.baselineUsage.snapShare ?? 0));
+  assert.ok((price?.recentUsage.carriesPerGame ?? 0) > 0);
+  assert.equal(brown?.injuryStatus, "Questionable");
+  assert.equal(mccaffrey?.advancedUsage?.rushingYardsOverExpectedPerAttempt, 1.619);
+  assert.equal(black?.recentUsage.games, 1);
+  assert.equal(black?.advancedUsage?.rushingYardsOverExpectedPerAttempt, -0.38);
+  assert.equal(gibbs?.recentUsage.games, 1);
+  assert.ok((gibbs?.recentUsage.carriesPerGame ?? 0) > (gibbs?.baselineUsage.carriesPerGame ?? 0));
+  assert.ok((schultz?.recentUsage.targetsPerGame ?? 0) > (schultz?.baselineUsage.targetsPerGame ?? 0));
+  assert.equal(schultz?.advancedUsage, undefined, "Sunday route metrics must wait for the advanced feed");
+  assert.equal(murray?.injuryStatus, "Questionable");
+  assert.deepEqual(nix?.recentUsage, nix?.baselineUsage, "Monday players must remain on their prior");
+});
+
+test("advanced in-season parsers calculate route-independent air share, RYOE, CPOE, PROE, and FMT rate", () => {
+  const pbp = [
+    "game_id,week,posteam,play_type,pass_oe,pass_attempt,receiver_player_name,air_yards,passer_player_name,cpoe",
+    "game,1,SEA,pass,25,1,J.Receiver,20,Q.Back,8",
+    "game,1,SEA,pass,20,1,J.Receiver,10,Q.Back,4",
+    "game,1,SEA,run,-60,0,,,,",
+  ].join("\n");
+  const parsedPbp = buildPbpAdvancedMetricsFromCsv(pbp, "game");
+  assert.equal(parsedPbp.receivingByName.get("j receiver")?.airYards, 30);
+  assert.equal(parsedPbp.quarterbackByName.get("q back")?.cpoe, 6);
+  assert.equal(parsedPbp.teamEnvironments[0]?.proe, -5);
+
+  const ngs = [
+    "season,week,player_display_name,rush_attempts,rush_yards_over_expected,rush_yards_over_expected_per_att",
+    "2026,1,Jadarian Price,10,6.834,0.6834",
+  ].join("\n");
+  assert.equal(buildNgsRushingMetricsFromCsv(ngs, 2026, 1).get("jadarian price")?.rushingYardsOverExpectedPerAttempt, 0.6834);
+
+  const charting = [
+    "season,week,player_name,carries,forced_missed_tackles",
+    "2026,1,Jadarian Price,10,3",
+  ].join("\n");
+  assert.equal(buildForcedMissedTackleMetricsFromCsv(charting, 2026, 1).get("jadarian price")?.forcedMissedTackleRate, 0.3);
+});
+
+test("advanced Week 1 board surfaces signals from both completed games", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const signatures = new Set(dataset.advancedMetricSignals.map((signal) => `${signal.playerName}:${signal.classification}`));
+  const price = dataset.players.find((player) => player.player.fullName === "Jadarian Price");
+
+  assert.ok(signatures.has("Jaxon Smith-Njigba:elite-target"));
+  assert.ok(signatures.has("Romeo Doubs:air-yards-watch"));
+  assert.ok(signatures.has("Jadarian Price:runner-creation"));
+  assert.ok(signatures.has("Drake Maye:qb-environment"));
+  assert.ok(signatures.has("Puka Nacua:elite-target"));
+  assert.ok(signatures.has("Davante Adams:air-yards-watch"));
+  assert.ok(signatures.has("Christian McCaffrey:elite-target"));
+  assert.ok(signatures.has("Christian McCaffrey:runner-creation"));
+  assert.ok(signatures.has("Matthew Stafford:qb-environment"));
+  assert.ok(!signatures.has("Sam Darnold:qb-environment"), "two attempts cannot produce a QB environment signal");
+  assert.equal(price?.advancedUsage?.forcedMissedTackles, null);
+  assert.equal(price?.advancedUsage?.statuses.forcedMissedTackles, "pending-source");
+});
+
 test("live in-season dataset never recommends an impossible rostered add or lopsided trade", () => {
   const dataset = getInSeasonCommandCenterDataset();
   const playersById = new Map(dataset.players.map((player) => [player.player.id, player] as const));
 
   assert.ok(dataset.actionQueue.length > 0);
+  const topWaiverTransaction = dataset.waiverRecommendations[0]?.proposedTransaction;
+  assert.equal(topWaiverTransaction?.kind, "add-drop");
+  assert.equal(topWaiverTransaction?.kind === "add-drop" ? topWaiverTransaction.add[0]?.fullName : null, "Dalton Schultz");
+  assert.equal(dataset.waiverRecommendations[0]?.verdict, "priority");
+  assert.ok(dataset.waiverRecommendations.some((idea) =>
+    playersById.get(idea.addPlayerId)?.player.fullName === "Kaelon Black" && idea.verdict === "priority"
+  ));
   assert.ok(dataset.waiverRecommendations.every((idea) => playersById.get(idea.addPlayerId)?.availability === "free-agent"));
   assert.ok(dataset.tradeIdeas.filter((idea) => idea.verdict !== "pass").every((idea) => idea.counterpartyStarterDelta >= -1.5));
   assert.ok(dataset.tradeIdeas.some((idea) => idea.format === "two-for-two"), "live recommendations should include roster-balancing packages");
@@ -4150,7 +4236,7 @@ test("league opportunity grades honor the three-WR, two-FLEX lineup without doub
   assert.ok(myProfile.groups.WR.percentiles.surplus > myProfile.groups.RB.percentiles.surplus);
 });
 
-test("opportunity dashboard diagnoses roster construction and refuses to invent trade formats", () => {
+test("opportunity dashboard activates usage categories after verified regular-season evidence", () => {
   const dataset = getInSeasonCommandCenterDataset();
   const dashboard = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
   const oneForOneBoard = dashboard.weeklyBoard.find((item) => item.label === "Best clean 1-for-1");
@@ -4161,8 +4247,8 @@ test("opportunity dashboard diagnoses roster construction and refuses to invent 
   assert.ok(dashboard.partners.some((partner) => !partner.viable), "not every opponent should be presented as a viable partner");
   assert.ok(oneForOneBoard, "the 1-for-1 category remains visible even when no deal clears the safeguards");
   if (!oneForOneBoard.available) assert.match(oneForOneBoard.value, /No worthwhile structure/);
-  assert.equal(dashboard.usageEvidenceAvailable, false);
-  assert.ok(dashboard.weeklyBoard.filter((item) => /buy-low|sell-high/i.test(item.label)).every((item) => !item.available));
+  assert.equal(dashboard.usageEvidenceAvailable, true);
+  assert.ok(dashboard.weeklyBoard.filter((item) => /buy-low|sell-high/i.test(item.label)).every((item) => item.available));
 });
 
 test("opportunity proposals preserve elite anchors and device preferences can block an outgoing player", () => {

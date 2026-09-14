@@ -16,6 +16,13 @@ import type {
 } from "@/lib/fantasy/types";
 import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
 import { buildPdfRosterInSeasonSnapshot, inSeasonRosterSnapshotMeta } from "@/lib/fantasy/inSeasonRosterSnapshot";
+import {
+  applyCompletedGameEvidence,
+  completedGameEvidenceMeta,
+  completedGameReviews,
+  completedGameTeamEnvironments,
+} from "@/lib/fantasy/completedGameEvidence";
+import { buildAdvancedMetricSignals } from "@/lib/fantasy/inSeasonAdvancedMetrics";
 
 const protectedFoundationNames = new Set<string>(
   leagueSourceOfTruth.keepers.myDeclaredPlayers,
@@ -797,6 +804,7 @@ function buildFaabRange(
   player: InSeasonPlayerSnapshot,
   trend: OpportunityTrendSnapshot | undefined,
   starterDelta: number,
+  verifiedRoleBreakout = false,
 ): FaabRangeSnapshot | null {
   const position = primaryPosition(player);
   const basePercent =
@@ -810,7 +818,7 @@ function buildFaabRange(
           ? 1
           : 0;
   const deltaBoost = clamp(starterDelta / 3, 0, 8);
-  const percentLow = Math.round(clamp(basePercent + classificationBoost + deltaBoost, 1, 35));
+  const percentLow = Math.round(clamp(basePercent + classificationBoost + deltaBoost + (verifiedRoleBreakout ? 8 : 0), 1, 35));
   const percentHigh = Math.round(clamp(percentLow + (classificationBoost >= 5 ? 6 : 4), percentLow, 45));
   const faabBudget = yahooLeagueConfig.faabBudget;
 
@@ -839,6 +847,18 @@ export function buildWaiverRecommendationSnapshots(
   return freeAgents
     .map((addPlayer) => {
       const addTrend = trendsByPlayerId.get(addPlayer.player.id);
+      const observedCarries = addPlayer.recentUsage.games > 0
+        ? (addPlayer.recentUsage.carriesPerGame - addPlayer.baselineUsage.carriesPerGame * (1 - completedGameEvidenceMeta.evidenceWeight)) /
+          completedGameEvidenceMeta.evidenceWeight
+        : 0;
+      const observedSnapShare = addPlayer.recentUsage.games > 0
+        ? (addPlayer.recentUsage.snapShare - addPlayer.baselineUsage.snapShare * (1 - completedGameEvidenceMeta.evidenceWeight)) /
+          completedGameEvidenceMeta.evidenceWeight
+        : 0;
+      const verifiedRoleBreakout = primaryPosition(addPlayer) === "RB" &&
+        addPlayer.advancedUsage?.statuses.routes === "verified" &&
+        observedCarries >= 12 &&
+        observedSnapShare >= 0.35;
       const bestSwap = dropCandidates
         .map((dropPlayer) => {
           const after = fillFutureValueLineup(
@@ -867,7 +887,8 @@ export function buildWaiverRecommendationSnapshots(
                 ? 4
                 : addTrend?.classification === "market-awakening"
                   ? 3
-                  : 0)
+                  : 0) +
+              (verifiedRoleBreakout ? 10 : 0)
             ).toFixed(2),
           );
 
@@ -887,7 +908,7 @@ export function buildWaiverRecommendationSnapshots(
       const playoffUpsideDelta = bestSwap?.playoffUpsideDelta ?? 0;
       const riskDelta = bestSwap?.riskDelta ?? 0;
       const verdict =
-        starterDelta >= 8 || (starterDelta >= 4 && addTrend?.classification === "early-edge")
+        verifiedRoleBreakout || starterDelta >= 8 || (starterDelta >= 4 && addTrend?.classification === "early-edge")
           ? "priority"
           : starterDelta >= 2 ||
               playoffUpsideDelta >= 8 ||
@@ -896,7 +917,7 @@ export function buildWaiverRecommendationSnapshots(
             : addTrend && addTrend.classification !== "steady"
               ? "watch"
               : "pass";
-      const faabRange = verdict === "pass" ? null : buildFaabRange(addPlayer, addTrend, starterDelta);
+      const faabRange = verdict === "pass" ? null : buildFaabRange(addPlayer, addTrend, starterDelta, verifiedRoleBreakout);
       const dropPlayer = bestSwap?.dropPlayer ?? null;
 
       return {
@@ -910,13 +931,16 @@ export function buildWaiverRecommendationSnapshots(
         faabRange,
         summary:
           verdict === "priority"
-            ? `${addPlayer.player.fullName} is the cleanest immediate add if you can cut ${dropPlayer?.player.fullName ?? "a fringe roster spot"}.`
+            ? verifiedRoleBreakout
+              ? `${addPlayer.player.fullName} is the cleanest immediate add after earning ${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of snaps; cut ${dropPlayer?.player.fullName ?? "a fringe roster spot"}.`
+              : `${addPlayer.player.fullName} is the cleanest immediate add if you can cut ${dropPlayer?.player.fullName ?? "a fringe roster spot"}.`
             : verdict === "bid"
               ? `${addPlayer.player.fullName} is worth a measured waiver bid if the roster churn point is ${dropPlayer?.player.fullName ?? "your weakest bench slot"}.`
               : verdict === "watch"
                 ? `${addPlayer.player.fullName} is not a mandatory click yet, but the usage trend is strong enough to keep live.`
                 : `${addPlayer.player.fullName} does not beat your current bench math enough to force a move right now.`,
         rationale: [
+          ...(verifiedRoleBreakout ? [`Verified role breakout: ${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of offensive snaps.`] : []),
           `Trend-adjusted starter delta: ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)}.`,
           `Weekly median delta versus ${dropPlayer?.player.fullName ?? "best drop"}: ${weeklyDelta >= 0 ? "+" : ""}${weeklyDelta.toFixed(1)}.`,
           `Playoff upside delta: ${playoffUpsideDelta >= 0 ? "+" : ""}${playoffUpsideDelta.toFixed(1)}.`,
@@ -1004,19 +1028,22 @@ export function buildTransactionQueue(
 
 export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset {
   const rosterSnapshot = buildPdfRosterInSeasonSnapshot();
-  const opportunityTrends = buildOpportunityTrendSnapshots(rosterSnapshot.players);
+  const completedEvidence = applyCompletedGameEvidence(rosterSnapshot.players);
+  const opportunityTrends = buildOpportunityTrendSnapshots(completedEvidence.players);
   const tradeIdeas = buildTradeIdeaSnapshots(
-    rosterSnapshot.players,
+    completedEvidence.players,
     rosterSnapshot.myTeam,
     rosterSnapshot.teams,
   );
   const waiverRecommendations = buildWaiverRecommendationSnapshots(
-    rosterSnapshot.players,
+    completedEvidence.players,
     rosterSnapshot.myTeam,
   );
+  const teamNamesById = new Map(rosterSnapshot.teams.map((team) => [team.teamId, team.name] as const));
+  const advancedMetricSignals = buildAdvancedMetricSignals(completedEvidence.players, teamNamesById);
 
   return {
-    players: rosterSnapshot.players,
+    players: completedEvidence.players,
     myTeam: rosterSnapshot.myTeam,
     leagueTeams: rosterSnapshot.teams,
     opportunityTrends,
@@ -1024,10 +1051,27 @@ export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset 
     waiverRecommendations,
     actionQueue: buildTransactionQueue(waiverRecommendations, tradeIdeas),
     tank01Status: getTank01ProviderStatus(),
+    evidenceStatus: {
+      week: completedGameEvidenceMeta.week,
+      completedGames: completedGameEvidenceMeta.completedGames,
+      scheduledGames: completedGameEvidenceMeta.scheduledGames,
+      capturedAt: completedGameEvidenceMeta.capturedAt,
+      latestGame: completedGameEvidenceMeta.latestGame,
+      evidenceWeight: completedGameEvidenceMeta.evidenceWeight,
+      matchedPlayers: completedEvidence.matchedPlayers,
+      sources: completedGameEvidenceMeta.sources.map((source) => ({ ...source })),
+    },
+    completedGameReviews,
+    advancedMetricSignals,
+    teamOffenseEnvironments: completedGameTeamEnvironments.map((environment) => ({
+      ...environment,
+      quarterbacks: environment.quarterbacks.map((quarterback) => ({ ...quarterback })),
+    })),
     scenarioNotes: [
       `League ownership comes from the ${inSeasonRosterSnapshotMeta.source} captured ${inSeasonRosterSnapshotMeta.capturedAt}.`,
       `${rosterSnapshot.unmatchedRosterPlayers.length} roster entries could not be matched to the current modeled player board.`,
-      "Week 1 has no regular-season usage sample yet, so opportunity corrections remain neutral until real snaps, routes, carries, and targets arrive.",
+      `Week 1 analysis is active after ${completedGameEvidenceMeta.latestGame}; ${completedEvidence.matchedPlayers} modeled players received verified game evidence. Sunday box scores update carries, targets, target share, and scoring while snap and route feeds remain pending.`,
+      `Early Week 1 evidence is blended at ${Math.round(completedGameEvidenceMeta.evidenceWeight * 100)}% so role signals can surface without treating one-week observations as stable season-long rates.`,
       "Tank01 is treated as an experimental live-state provider seam, not a core dependency, until live value is proven.",
       "Trade ideas are evaluated by starter-range and playoff-upside impact, not generic name value.",
       "Waiver recommendations lean on trend-adjusted future value so quiet usage breakouts can outrank stale median projections before the market fully catches up.",

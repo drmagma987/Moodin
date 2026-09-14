@@ -1003,3 +1003,39 @@ If checks cannot be run, say so clearly.
 - Added an explainable weekly board and opponent drill-down with explicit empty states when a trade format or usage-backed buy-low/sell-high signal does not exist.
 - Added regressions for league-relative grading, unique FLEX allocation, compatibility/non-viability, 1-for-1 visibility, anchor preservation, untouchable preferences, IR stash value, and marginal lineup replacement.
 - Verified canonical league integrity, 137/137 fantasy tests, lint (existing bachelor-party font warning only), TypeScript, production build, and local browser rendering/interactions.
+
+### 2026-09-10
+
+- Activated the Fantasy Football Supertool's regular-season analysis after the first 2026 NFL final:
+  - ingested the Patriots-Seahawks opener from verified box-score and usage sources
+  - blended one-game snaps, routes, carries, targets, target share, and fantasy scoring into preseason baselines at an 18% Week 1 evidence weight
+  - added roster-aware reviews for Jadarian Price, Hunter Henry, Romeo Doubs, Jaxon Smith-Njigba, Rhamondre Stevenson, and A.J. Brown
+  - prevented A.J. Brown's injury-shortened route total from being presented as a role collapse
+  - replaced the stale no-games-played copy with live Week 1 evidence status and first-final analysis cards
+- Added the in-season Advanced Opportunity Lab:
+  - TPRR, YPRR, and Air Yards Share use verified routes, receiving production, and nflverse play-by-play air yards
+  - RYOE and RYOE per attempt use NFL Next Gen Stats through nflverse
+  - quarterback CPOE is paired with team PROE and suppresses sub-10-attempt quarterback signals
+  - Forced Missed Tackle Rate is modeled with an explicit ingestion adapter and unavailable-state guard; the opener remains pending until a trustworthy charted value posts
+  - advanced signals are roster-aware, sample-size labeled, and kept distinct from raw fantasy-point sorting
+- Verified with 140/140 fantasy tests, lint (existing bachelor-party font warning only), TypeScript, and a local rendered interaction check of the new Advanced tab.
+
+### 2026-09-11
+
+- Ingested the second completed Week 1 game, San Francisco 27 at Los Angeles Rams 7, into the Fantasy Football Supertool.
+- Expanded the completed-game evidence layer to 37 matched modeled players across two finals while retaining a conservative 18% early-week observation weight.
+- Added verified 49ers-Rams snaps, routes, targets, carries, scoring, air yards, team PROE, quarterback CPOE, and available Next Gen Stats RYOE.
+- Added roster-aware reviews for Kaelon Black, Christian McCaffrey, Puka Nacua, Davante Adams, George Kittle, and Matthew Stafford; Forced Missed Tackle Rate remains explicitly pending rather than inferred.
+
+### 2026-09-13
+
+- Ingested the full finalized Week 1 Sunday daytime slate into the Fantasy Football Supertool:
+  - advanced the evidence status from 2 to 14 of 16 completed games
+  - matched 242 modeled players across the completed slate
+  - applied verified Sunday carries, targets, team target shares, and Yahoo-custom scoring at the existing conservative 18% Week 1 evidence weight
+  - preserved preseason snap/route baselines for the Sunday games until those advanced feeds publish rather than manufacturing usage estimates
+- Rebuilt the league-aware move queue from the expanded evidence:
+  - Dalton Schultz and Kaelon Black now surface as the priority waiver options, with Tyjae Spears as the preferred cut
+  - added slate reviews for the user's Gibbs, Amon-Ra, Olave, Fannin, and Spears decisions plus major waiver, trade, and injury signals
+  - marked Kyler Murray questionable after his first-quarter concussion and prevented the shortened performance from being treated as a normal efficiency sample
+- Clarified the Advanced Opportunity Lab so the first two games' route/air-yard/NGS metrics remain visible while Sunday advanced charting is explicitly labeled pending.
