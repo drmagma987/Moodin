@@ -140,8 +140,12 @@ export function buildAdvancedMetricSignals(
       const tprr = advanced.targetsPerRouteRun;
       const yprr = advanced.yardsPerRouteRun;
       const airShare = advanced.airYardsShare;
-      const eliteEfficiency = (tprr ?? 0) >= 0.25 || (yprr ?? 0) >= 2.25;
-      const airYardsWatch = (airShare ?? 0) >= 0.25 && (yprr ?? 0) < 1.5;
+      const estimatedTargets = advanced.routes * (tprr ?? 0);
+      const routeQualified = position === "RB"
+        ? advanced.routes >= 8 && estimatedTargets >= 2
+        : advanced.routes >= 12 && estimatedTargets >= 3;
+      const eliteEfficiency = routeQualified && ((tprr ?? 0) >= 0.25 || (yprr ?? 0) >= 2.25);
+      const airYardsWatch = routeQualified && (airShare ?? 0) >= 0.25 && (yprr ?? 0) < 1.5;
       if (eliteEfficiency || airYardsWatch) {
         const classification = airYardsWatch ? "air-yards-watch" as const : "elite-target" as const;
         const score = (tprr ?? 0) * 35 + (yprr ?? 0) * 4 + (airShare ?? 0) * 24;

@@ -8,8 +8,8 @@ import type {
 } from "@/lib/fantasy/types";
 
 export const inSeasonRosterSnapshotMeta = {
-  source: "Yahoo Starting Rosters PDF",
-  capturedAt: "2026-09-08T09:42:24-04:00",
+  source: "Yahoo Starting Rosters PDF + manual roster correction",
+  capturedAt: "2026-09-15T10:24:00-04:00",
   week: 1,
 } as const;
 
@@ -57,7 +57,7 @@ export const inSeasonRosterSnapshotTeams = [
   {
     teamId: "fc-netanyah00",
     name: "FC Netanyah00",
-    players: ["Dak Prescott", "Jahmyr Gibbs", "Jadarian Price", "Amon-Ra St. Brown", "Chris Olave", "DeVonta Smith", "Harold Fannin Jr.", "Rome Odunze", "Josh Downs", "Cameron Dicker", "J.K. Dobbins", "Kenny Gainwell", "Romeo Doubs", "Tre Tucker", "Tyjae Spears", "Hunter Henry", "Isiah Pacheco"],
+    players: ["Dak Prescott", "Jahmyr Gibbs", "Jadarian Price", "Amon-Ra St. Brown", "Chris Olave", "DeVonta Smith", "Harold Fannin Jr.", "Rome Odunze", "Josh Downs", "Cameron Dicker", "J.K. Dobbins", "Kenny Gainwell", "Romeo Doubs", "Tre Tucker", "Tyjae Spears", "Brock Purdy", "Isiah Pacheco"],
   },
   {
     teamId: "peyton-and-brady-place",
@@ -133,6 +133,7 @@ export function buildPdfRosterInSeasonSnapshot() {
         marketTrendCount: 0,
         marketRank: candidate.market.aggregateRank ?? candidate.market.yahooXRank ?? candidate.market.ecr ?? candidate.market.adp ?? null,
         marketTier: candidate.market.tier ?? null,
+        currentRole: candidate.context?.currentRole ?? "unknown",
         injuryStatus: injuredReserveNames.has(normalizeName(candidate.player.fullName))
           ? "IR"
           : candidate.context?.healthStatus ?? null,

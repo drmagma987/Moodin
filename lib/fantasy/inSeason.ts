@@ -87,54 +87,88 @@ export function buildOpportunityTrendSnapshots(
       const opportunityFalling = opportunityScore <= -8;
       const marketHot = market >= 8;
       const marketCold = market <= -5;
+      const pointsDelta = player.recentUsage.fantasyPointsPerGame - player.baselineUsage.fantasyPointsPerGame;
+      const rank = player.marketRank ?? null;
+      const tier = player.marketTier ?? null;
+      const priceContext = tier !== null && tier <= 2 || rank !== null && rank <= 24
+        ? "elite" as const
+        : tier !== null && tier <= 5 || rank !== null && rank <= 60
+          ? "established" as const
+          : tier !== null && tier <= 10 || rank !== null && rank <= 180
+            ? "mid-market" as const
+            : tier !== null || rank !== null
+              ? "deep" as const
+              : "unknown" as const;
+      const meaningfulVolume = player.recentUsage.carriesPerGame + player.recentUsage.targetsPerGame >= 6
+        || player.recentUsage.routeParticipation >= 0.45;
+      const trueBuyLow = player.availability === "league-rostered"
+        && priceContext !== "elite"
+        && opportunityRising
+        && !marketHot
+        && meaningfulVolume
+        && (marketCold || pointsDelta <= -1.5 || priceContext === "mid-market" || priceContext === "deep" || priceContext === "unknown");
+      const trueSellHigh = (marketHot || pointsDelta >= 4)
+        && opportunityScore < 5;
 
-      const classification =
-        opportunityRising && !marketHot
-          ? "early-edge"
-          : opportunityRising && marketHot
-            ? "market-awakening"
-            : !opportunityRising && marketHot
-              ? "hype-without-usage"
-              : opportunityFalling || marketCold
-                ? "role-collapse"
-                : "steady";
+      const classification = trueBuyLow
+        ? "buy-low" as const
+        : trueSellHigh
+          ? "sell-high" as const
+          : player.availability === "free-agent" && opportunityRising && meaningfulVolume
+            ? "waiver-rise" as const
+            : opportunityFalling || marketCold
+              ? "role-warning" as const
+              : opportunityRising || priceContext === "elite" && opportunityScore >= 5
+                ? "role-confirmation" as const
+                : "watch" as const;
 
-      const recommendation =
-        classification === "early-edge"
-          ? player.availability === "free-agent"
-            ? "add"
-            : player.availability === "my-roster"
-              ? "hold"
-              : "trade-for"
-          : classification === "market-awakening"
-            ? player.availability === "free-agent"
-              ? "add"
-              : player.availability === "my-roster"
-                ? "hold"
-                : "trade-for"
-            : classification === "hype-without-usage"
-              ? "avoid"
-              : classification === "role-collapse"
-                ? player.availability === "my-roster"
-                  ? "hold"
-                  : "avoid"
-                : "watch";
+      const recommendation = classification === "buy-low"
+        ? "trade-for" as const
+        : classification === "sell-high"
+          ? player.availability === "my-roster" ? "shop" as const : "avoid" as const
+          : classification === "waiver-rise"
+            ? "add" as const
+            : classification === "role-confirmation"
+              ? player.availability === "my-roster" ? "hold" as const : "watch" as const
+              : classification === "role-warning"
+                ? player.availability === "my-roster" ? "hold" as const : "avoid" as const
+                : "watch" as const;
+      const actionability = classification === "buy-low" || classification === "sell-high" || classification === "waiver-rise"
+        ? "actionable" as const
+        : classification === "role-confirmation"
+          ? "context" as const
+          : "watch" as const;
+      const marketLabel = [rank !== null ? `Consensus #${Math.round(rank)}` : null, tier !== null ? `Tier ${tier}` : null]
+        .filter(Boolean)
+        .join(" · ") || "No price rank";
+      const hasLiveMovement = player.marketTrend !== "steady" && player.marketTrendCount > 0;
+      const marketEvidence = hasLiveMovement
+        ? `${marketLabel}; Sleeper ${player.marketTrend} activity (${player.marketTrendCount}).`
+        : `${marketLabel}; no live add/drop movement is connected, so this is price context—not proof the market missed anything.`;
 
       const signals: string[] = [];
-      if (player.recentUsage.snapShare > player.baselineUsage.snapShare) {
+      if (Math.abs(player.recentUsage.snapShare - player.baselineUsage.snapShare) >= 0.02) {
         signals.push(
           `Snap share ${Math.round(player.baselineUsage.snapShare * 100)}% -> ${Math.round(player.recentUsage.snapShare * 100)}%.`,
         );
       }
-      if (player.recentUsage.targetsPerGame > player.baselineUsage.targetsPerGame) {
+      if (Math.abs(player.recentUsage.targetsPerGame - player.baselineUsage.targetsPerGame) >= 0.5) {
         signals.push(
           `Targets/game ${player.baselineUsage.targetsPerGame.toFixed(1)} -> ${player.recentUsage.targetsPerGame.toFixed(1)}.`,
         );
       }
-      if (player.recentUsage.carriesPerGame > player.baselineUsage.carriesPerGame) {
+      if (Math.abs(player.recentUsage.carriesPerGame - player.baselineUsage.carriesPerGame) >= 0.8) {
         signals.push(
           `Carries/game ${player.baselineUsage.carriesPerGame.toFixed(1)} -> ${player.recentUsage.carriesPerGame.toFixed(1)}.`,
         );
+      }
+      if (Math.abs(pointsDelta) >= 1) {
+        signals.push(
+          `Fantasy points/game ${player.baselineUsage.fantasyPointsPerGame.toFixed(1)} -> ${player.recentUsage.fantasyPointsPerGame.toFixed(1)}.`,
+        );
+      }
+      if (player.currentRole && player.currentRole !== "unknown") {
+        signals.push(`Depth-chart context: ${player.currentRole.replaceAll("-", " ")}.`);
       }
       if (player.marketTrend !== "steady") {
         signals.push(
@@ -145,16 +179,23 @@ export function buildOpportunityTrendSnapshots(
         signals.push("Tank01-ready live game hook is available for this player profile.");
       }
 
-      const summary =
-        classification === "early-edge"
-          ? `${player.player.fullName} is gaining real opportunity before the market has fully reacted.`
-          : classification === "market-awakening"
-            ? `${player.player.fullName} has both usage momentum and market attention, so the edge is getting louder.`
-            : classification === "hype-without-usage"
-              ? `${player.player.fullName} is getting attention without enough usage evidence yet.`
-              : classification === "role-collapse"
-                ? `${player.player.fullName} is losing enough role support that the floor is getting shakier.`
-                : `${player.player.fullName} looks stable enough that there is no urgent in-season action.`;
+      const summary = classification === "buy-low"
+        ? `${player.player.fullName} has improving opportunity while production or roster activity still points to a discounted price.`
+        : classification === "sell-high" && player.availability === "my-roster"
+          ? `${player.player.fullName}'s fantasy result or roster buzz is running ahead of the underlying role. Test the trade market; do not force a deal.`
+          : classification === "sell-high" && player.availability === "free-agent"
+            ? `${player.player.fullName}'s result or waiver buzz is running ahead of the underlying role. Treat this as a chase to avoid, not a reason to spend.`
+            : classification === "sell-high"
+              ? `${player.player.fullName}'s result or reputation is running ahead of the underlying role. Avoid paying the other manager's likely asking price.`
+          : classification === "waiver-rise"
+            ? `${player.player.fullName} has enough real volume to make the usage rise actionable on waivers.`
+            : classification === "role-confirmation" && priceContext === "elite"
+              ? `${player.player.fullName}'s usage confirms an already elite price. This is validation, not a claim that the player is obtainable below value.`
+              : classification === "role-confirmation"
+                ? `${player.player.fullName} earned a stronger role, but the current evidence does not establish a discounted trade price.`
+                : classification === "role-warning"
+                  ? `${player.player.fullName} is losing role support or roster momentum. Treat this as a risk flag, not an automatic drop.`
+                  : `${player.player.fullName} has an interesting data point, but price, role, and sample do not yet support a trade call.`;
 
       return {
         playerId: player.player.id,
@@ -162,12 +203,28 @@ export function buildOpportunityTrendSnapshots(
         opportunityScore,
         marketScore: market,
         recommendation,
+        actionability,
+        priceContext,
+        marketLabel,
+        marketEvidence,
         summary,
         signals: signals.slice(0, 4),
       } satisfies OpportunityTrendSnapshot;
     })
-    .sort((a, b) => Math.abs(b.opportunityScore) + Math.abs(b.marketScore) - (Math.abs(a.opportunityScore) + Math.abs(a.marketScore)))
-    .slice(0, 6);
+    .filter((trend) => {
+      const player = players.find((entry) => entry.player.id === trend.playerId);
+      const buried = player && (player.currentRole === "backup" || trend.priceContext === "deep")
+        && player.recentUsage.carriesPerGame + player.recentUsage.targetsPerGame < 6
+        && player.recentUsage.routeParticipation < 0.45;
+      if (buried && trend.actionability !== "actionable") return false;
+      return trend.classification !== "watch" || Math.abs(trend.opportunityScore) >= 5 || Math.abs(trend.marketScore) >= 5;
+    })
+    .sort((a, b) => {
+      const priority = { actionable: 3, context: 2, watch: 1 } as const;
+      return priority[b.actionability] - priority[a.actionability]
+        || Math.abs(b.opportunityScore) + Math.abs(b.marketScore) - (Math.abs(a.opportunityScore) + Math.abs(a.marketScore));
+    })
+    .slice(0, 16);
 }
 
 function fillStartingLineup(
@@ -282,13 +339,13 @@ function futureValueScore(
   const market = marketScore(player);
   const volatility = player.rosProjection.p90 - player.rosProjection.p10;
   const classificationBoost =
-    trend?.classification === "early-edge"
+    trend?.classification === "buy-low" || trend?.classification === "waiver-rise"
       ? 10
-      : trend?.classification === "market-awakening"
-        ? 7
-        : trend?.classification === "role-collapse"
+      : trend?.classification === "role-confirmation"
+        ? 5
+        : trend?.classification === "role-warning"
           ? -10
-          : trend?.classification === "hype-without-usage"
+          : trend?.classification === "sell-high"
             ? -4
             : 0;
 
@@ -810,12 +867,10 @@ function buildFaabRange(
   const basePercent =
     position === "RB" ? 6 : position === "WR" ? 5 : position === "TE" ? 4 : position === "QB" ? 3 : 1;
   const classificationBoost =
-    trend?.classification === "early-edge"
+    trend?.classification === "waiver-rise"
       ? 5
-      : trend?.classification === "market-awakening"
-        ? 7
-        : trend?.classification === "hype-without-usage"
-          ? 1
+      : trend?.classification === "role-confirmation"
+        ? 2
           : 0;
   const deltaBoost = clamp(starterDelta / 3, 0, 8);
   const percentLow = Math.round(clamp(basePercent + classificationBoost + deltaBoost + (verifiedRoleBreakout ? 8 : 0), 1, 35));
@@ -883,10 +938,10 @@ export function buildWaiverRecommendationSnapshots(
               weeklyDelta * 0.9 +
               playoffUpsideDelta * 0.12 +
               riskDelta * 0.08 +
-              (addTrend?.classification === "early-edge"
+              (addTrend?.classification === "waiver-rise"
                 ? 4
-                : addTrend?.classification === "market-awakening"
-                  ? 3
+                : addTrend?.classification === "role-confirmation"
+                  ? 2
                   : 0) +
               (verifiedRoleBreakout ? 10 : 0)
             ).toFixed(2),
@@ -908,13 +963,13 @@ export function buildWaiverRecommendationSnapshots(
       const playoffUpsideDelta = bestSwap?.playoffUpsideDelta ?? 0;
       const riskDelta = bestSwap?.riskDelta ?? 0;
       const verdict =
-        verifiedRoleBreakout || starterDelta >= 8 || (starterDelta >= 4 && addTrend?.classification === "early-edge")
+        verifiedRoleBreakout || starterDelta >= 8 || (starterDelta >= 4 && addTrend?.classification === "waiver-rise")
           ? "priority"
           : starterDelta >= 2 ||
               playoffUpsideDelta >= 8 ||
               addTrend?.recommendation === "add"
             ? "bid"
-            : addTrend && addTrend.classification !== "steady"
+            : addTrend && addTrend.classification !== "watch"
               ? "watch"
               : "pass";
       const faabRange = verdict === "pass" ? null : buildFaabRange(addPlayer, addTrend, starterDelta, verifiedRoleBreakout);
@@ -1070,7 +1125,7 @@ export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset 
     scenarioNotes: [
       `League ownership comes from the ${inSeasonRosterSnapshotMeta.source} captured ${inSeasonRosterSnapshotMeta.capturedAt}.`,
       `${rosterSnapshot.unmatchedRosterPlayers.length} roster entries could not be matched to the current modeled player board.`,
-      `Week 1 analysis is active after ${completedGameEvidenceMeta.latestGame}; ${completedEvidence.matchedPlayers} modeled players received verified game evidence. Sunday box scores update carries, targets, target share, and scoring while snap and route feeds remain pending.`,
+      `Week 1 analysis is active after ${completedGameEvidenceMeta.latestGame}; ${completedEvidence.matchedPlayers} modeled players received verified game evidence. Box scores update carries, targets, target share, and scoring while snap and route feeds remain pending.`,
       `Early Week 1 evidence is blended at ${Math.round(completedGameEvidenceMeta.evidenceWeight * 100)}% so role signals can surface without treating one-week observations as stable season-long rates.`,
       "Tank01 is treated as an experimental live-state provider seam, not a core dependency, until live value is proven.",
       "Trade ideas are evaluated by starter-range and playoff-upside impact, not generic name value.",

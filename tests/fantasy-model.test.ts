@@ -49,7 +49,10 @@ import {
   buildWaiverRecommendationSnapshots,
 } from "@/lib/fantasy/inSeason";
 import { buildPdfRosterInSeasonSnapshot } from "@/lib/fantasy/inSeasonRosterSnapshot";
-import { applyCompletedGameEvidence } from "@/lib/fantasy/completedGameEvidence";
+import {
+  applyCompletedGameEvidence,
+  completedGameEvidenceMeta,
+} from "@/lib/fantasy/completedGameEvidence";
 import {
   buildForcedMissedTackleMetricsFromCsv,
   buildNgsRushingMetricsFromCsv,
@@ -3980,7 +3983,7 @@ test("breaking news warns immediately but refuses to invent an unverified next m
   assert.match(response.blockers[0] ?? "", /depth-chart/);
 });
 
-test("in-season opportunity trends distinguish quiet risers from hype without usage", () => {
+test("in-season market board separates actionable rises from sell-high mismatches", () => {
   const trends = buildOpportunityTrendSnapshots(inSeasonFixturePlayers);
   const tyjae = trends.find((trend) =>
     inSeasonFixturePlayers.find((player) => player.player.id === trend.playerId)?.player.fullName ===
@@ -3993,10 +3996,23 @@ test("in-season opportunity trends distinguish quiet risers from hype without us
 
   assert.ok(tyjae, "Tyjae Spears trend should exist");
   assert.ok(chaseBrown, "Chase Brown trend should exist");
-  assert.equal(tyjae.classification, "early-edge");
+  assert.equal(tyjae.classification, "waiver-rise");
   assert.equal(tyjae.recommendation, "add");
-  assert.equal(chaseBrown.classification, "hype-without-usage");
-  assert.equal(chaseBrown.recommendation, "avoid");
+  assert.equal(chaseBrown.classification, "sell-high");
+  assert.equal(chaseBrown.recommendation, "shop");
+});
+
+test("sell-high regression signals become fades when the player is not ours", () => {
+  const players = structuredClone(inSeasonFixturePlayers);
+  const chaseBrown = players.find((player) => player.player.fullName === "Chase Brown");
+  assert.ok(chaseBrown);
+  chaseBrown.availability = "league-rostered";
+  chaseBrown.rosterTeamId = "team-4";
+
+  const trend = buildOpportunityTrendSnapshots(players).find((entry) => entry.playerId === chaseBrown.player.id);
+  assert.equal(trend?.classification, "sell-high");
+  assert.equal(trend?.recommendation, "avoid");
+  assert.match(trend?.summary ?? "", /avoid paying/i);
 });
 
 test("in-season trade ideas are driven by two-team lineup impact", () => {
@@ -4032,12 +4048,17 @@ test("PDF roster snapshot matches all 10 Yahoo teams without ownership gaps", ()
   assert.equal(snapshot.teams.length, 10);
   assert.equal(snapshot.myTeam.name, "FC Netanyah00");
   assert.equal(snapshot.myTeam.playerIds.length, 17);
+  const myPlayerNames = snapshot.players
+    .filter((player) => player.rosterTeamId === snapshot.myTeam.teamId)
+    .map((player) => player.player.fullName);
+  assert.ok(myPlayerNames.includes("Brock Purdy"));
+  assert.ok(!myPlayerNames.includes("Hunter Henry"));
   assert.equal(snapshot.unmatchedRosterPlayers.length, 0);
   assert.equal(new Set(rosteredIds).size, rosteredIds.length, "a player cannot appear on two teams");
   assert.ok(snapshot.players.length >= 220, "the in-season pool must remain a full league-quality player universe");
 });
 
-test("completed Week 1 evidence updates the full Sunday afternoon slate with conservative weight", () => {
+test("completed Week 1 evidence updates the full 16-game slate with conservative weight", () => {
   const snapshot = buildPdfRosterInSeasonSnapshot();
   const evidence = applyCompletedGameEvidence(snapshot.players);
   const byName = new Map(evidence.players.map((player) => [player.player.fullName, player] as const));
@@ -4049,8 +4070,14 @@ test("completed Week 1 evidence updates the full Sunday afternoon slate with con
   const schultz = byName.get("Dalton Schultz");
   const murray = byName.get("Kyler Murray");
   const nix = byName.get("Bo Nix");
+  const dak = byName.get("Dak Prescott");
+  const walker = byName.get("Kenneth Walker III");
+  const likely = byName.get("Isaiah Likely");
+  const purdy = byName.get("Brock Purdy");
 
-  assert.equal(evidence.matchedPlayers, 242);
+  assert.equal(completedGameEvidenceMeta.completedGames, 16);
+  assert.equal(completedGameEvidenceMeta.scheduledGames, 16);
+  assert.equal(evidence.matchedPlayers, 279);
   assert.equal(price?.recentUsage.games, 1);
   assert.ok((price?.recentUsage.snapShare ?? 0) < (price?.baselineUsage.snapShare ?? 0));
   assert.ok((price?.recentUsage.carriesPerGame ?? 0) > 0);
@@ -4063,7 +4090,14 @@ test("completed Week 1 evidence updates the full Sunday afternoon slate with con
   assert.ok((schultz?.recentUsage.targetsPerGame ?? 0) > (schultz?.baselineUsage.targetsPerGame ?? 0));
   assert.equal(schultz?.advancedUsage, undefined, "Sunday route metrics must wait for the advanced feed");
   assert.equal(murray?.injuryStatus, "Questionable");
-  assert.deepEqual(nix?.recentUsage, nix?.baselineUsage, "Monday players must remain on their prior");
+  assert.equal(nix?.recentUsage.games, 1);
+  assert.ok((nix?.recentUsage.fantasyPointsPerGame ?? 0) < (nix?.baselineUsage.fantasyPointsPerGame ?? 0));
+  assert.equal(dak?.recentUsage.games, 1);
+  assert.ok((walker?.recentUsage.carriesPerGame ?? 0) > (walker?.baselineUsage.carriesPerGame ?? 0));
+  assert.ok((likely?.recentUsage.targetsPerGame ?? 0) > (likely?.baselineUsage.targetsPerGame ?? 0));
+  assert.equal(likely?.advancedUsage, undefined, "closing-game route metrics must wait for the advanced feed");
+  assert.equal(purdy?.recentUsage.games, 1);
+  assert.ok((purdy?.recentUsage.fantasyPointsPerGame ?? 0) > (purdy?.baselineUsage.fantasyPointsPerGame ?? 0));
 });
 
 test("advanced in-season parsers calculate route-independent air share, RYOE, CPOE, PROE, and FMT rate", () => {
@@ -4106,6 +4140,7 @@ test("advanced Week 1 board surfaces signals from both completed games", () => {
   assert.ok(signatures.has("Christian McCaffrey:runner-creation"));
   assert.ok(signatures.has("Matthew Stafford:qb-environment"));
   assert.ok(!signatures.has("Sam Darnold:qb-environment"), "two attempts cannot produce a QB environment signal");
+  assert.ok(!signatures.has("Ronnie Rivers:elite-target"), "three routes cannot put a buried backup alongside full-role players");
   assert.equal(price?.advancedUsage?.forcedMissedTackles, null);
   assert.equal(price?.advancedUsage?.statuses.forcedMissedTackles, "pending-source");
 });
@@ -4133,6 +4168,20 @@ test("live in-season dataset never recommends an impossible rostered add or lops
     return /rare same-position exception/i.test(idea.constructionSummary);
   }), "same-position one-for-ones must be explicitly justified exceptions");
   assert.ok(dataset.waiverRecommendations.every((idea) => idea.dropPlayerId === null || playersById.get(idea.dropPlayerId)?.injuryStatus !== "IR"));
+  const njigba = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Jaxon Smith-Njigba");
+  assert.equal(njigba?.classification, "role-confirmation");
+  assert.equal(njigba?.priceContext, "elite");
+  assert.notEqual(njigba?.actionability, "actionable");
+  assert.match(njigba?.summary ?? "", /already elite price/i);
+  const stevenson = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Rhamondre Stevenson");
+  assert.equal(stevenson?.classification, "buy-low");
+  assert.equal(stevenson?.actionability, "actionable");
+  const watson = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Christian Watson");
+  const bryceYoung = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Bryce Young");
+  assert.equal(watson?.classification, "sell-high");
+  assert.equal(watson?.recommendation, "avoid");
+  assert.equal(bryceYoung?.classification, "sell-high");
+  assert.equal(bryceYoung?.recommendation, "avoid");
 });
 
 test("trade recommendations reject depth aggregation that dilutes the best asset", () => {

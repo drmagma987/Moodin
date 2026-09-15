@@ -724,6 +724,7 @@ export type InSeasonPlayerSnapshot = {
   marketTrendCount: number;
   marketRank?: number | null;
   marketTier?: number | null;
+  currentRole?: PlayerCurrentRole;
   depthChartOrder?: number;
   injuryStatus?: string | null;
   projectedReturnDate?: string | null;
@@ -832,14 +833,19 @@ export type BreakingNewsResponse = {
 export type OpportunityTrendSnapshot = {
   playerId: string;
   classification:
-    | "early-edge"
-    | "market-awakening"
-    | "hype-without-usage"
-    | "role-collapse"
-    | "steady";
+    | "buy-low"
+    | "sell-high"
+    | "waiver-rise"
+    | "role-confirmation"
+    | "role-warning"
+    | "watch";
   opportunityScore: number;
   marketScore: number;
-  recommendation: "add" | "watch" | "trade-for" | "hold" | "avoid";
+  recommendation: "add" | "watch" | "trade-for" | "shop" | "hold" | "avoid";
+  actionability: "actionable" | "context" | "watch";
+  priceContext: "elite" | "established" | "mid-market" | "deep" | "unknown";
+  marketLabel: string;
+  marketEvidence: string;
   summary: string;
   signals: string[];
 };

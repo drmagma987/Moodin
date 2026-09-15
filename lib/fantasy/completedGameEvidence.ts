@@ -3,6 +3,7 @@ import type {
   InSeasonPlayerSnapshot,
   UsageWindowSnapshot,
 } from "@/lib/fantasy/types";
+import { weekOneClosingBoxScoreGroups } from "@/lib/fantasy/data/weekOneClosingBoxScores.generated";
 import { weekOneSundayBoxScoreGroups } from "@/lib/fantasy/data/weekOneSundayBoxScores.generated";
 
 const WEEK_ONE_EVIDENCE_WEIGHT = 0.18;
@@ -26,10 +27,10 @@ type PlayerGameUsage = {
 
 export const completedGameEvidenceMeta = {
   week: 1,
-  completedGames: 14,
+  completedGames: 16,
   scheduledGames: 16,
-  capturedAt: "2026-09-13T22:11:00-04:00",
-  latestGame: "Full Sunday afternoon slate · 14 of 16 games final",
+  capturedAt: "2026-09-15T10:20:49-04:00",
+  latestGame: "Week 1 complete · 16 of 16 games final",
   evidenceWeight: WEEK_ONE_EVIDENCE_WEIGHT,
   sources: [
     {
@@ -53,8 +54,12 @@ export const completedGameEvidenceMeta = {
       url: "https://github.com/nflverse/nflverse-data/releases",
     },
     {
-      label: "ESPN Week 1 Sunday box scores",
+      label: "ESPN Week 1 scoreboard and box scores",
       url: "https://www.espn.com/nfl/scoreboard/_/week/1/year/2026/seasontype/2",
+    },
+    {
+      label: "Official Giants-Cowboys game stats",
+      url: "https://www.giants.com/game-day/game-stats",
     },
   ],
 } as const;
@@ -79,6 +84,7 @@ const openingGameUsage: PlayerGameUsage[] = [
 ];
 
 const secondGameUsage: PlayerGameUsage[] = [
+  { name: "Brock Purdy", teamTargets: 34, carries: 5, targets: 0, fantasyPoints: 28.1, boxScoreOnly: true },
   { name: "Mike Evans", teamSnaps: 65, teamRoutes: 36, teamTargets: 34, snaps: 49, routes: 26, carries: 0, targets: 7, receivingYards: 49, airYards: 55, fantasyPoints: 16.9 },
   { name: "Demarcus Robinson", teamSnaps: 65, teamRoutes: 36, teamTargets: 34, snaps: 41, routes: 21, carries: 0, targets: 3, receivingYards: 50, airYards: 45, fantasyPoints: 13 },
   { name: "Deebo Samuel Sr.", teamSnaps: 65, teamRoutes: 36, teamTargets: 34, snaps: 27, routes: 19, carries: 1, targets: 7, receivingYards: 48, airYards: 17, fantasyPoints: 18 },
@@ -110,7 +116,23 @@ const sundayAfternoonUsage: PlayerGameUsage[] = weekOneSundayBoxScoreGroups.flat
   })),
 );
 
-const completedGameUsage = [...openingGameUsage, ...secondGameUsage, ...sundayAfternoonUsage];
+const closingSlateUsage: PlayerGameUsage[] = weekOneClosingBoxScoreGroups.flatMap((group) =>
+  group.players.map(([name, carries, targets, fantasyPoints]) => ({
+    name,
+    teamTargets: group.teamTargets,
+    carries,
+    targets,
+    fantasyPoints,
+    boxScoreOnly: true,
+  })),
+);
+
+const completedGameUsage = [
+  ...openingGameUsage,
+  ...secondGameUsage,
+  ...sundayAfternoonUsage,
+  ...closingSlateUsage,
+];
 
 const teamAirYards = { SEA: 154, NE: 205, SF: 149, LAR: 259 } as const;
 const teamProe = { SEA: -5.48, NE: -2.58, SF: 4.95, LAR: -17.3 } as const;
@@ -370,21 +392,71 @@ export const completedGameReviews: CompletedGameReviewSnapshot[] = [
     playerName: "Jadarian Price",
     team: "SEA",
     rosterContext: "Your roster",
-    action: "Hold · bench for now",
+    action: "Start again · workload bet",
     confidence: "medium",
     statLine: "10 carries · 52 rush yds · 2/2 rec · 7.8 pts",
     usageLine: "48% snaps · 44% route participation · 2 targets",
-    analysis: "The burst translated, but Seattle reserved third downs, the two-minute drill, and goal-line work for other backs. That is a promising committee debut, not a locked starter role.",
+    analysis: "The role was a committee, but 12 opportunities and solid efficiency are enough to start Price again given your thin RB room. The missing third-down and goal-line work cap his ceiling; they do not make your current alternative stronger.",
+  },
+  {
+    playerName: "Dak Prescott",
+    team: "DAL",
+    rosterContext: "Your roster",
+    action: "Keep starting · lowered ceiling",
+    confidence: "medium",
+    statLine: "22/34 · 175 pass yds · 2 TD · INT · 19.4 pts",
+    usageLine: "Dallas produced 244 total yards and 30 receiver targets",
+    analysis: "The six-point passing-touchdown format rescued a poor efficiency night. Dak remains your starter, but the low yardage and pressure problems make this a floor result rather than evidence that the offense is healthy.",
+  },
+  {
+    playerName: "J.K. Dobbins",
+    team: "DEN",
+    rosterContext: "Your roster",
+    action: "Bench behind Price · role concern",
+    confidence: "medium",
+    statLine: "8 carries · 36 rush yds · 0 targets · 3.6 pts",
+    usageLine: "11 fewer opportunities than Price; no receiving work",
+    analysis: "Dobbins was efficient enough on the ground, but eight carries and zero targets give him a thinner Week 2 case than Price. Keep him rostered while Denver's split settles, but he is not the better start from your current RB options.",
+  },
+  {
+    playerName: "Kenneth Walker III",
+    team: "KC",
+    rosterContext: "Dakked Raw",
+    action: "Elite role confirmed · do not chase",
+    confidence: "high",
+    statLine: "23 carries · 173 rush yds · 3/6 rec · 2 TD · 36.1 pts",
+    usageLine: "29 opportunities and both rushing/receiving scoring equity",
+    analysis: "The workload was elite and the breakout was fully visible. He is a top-tier asset now, but the 60-yard score and 7.5 yards per carry make this a poor moment to pay a post-Week 1 premium.",
+  },
+  {
+    playerName: "Isaiah Likely",
+    team: "NYG",
+    rosterContext: "Njigba Please",
+    action: "Role breakout · price already rising",
+    confidence: "high",
+    statLine: "8/8 rec · 78 yds · 2 TD · 27.8 pts",
+    usageLine: "28% target share; caught every target",
+    analysis: "Eight targets make this much more than touchdown noise, but two scores still lifted the result far above a repeatable weekly median. Treat him as a real TE riser without chasing the full box-score price.",
   },
   {
     playerName: "Hunter Henry",
     team: "NE",
-    rosterContext: "Your roster",
-    action: "Hold",
+    rosterContext: "Free agent",
+    action: "No longer rostered · monitor",
     confidence: "medium",
     statLine: "3/3 rec · 26 yds · 5.6 pts",
     usageLine: "76% snaps · 62% route participation",
     analysis: "The route share was usable and every target was caught. A.J. Brown's ankle status could open a little more short-area volume, but one quiet scoring game is not a reason to change Henry's tier.",
+  },
+  {
+    playerName: "Brock Purdy",
+    team: "SF",
+    rosterContext: "Your roster",
+    action: "Strong QB2 · trade chip, not a cut",
+    confidence: "high",
+    statLine: "25/34 · 205 pass yds · 3 TD · INT · 29 rush yds · 28.1 pts",
+    usageLine: "+5.0% team PROE · 0.8 CPOE",
+    analysis: "Purdy's three-touchdown opener gives you a credible alternative if Dak's offense stays sluggish. Keep him unless the Trade Lab returns a meaningful starter upgrade; he is useful leverage now, not expendable waiver-level depth.",
   },
   {
     playerName: "Romeo Doubs",

@@ -1039,3 +1039,25 @@ If checks cannot be run, say so clearly.
   - added slate reviews for the user's Gibbs, Amon-Ra, Olave, Fannin, and Spears decisions plus major waiver, trade, and injury signals
   - marked Kyler Murray questionable after his first-quarter concussion and prevented the shortened performance from being treated as a normal efficiency sample
 - Clarified the Advanced Opportunity Lab so the first two games' route/air-yard/NGS metrics remain visible while Sunday advanced charting is explicitly labeled pending.
+
+### 2026-09-14
+
+- Reworked the Fantasy Football Buy Low / Sell High board so Week 1 usage changes no longer imply that an undefined “market” has failed to react.
+- Defined price context as preseason consensus rank/tier and labeled Sleeper add/drop movement separately only when that live evidence exists.
+- Added actionability gates that separate true buy-low, sell-high, and waiver calls from elite-player role confirmations and general warnings.
+- Made sell-high regression signals ownership-aware: shop players on the user's roster, avoid overpaying for opponents, and avoid chasing misleading free-agent spikes.
+- Expanded Buy Low / Sell High into four decision buckets: actionable buys, actionable sells/fades, one-more-week monitors, and already-priced-correctly confirmations.
+- Market cards now show league owner, price reference, underlying usage evidence, waiver bid/cut context, and only display trade packages that already clear the two-team lineup safeguards.
+- Added a direct Market-to-Trade-Lab handoff that preloads both sides of a viable suggested package and preserves the originating player/call context in the analyzer.
+- Decoupled buy-low discovery from trade-partner viability: worthwhile player signals now surface on their own, while targets without a guarded package can still open directly in Trade Lab for manual exploration.
+- Added depth/sample safeguards so tiny-route backup performances, including Ronnie Rivers' three-route game, do not rank beside established full-role players in the Advanced Opportunity Lab.
+
+### 2026-09-15
+
+- Completed the 2026 Week 1 ingestion for the Fantasy Football Supertool:
+  - added the Cowboys-Giants and Broncos-Chiefs closing box scores, advancing the evidence state to all 16 games final and 279 matched modeled players
+  - applied carries, targets, target share, fumbles, and Yahoo-custom scoring at the existing conservative 18% one-week evidence weight
+  - kept prime-time snap, route, air-yard, and charting metrics on their priors until verified advanced feeds publish
+  - added decision reviews for Dak Prescott, J.K. Dobbins, Kenneth Walker III, and Isaiah Likely
+  - aligned Jadarian Price's recommendation with the user's thin RB room: start him again over Dobbins while recognizing the committee-role ceiling
+  - applied the user's post-Week 1 roster correction by replacing Hunter Henry with Brock Purdy and updating both players' roster-aware reviews
