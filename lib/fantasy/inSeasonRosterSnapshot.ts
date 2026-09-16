@@ -21,7 +21,10 @@ export const inSeasonRosterSnapshotTeams = [
   },
   {
     teamId: "dakked-raw",
-    name: "Dakked Raw",
+    name: "Nabers think I did 9🏈11",
+    aliases: ["Dakked Raw"],
+    satisfiedPositions: ["QB"] as PlayerPosition[],
+    preferredStarterNames: ["Caleb Williams"],
     players: ["Caleb Williams", "Kenneth Walker III", "Chase Brown", "Garrett Wilson", "Luther Burden III", "Carnell Tate", "Colston Loveland", "Bucky Irving", "Tony Pollard", "Ka'imi Fairbairn", "De'Zhaun Stribling", "Kyle Monangai", "Makai Lemon", "Tank Bigsby", "Pat Bryant", "Keenan Allen"],
   },
   {
@@ -148,9 +151,16 @@ export function buildPdfRosterInSeasonSnapshot() {
   const teams: InSeasonTeamSnapshot[] = inSeasonRosterSnapshotTeams.map((team) => ({
     teamId: team.teamId,
     name: team.name,
+    aliases: "aliases" in team ? [...team.aliases] : undefined,
     playerIds: team.players
       .map((name) => playerByName.get(normalizeName(name))?.player.id)
       .filter((playerId): playerId is string => Boolean(playerId)),
+    managerPreferences: "satisfiedPositions" in team ? {
+      satisfiedPositions: [...team.satisfiedPositions],
+      preferredStarterPlayerIds: team.preferredStarterNames
+        .map((name) => playerByName.get(normalizeName(name))?.player.id)
+        .filter((playerId): playerId is string => Boolean(playerId)),
+    } : undefined,
   }));
   const unmatchedRosterPlayers = inSeasonRosterSnapshotTeams.flatMap((team) =>
     team.players.filter((name) => !playerByName.has(normalizeName(name))).map((name) => `${team.name}: ${name}`),

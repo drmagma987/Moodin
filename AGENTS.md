@@ -1113,3 +1113,10 @@ If checks cannot be run, say so clearly.
   - refreshed RotoBaller Week 2 FAAB and FantasyPros PPR waiver context with publication/check dates and a seven-day stale-source guard
   - added NFL Next Gen Stats rushing through nflverse when attempts and source arithmetic reconcile exactly, plus a narrow evidence-backed Travis Hunter WR/CB identity exception that keeps other defensive namesakes rejected
   - live priority audit now has 25 of 241 base-priority profiles complete with all four public feeds loaded and no invalid profiles; remaining gaps are still predominantly routes/TPRR/YPRR, team PROE, air yards, RYOE, and CPOE
+- Hardened the first post-waiver roster correction after a real-world import problem:
+  - renamed `Dakked Raw` to `Nabers think I did 9🏈11` while retaining the prior name as an import alias
+  - recorded the manager's confidence in Caleb Williams as QB1 so QB depth no longer creates a false roster need or marginal QB trade recommendation; only a clearly elite, material starter upgrade may override that preference
+  - preserved team aliases and manager preferences when applying a new Yahoo inventory
+  - added fail-closed reconciliation for future team renames only when one existing owner has a strong majority of recognized players in that PDF block; ambiguous blocks still cannot be applied
+  - moved the PDF picker to the top of League Sync so the primary upload path is immediately reachable on mobile instead of sitting below the full coverage report
+  - a real failing Yahoo PDF is still required to validate and repair any remaining extraction/layout differences beyond the synthetic fixture

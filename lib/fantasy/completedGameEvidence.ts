@@ -443,7 +443,7 @@ export const completedGameReviews: CompletedGameReviewSnapshot[] = [
   {
     playerName: "Kenneth Walker III",
     team: "KC",
-    rosterContext: "Dakked Raw",
+    rosterContext: "Nabers think I did 9🏈11",
     action: "Elite role confirmed · do not chase",
     confidence: "high",
     statLine: "23 carries · 173 rush yds · 3/6 rec · 2 TD · 36.1 pts",

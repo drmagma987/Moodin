@@ -37,6 +37,7 @@ export type GroupGrade = {
   group: OpportunityGroup;
   grade: number;
   label: "Elite" | "Strong" | "Average" | "Thin" | "Critical";
+  managerSatisfied?: boolean;
   measurements: {
     startingStrength: number;
     depth: number;
@@ -153,6 +154,26 @@ function round(value: number, digits = 1) {
 
 function position(player: InSeasonPlayerSnapshot): PlayerPosition {
   return player.player.positions[0] ?? "WR";
+}
+
+function managerIsSatisfiedAt(team: InSeasonTeamSnapshot, group: OpportunityGroup) {
+  return group !== "FLEX" && group !== "Bench" &&
+    Boolean(team.managerPreferences?.satisfiedPositions?.includes(group));
+}
+
+function clearsSatisfiedQbUpgradeBar(
+  team: InSeasonTeamSnapshot,
+  incoming: InSeasonPlayerSnapshot[],
+  outgoing: InSeasonPlayerSnapshot[],
+) {
+  if (!managerIsSatisfiedAt(team, "QB")) return true;
+  const incomingQb = incoming.find((player) => position(player) === "QB");
+  if (!incomingQb) return true;
+  const outgoingQb = outgoing.find((player) => position(player) === "QB");
+  if (!outgoingQb) return false;
+  const preferredIds = new Set(team.managerPreferences?.preferredStarterPlayerIds ?? []);
+  if (preferredIds.size > 0 && !preferredIds.has(outgoingQb.player.id)) return false;
+  return (incomingQb.marketTier ?? 99) <= 3 && value(incomingQb, true) >= value(outgoingQb, true) * 1.2;
 }
 
 function availabilityFactor(player: InSeasonPlayerSnapshot, future: boolean) {
@@ -315,11 +336,13 @@ export function buildLeaguePositionGrades(
         ...groups[group],
         grade,
         label: gradeLabel(grade),
+        managerSatisfied: managerIsSatisfiedAt(team, group),
         percentiles,
         detail: `${round(measurements.startingStrength)} starter value, ${round(measurements.depth)} depth value, ${round(measurements.ceiling)} ceiling and ${round(measurements.health, 0)}% healthy availability. All percentiles are versus this league.`,
       };
     }
     const rankedCore = [...CORE_GROUPS].sort((a, b) => graded[b].grade - graded[a].grade);
+    const actionableCore = rankedCore.filter((group) => !managerIsSatisfiedAt(team, group));
     const immediatePressure = round(100 - (graded.RB.percentiles.health * 0.28 + graded.WR.percentiles.health * 0.28 + graded.FLEX.percentiles.health * 0.24 + graded.Bench.percentiles.depth * 0.2), 0);
     return {
       teamId: team.teamId,
@@ -329,8 +352,8 @@ export function buildLeaguePositionGrades(
       futureLineup: future.assignments,
       benchPlayerIds: current.bench.map((player) => player.player.id),
       strongestGroup: rankedCore[0],
-      weakestGroup: rankedCore[rankedCore.length - 1],
-      needs: CORE_GROUPS.filter((group) => graded[group].grade < 40).sort((a, b) => graded[a].grade - graded[b].grade),
+      weakestGroup: actionableCore[actionableCore.length - 1] ?? rankedCore[rankedCore.length - 1],
+      needs: CORE_GROUPS.filter((group) => graded[group].grade < 40 && !managerIsSatisfiedAt(team, group)).sort((a, b) => graded[a].grade - graded[b].grade),
       surpluses: CORE_GROUPS.filter((group) => graded[group].percentiles.surplus >= 65).sort((a, b) => graded[b].percentiles.surplus - graded[a].percentiles.surplus),
       immediatePressure,
     };
@@ -453,6 +476,7 @@ function generateTeamProposals(
   for (const [sendCount, receiveCount, format] of structures) {
     for (const send of combinations(mine, sendCount)) {
       for (const receive of combinations(theirs, receiveCount)) {
+        if (!clearsSatisfiedQbUpgradeBar(theirTeam, send, receive)) continue;
         if (format === "one-for-one" && position(send[0]) === position(receive[0])) {
           const riskBenefit = (receive[0].rosProjection.p90 - receive[0].rosProjection.p10) + 8 < (send[0].rosProjection.p90 - send[0].rosProjection.p10);
           const injuryBenefit = send[0].injuryStatus === "IR" && receive[0].injuryStatus !== "IR";

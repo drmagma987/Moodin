@@ -47,14 +47,18 @@ function rebuildDatasetFromInventory(
   maxAgeMinutes: number,
 ) {
   const applied = applyYahooLeagueInventory(base.players, inventory, { maxAgeMinutes });
+  const baseTeams = new Map(base.leagueTeams.map((team) => [team.teamId, team] as const));
   const teamNames = new Map(base.leagueTeams.map((team) => [team.teamId, team.name] as const));
+  const baseMyTeam = baseTeams.get(inventory.myTeamId);
   const myTeam = {
+    ...baseMyTeam,
     teamId: inventory.myTeamId,
     name: teamNames.get(inventory.myTeamId) ?? "My Team",
     playerIds: applied.players.filter((player) => player.availability === "my-roster").map((player) => player.player.id),
   };
   const leagueTeamIds = Array.from(new Set(applied.players.map((player) => player.rosterTeamId).filter((teamId): teamId is string => Boolean(teamId))));
   const leagueTeams = leagueTeamIds.map((teamId) => ({
+    ...baseTeams.get(teamId),
     teamId,
     name: teamNames.get(teamId) ?? (teamId === inventory.myTeamId ? "My Team" : `Yahoo Team ${teamId}`),
     playerIds: applied.players.filter((player) => player.rosterTeamId === teamId).map((player) => player.player.id),
@@ -591,7 +595,7 @@ export function InSeasonCommandCenter({ dataset: initialDataset }: { dataset: In
             {evidenceRefreshMessage ? <p role="status" className="mt-3 text-sm text-slate-300">{evidenceRefreshMessage}</p> : null}
           </section>
           <PlayerCoverageReport players={dataset.players} report={coverageReport} />
-          <section className="rounded-[28px] border border-cyan-300/20 bg-[#0a1727]/95 p-5 sm:p-6 lg:col-span-2">
+          <section className="order-first rounded-[28px] border border-cyan-300/20 bg-[#0a1727]/95 p-5 sm:p-6 lg:col-span-2">
             <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end"><div><div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-200"><FileUp className="h-4 w-4" /> Recommended league sync</div><h2 className="mt-1 text-2xl font-black">Upload Yahoo Starting Rosters PDF</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">In Yahoo, open the league-wide Starting Rosters page, press Ctrl+P or Cmd+P, and save as PDF. The file is read on this device; only the validated roster snapshot is saved.</p></div><label className={cn("flex min-h-12 cursor-pointer items-center justify-center rounded-xl px-4 text-sm font-black transition", pdfLoading ? "cursor-wait bg-white/10 text-slate-400" : "bg-cyan-300 text-slate-950 hover:bg-cyan-200")}><input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={pdfLoading} onChange={(event) => void previewYahooRosterPdf(event.target.files?.[0])} />{pdfLoading ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Reading roster pages…</> : <><FileUp className="mr-2 h-4 w-4" /> Choose Yahoo PDF</>}</label></div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2"><p className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-300"><span className="font-black text-white">Current snapshot:</span> {snapshotTime(dataset.rosterSnapshot.capturedAt)} · {dataset.rosterSnapshot.source}</p><p className="rounded-xl border border-amber-300/15 bg-amber-300/[0.06] px-3 py-2 text-xs text-amber-100"><span className="font-black">This-browser persistence:</span> applied rosters survive reloads here, but do not sync to another device. The source PDF itself is never uploaded or stored.</p></div>
             {pdfFileName ? <p className="mt-3 text-xs font-bold text-slate-500">Selected: {pdfFileName}</p> : null}

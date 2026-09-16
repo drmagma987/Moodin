@@ -4076,6 +4076,28 @@ test("in-season trade ideas are driven by two-team lineup impact", () => {
   );
 });
 
+test("a manager satisfied with Caleb Williams is not treated as needing QB depth", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const renamedTeam = dataset.leagueTeams.find((team) => team.teamId === "dakked-raw");
+  assert.ok(renamedTeam);
+  assert.equal(renamedTeam.name, "Nabers think I did 9🏈11");
+  const profile = buildLeaguePositionGrades(dataset.players, dataset.leagueTeams)
+    .find((team) => team.teamId === renamedTeam.teamId);
+  assert.ok(profile);
+  assert.ok(!profile.needs.includes("QB"), "a viable, manager-backed QB1 should not create a backup-driven need");
+  assert.equal(profile.groups.QB.managerSatisfied, true);
+  assert.notEqual(profile.weakestGroup, "QB", "manager-backed positions should not be described as the team's weakest need");
+  const ideas = buildTradeIdeaSnapshots(dataset.players, dataset.myTeam, dataset.leagueTeams)
+    .filter((idea) => idea.counterpartyTeamId === renamedTeam.teamId);
+  const byId = new Map(dataset.players.map((player) => [player.player.id, player] as const));
+  assert.ok(ideas.every((idea) => !idea.givePlayerIds.some((id) => byId.get(id)?.player.positions[0] === "QB")));
+  const dashboard = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
+  const partner = dashboard.partners.find((entry) => entry.teamId === renamedTeam.teamId);
+  assert.ok(partner);
+  assert.ok(!partner.whatTheyNeed.includes("QB"));
+  assert.ok(partner.proposals.every((proposal) => !proposal.sendPlayerIds.some((id) => byId.get(id)?.player.positions[0] === "QB")));
+});
+
 test("PDF roster snapshot matches all 10 Yahoo teams without ownership gaps", () => {
   const snapshot = buildPdfRosterInSeasonSnapshot();
   const rosteredIds = snapshot.teams.flatMap((team) => team.playerIds);
@@ -5430,6 +5452,14 @@ test("Yahoo roster PDF import matches every team and fails closed before applyin
   assert.equal(preview.matchedPlayers, snapshot.teams.reduce((total, team) => total + team.playerIds.length, 0));
   assert.equal(preview.unmatchedRosterRows, 0);
   assert.equal(preview.ownershipChanges.length, 0);
+  const previousNameLines = lines.map((line) => line.text === "Nabers think I did 9🏈11" ? { ...line, text: "Dakked Raw" } : line);
+  const previousNamePreview = parseYahooRosterPdfLines(previousNameLines, snapshot.players, snapshot.teams);
+  assert.equal(previousNamePreview.ready, true, "the prior Yahoo team name remains a safe import alias");
+  assert.equal(previousNamePreview.teams.find((team) => team.teamId === "dakked-raw")?.teamName, "Nabers think I did 9🏈11");
+  const futureRenameLines = lines.map((line) => line.text === "Nabers think I did 9🏈11" ? { ...line, text: "A Brand New Team Name" } : line);
+  const futureRenamePreview = parseYahooRosterPdfLines(futureRenameLines, snapshot.players, snapshot.teams);
+  assert.equal(futureRenamePreview.ready, true, "a strong prior-ownership majority can safely reconcile a future rename");
+  assert.ok(futureRenamePreview.warnings.some((warning) => /renamed team block/.test(warning)));
   const inventory = buildYahooInventoryFromPdfPreview(preview, snapshot.players, snapshot.myTeam.teamId);
   assert.equal(inventory.source, "yahoo-roster-pdf");
   assert.equal(inventory.coverage.partial, false);

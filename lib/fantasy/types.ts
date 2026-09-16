@@ -888,6 +888,11 @@ export type InSeasonTeamSnapshot = {
   teamId: string;
   name: string;
   playerIds: string[];
+  aliases?: string[];
+  managerPreferences?: {
+    satisfiedPositions?: PlayerPosition[];
+    preferredStarterPlayerIds?: string[];
+  };
 };
 
 export type TradeIdeaSnapshot = {

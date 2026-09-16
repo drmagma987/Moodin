@@ -41,6 +41,21 @@ function primaryPosition(player: InSeasonPlayerSnapshot): PlayerPosition {
   return player.player.positions[0] ?? "WR";
 }
 
+function clearsCounterpartyQbPreference(
+  targetTeam: InSeasonTeamSnapshot,
+  incoming: InSeasonPlayerSnapshot[],
+  outgoing: InSeasonPlayerSnapshot[],
+) {
+  if (!targetTeam.managerPreferences?.satisfiedPositions?.includes("QB")) return true;
+  const incomingQb = incoming.find((player) => primaryPosition(player) === "QB");
+  if (!incomingQb) return true;
+  const outgoingQb = outgoing.find((player) => primaryPosition(player) === "QB");
+  if (!outgoingQb) return false;
+  const preferredIds = new Set(targetTeam.managerPreferences.preferredStarterPlayerIds ?? []);
+  if (preferredIds.size > 0 && !preferredIds.has(outgoingQb.player.id)) return false;
+  return (incomingQb.marketTier ?? 99) <= 3 && incomingQb.rosProjection.p50 >= outgoingQb.rosProjection.p50 * 1.2;
+}
+
 function opportunityDelta(player: InSeasonPlayerSnapshot) {
   const position = primaryPosition(player);
   const baseline = player.baselineUsage;
@@ -756,6 +771,7 @@ export function buildTradeIdeaSnapshots(
     receive: InSeasonPlayerSnapshot[],
     targetTeam: InSeasonTeamSnapshot,
   ) {
+    if (!clearsCounterpartyQbPreference(targetTeam, send, receive)) return;
     if (!decisionGate([...send, ...receive].map((player) => player.player.id), "trade").actionable) return;
     const format = send.length === 2 ? "two-for-two" : "one-for-one";
     const impact = evaluateTradeImpact(playersById, myTeam, targetTeam, send, receive);

@@ -119,7 +119,11 @@ export function parseYahooRosterPdfLines(
   capturedAt = new Date().toISOString(),
 ): YahooRosterPdfPreview {
   const knownTeams = leagueTeams
-    .map((team) => ({ ...team, normalized: normalize(team.name) }))
+    .flatMap((team) => [team.name, ...(team.aliases ?? [])].map((name) => ({
+      ...team,
+      normalized: normalize(name),
+    })))
+    .filter((team) => team.normalized.length > 0)
     .sort((a, b) => b.normalized.length - a.normalized.length);
   const knownPlayers = players
     .map((player) => ({ player, normalized: normalize(player.player.fullName) }))
@@ -131,6 +135,7 @@ export function parseYahooRosterPdfLines(
   const currentTeamByColumn = new Map<YahooPdfTextLine["column"], string>();
   const seenPlayerOwners = new Map<string, string[]>();
   const detectedTeamIds = new Set<string>();
+  const inferredTeamIds = new Set<string>();
   const unmatchedRows: YahooRosterPdfPreview["unmatchedRows"] = [];
   const ambiguousRows: YahooRosterPdfPreview["ambiguousRows"] = [];
 
@@ -138,7 +143,52 @@ export function parseYahooRosterPdfLines(
     a.page - b.page || a.column.localeCompare(b.column) || b.y - a.y,
   );
 
+  // Yahoo team names are mutable. When a page/column block has no recognized
+  // header, reconcile it only from a strong majority of its already-owned
+  // player rows. This tolerates a rename and a few waiver moves without ever
+  // guessing when two teams are plausible.
+  const inferredTeamByBlock = new Map<string, string>();
+  const blocks = new Map<string, YahooPdfTextLine[]>();
   for (const line of orderedLines) {
+    const key = `${line.page}:${line.column}`;
+    blocks.set(key, [...(blocks.get(key) ?? []), line]);
+  }
+  for (const [key, blockLines] of blocks) {
+    const exactIds = new Set(blockLines.flatMap((line) => {
+      const normalizedLine = normalize(line.text);
+      const team = knownTeams.find((entry) => containsNormalized(normalizedLine, entry.normalized));
+      return team ? [team.teamId] : [];
+    }));
+    if (exactIds.size === 1) {
+      inferredTeamByBlock.set(key, [...exactIds][0]);
+      continue;
+    }
+    if (exactIds.size > 1) continue;
+    const ownerCounts = new Map<string, number>();
+    let matchedRows = 0;
+    for (const line of blockLines.filter((entry) => hasRosterSlot(entry.text))) {
+      const normalizedLine = normalize(line.text);
+      const matches = knownPlayers.filter((entry) => containsNormalized(normalizedLine, entry.normalized));
+      if (matches.length !== 1) continue;
+      matchedRows += 1;
+      const owner = matches[0].player.rosterTeamId;
+      if (owner) ownerCounts.set(owner, (ownerCounts.get(owner) ?? 0) + 1);
+    }
+    const ranked = [...ownerCounts.entries()].sort((a, b) => b[1] - a[1]);
+    const [leaderId, leaderCount] = ranked[0] ?? [];
+    const runnerUpCount = ranked[1]?.[1] ?? 0;
+    if (leaderId && leaderCount >= 8 && leaderCount >= runnerUpCount + 3 && leaderCount / Math.max(1, matchedRows) >= 0.6) {
+      inferredTeamByBlock.set(key, leaderId);
+      inferredTeamIds.add(leaderId);
+    }
+  }
+
+  for (const line of orderedLines) {
+    const inferredTeamId = inferredTeamByBlock.get(`${line.page}:${line.column}`);
+    if (inferredTeamId) {
+      currentTeamByColumn.set(line.column, inferredTeamId);
+      detectedTeamIds.add(inferredTeamId);
+    }
     const normalizedLine = normalize(line.text);
     if (!normalizedLine) continue;
     const team = knownTeams.find((entry) => containsNormalized(normalizedLine, entry.normalized));
@@ -208,6 +258,7 @@ export function parseYahooRosterPdfLines(
   const matchedPlayers = teams.reduce((total, team) => total + team.players.length, 0);
   const warnings = [
     ...(matchedPlayers < 150 ? [`Only ${matchedPlayers} total players were matched; a normal ten-team export should be materially larger.`] : []),
+    ...(inferredTeamIds.size > 0 ? [`Reconciled ${inferredTeamIds.size} renamed team block${inferredTeamIds.size === 1 ? "" : "s"} from a strong majority of existing player ownership. Review that team before applying.`] : []),
     ...teams.filter((team) => team.rosterRows === 0).map((team) => `${team.teamName} had no recognizable roster-slot rows.`),
   ];
   if (matchedPlayers < 140) blockers.push("The PDF is too incomplete to replace league ownership.");
