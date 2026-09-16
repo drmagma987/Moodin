@@ -102,17 +102,23 @@ export function buildBreakingNewsResponse(input: {
   }
   const beneficiaryIds = new Set(beneficiaries.map((player) => player.player.id));
   const adjustedPlayers = input.players.map((player) => beneficiaryIds.has(player.player.id)
-    ? applyProvisionalOpportunity(player, affected, alert.actionConfidence)
+    ? { ...applyProvisionalOpportunity(player, affected, alert.actionConfidence), injuryOpportunity: {
+        source: alert.sourceLabel, capturedAt: alert.publishedAt,
+        confirmed: alert.actionConfidence === "confirmed", successorVerified: true,
+      } }
     : player);
-  const recommendations = buildWaiverRecommendationSnapshots(adjustedPlayers, input.myTeam)
-    .filter((recommendation) => beneficiaryIds.has(recommendation.addPlayerId))
-    .filter((recommendation) => recommendation.verdict !== "pass");
+  const candidates = buildWaiverRecommendationSnapshots(adjustedPlayers, input.myTeam)
+    .filter((recommendation) => beneficiaryIds.has(recommendation.addPlayerId));
+  const recommendations = candidates
+    .filter((recommendation) => recommendation.coverage?.actionable === true && (recommendation.verdict === "priority" || recommendation.verdict === "bid"));
   return {
-    status: recommendations.length > 0 ? "actionable" : "no-roster-upgrade",
+    status: recommendations.length > 0 ? "actionable" : candidates.some((candidate) => !candidate.coverage?.actionable) ? "monitor" : "no-roster-upgrade",
     alert,
     beneficiaryPlayerIds: [...beneficiaryIds],
     recommendations,
-    blockers: recommendations.length > 0 ? [] : ["The verified next player up does not beat the current weakest roster spot yet."],
+    blockers: recommendations.length > 0 ? [] : candidates.some((candidate) => !candidate.coverage?.actionable)
+      ? ["Player coverage gate: required evidence is incomplete for the beneficiary or roster comparison."]
+      : ["The verified next player up does not beat the current weakest roster spot yet."],
   };
 }
 

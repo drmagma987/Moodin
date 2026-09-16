@@ -1,4 +1,5 @@
 import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
+import { createDecisionGate } from "@/lib/fantasy/playerCoverage";
 import type {
   InSeasonPlayerSnapshot,
   InSeasonTeamSnapshot,
@@ -438,6 +439,7 @@ function generateTeamProposals(
   theirTeam: InSeasonTeamSnapshot,
   preferences: OpportunityPreferences,
 ) {
+  const decisionGate = createDecisionGate(players);
   const byId = new Map(players.map((player) => [player.player.id, player] as const));
   const rank = (ids: string[]) => ids.map((id) => byId.get(id))
     .filter((player): player is InSeasonPlayerSnapshot => player !== undefined)
@@ -459,7 +461,10 @@ function generateTeamProposals(
         }
         const sendIds = send.map((player) => player.player.id);
         const receiveIds = receive.map((player) => player.player.id);
+        if (!decisionGate([...sendIds, ...receiveIds], "trade").actionable) continue;
         const effects = calculateMarginalLineupEffects(players, myTeam, theirTeam, sendIds, receiveIds);
+        const replacementIds = [effects.myEffect, effects.theirEffect].flatMap((effect) => effect.replacements.flatMap((replacement) => [replacement.incomingPlayerId, ...(replacement.replacedPlayerId ? [replacement.replacedPlayerId] : [])]));
+        if (!decisionGate(replacementIds).actionable) continue;
         const warnings = packageQuality(send, receive, effects.myEffect);
         const marketDelta = round(receive.reduce((sum, player) => sum + value(player, true), 0) - send.reduce((sum, player) => sum + value(player, true), 0));
         const prefSend = preferenceAdjustment(sendIds, "send", preferences);

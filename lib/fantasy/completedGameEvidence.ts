@@ -151,6 +151,16 @@ const injuryStatusOverrides = new Map<string, InSeasonPlayerSnapshot["injuryStat
   ["kyler murray", "Questionable"],
 ]);
 
+const opportunityContextOverrides = new Map<string, NonNullable<InSeasonPlayerSnapshot["opportunityContext"]>>([
+  [
+    "rhamondre stevenson",
+    {
+      stability: "contingent",
+      reason: "Week 1 workload expanded with TreVeyon Henderson inactive; do not treat it as a durable role gain until both backs are active.",
+    },
+  ],
+]);
+
 export const completedGameTeamEnvironments = [
   { team: "SEA", week: 1, plays: 47, proe: teamProe.SEA, quarterbacks: quarterbackEvidence.filter((qb) => qb.team === "SEA").map((qb) => ({ playerName: qb.name, attempts: qb.attempts, cpoe: qb.cpoe, status: qb.attempts >= 10 ? "verified" as const : "insufficient-sample" as const })) },
   { team: "NE", week: 1, plays: 67, proe: teamProe.NE, quarterbacks: quarterbackEvidence.filter((qb) => qb.team === "NE").map((qb) => ({ playerName: qb.name, attempts: qb.attempts, cpoe: qb.cpoe, status: qb.attempts >= 10 ? "verified" as const : "insufficient-sample" as const })) },
@@ -198,13 +208,24 @@ export function applyCompletedGameEvidence(players: InSeasonPlayerSnapshot[]) {
     const quarterback = quarterbackByName.get(normalizeName(player.player.fullName));
     if (!observed && !quarterback) return player;
     matchedPlayers += 1;
-    const withObservedUsage = observed
+    const withObservedUsage: InSeasonPlayerSnapshot = { ...(observed
       ? {
           ...player,
           recentUsage: blendedUsage(player.baselineUsage, observed),
           injuryStatus: injuryStatusOverrides.get(normalizeName(player.player.fullName)) ?? player.injuryStatus,
+          opportunityContext: opportunityContextOverrides.get(normalizeName(player.player.fullName)) ?? player.opportunityContext,
         }
-      : player;
+      : player), evidence: {
+        week: completedGameEvidenceMeta.week,
+        participation: "played",
+        capturedAt: completedGameEvidenceMeta.capturedAt,
+        source: observed ? "Official NFL box score / published usage report" : "nflverse play-by-play",
+        boxScore: Boolean(observed || quarterback),
+        snaps: observed?.snaps !== undefined && Boolean(observed.teamSnaps),
+        routes: observed?.routes !== undefined && Boolean(observed.teamRoutes),
+        ...(observed ? { observedTargets: observed.targets, observedCarries: observed.carries,
+          ...(observed.receivingYards !== undefined ? { observedReceivingYards: observed.receivingYards } : {}) } : {}),
+      } };
     if (quarterback) {
       return {
         ...withObservedUsage,
@@ -235,18 +256,19 @@ export function applyCompletedGameEvidence(players: InSeasonPlayerSnapshot[]) {
     }
     if (!observed) return player;
     if (observed.boxScoreOnly) return withObservedUsage;
-    const observedRoutes = observed.routes ?? 0;
-    const observedAirYards = observed.airYards ?? 0;
+    const observedRoutes = observed.routes ?? null;
+    const observedAirYards = observed.airYards ?? null;
     return {
       ...withObservedUsage,
       advancedUsage: {
         week: 1,
         games: 1,
         routes: observedRoutes,
-        targetsPerRouteRun: observedRoutes > 0 ? Number((observed.targets / observedRoutes).toFixed(3)) : null,
-        yardsPerRouteRun: observedRoutes > 0 ? Number(((observed.receivingYards ?? 0) / observedRoutes).toFixed(3)) : null,
+        targetsPerRouteRun: observedRoutes !== null && observedRoutes > 0 ? Number((observed.targets / observedRoutes).toFixed(3)) : null,
+        yardsPerRouteRun: observedRoutes !== null && observedRoutes > 0 && observed.receivingYards !== undefined ? Number((observed.receivingYards / observedRoutes).toFixed(3)) : null,
         airYards: observedAirYards,
-        airYardsShare: Number((observedAirYards / teamAirYards[player.player.team as keyof typeof teamAirYards]).toFixed(3)),
+        airYardsShare: observedAirYards !== null && teamAirYards[player.player.team as keyof typeof teamAirYards]
+          ? Number((observedAirYards / teamAirYards[player.player.team as keyof typeof teamAirYards]).toFixed(3)) : null,
         rushingYardsOverExpected: observed.rushingYardsOverExpected ?? null,
         rushingYardsOverExpectedPerAttempt: observed.rushingYardsOverExpectedPerAttempt ?? null,
         forcedMissedTackles: null,
@@ -254,8 +276,8 @@ export function applyCompletedGameEvidence(players: InSeasonPlayerSnapshot[]) {
         cpoe: null,
         teamProe: teamProe[player.player.team as keyof typeof teamProe],
         statuses: {
-          routes: "verified",
-          airYards: "verified",
+          routes: observedRoutes !== null ? "verified" : "pending-source",
+          airYards: observedAirYards !== null ? "verified" : "pending-source",
           rushingYardsOverExpected: observed.rushingYardsOverExpected === undefined ? "insufficient-sample" : "verified",
           forcedMissedTackles: "pending-source",
           quarterbackEnvironment: "verified",
@@ -482,11 +504,11 @@ export const completedGameReviews: CompletedGameReviewSnapshot[] = [
     playerName: "Rhamondre Stevenson",
     team: "NE",
     rosterContext: "Gabagool",
-    action: "Role confirmed · no panic sell",
+    action: "Contingent volume · monitor Henderson",
     confidence: "medium",
     statLine: "18 carries · 5/6 rec · 95 scrimmage yds · 14.5 pts",
     usageLine: "85% snaps · 76% route participation",
-    analysis: "With TreVeyon Henderson inactive, Stevenson handled 24 opportunities and every-down work. Henderson's return still matters, but this is strong contingent-role evidence.",
+    analysis: "With TreVeyon Henderson inactive, Stevenson handled 24 opportunities and every-down work. The workload is useful evidence of what he can do as the replacement lead, but it is not evidence that his normal role grew and should not create a buy-low recommendation.",
   },
   {
     playerName: "A.J. Brown",

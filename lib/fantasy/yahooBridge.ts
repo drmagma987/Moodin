@@ -130,7 +130,7 @@ export type YahooLeagueInventoryCoverage = {
 
 export type YahooLeagueInventorySnapshot = {
   schemaVersion: 1;
-  source: "yahoo-browser";
+  source: "yahoo-browser" | "yahoo-roster-pdf";
   leagueId: string;
   myTeamId: string;
   startedAt: string;

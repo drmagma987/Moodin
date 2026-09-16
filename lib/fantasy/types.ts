@@ -713,6 +713,36 @@ export type Tank01LivePlayerSnapshot = {
 };
 
 export type InSeasonPlayerSnapshot = {
+  projectionBasis?: "preseason-prior" | "weekly-updated";
+  projectionUpdate?: {
+    season: number;
+    week: number;
+    capturedAt: string;
+    sampleGames: number;
+    observationWeight: number;
+    baselineWeekly: PlayerRange;
+    baselineRos: PlayerRange;
+    usageMultiplier: number;
+    roleMultiplier: number;
+    healthMultiplier: number;
+    teamContextMultiplier: number;
+    sources: string[];
+    drivers: string[];
+    limitations: string[];
+  };
+  injuryOpportunity?: { source: string; capturedAt: string; confirmed: boolean; successorVerified: boolean };
+  evidence?: {
+    week: number;
+    capturedAt: string;
+    source: string;
+    boxScore: boolean;
+    snaps: boolean;
+    routes: boolean;
+    observedTargets?: number;
+    observedReceivingYards?: number;
+    observedCarries?: number;
+    participation?: "played" | "zero-snaps" | "inactive" | "bye";
+  };
   player: CanonicalPlayer;
   availability: InSeasonAvailability;
   rosterTeamId: string | null;
@@ -729,6 +759,10 @@ export type InSeasonPlayerSnapshot = {
   injuryStatus?: string | null;
   projectedReturnDate?: string | null;
   practiceParticipation?: string | null;
+  opportunityContext?: {
+    stability: "durable" | "contingent" | "uncertain";
+    reason: string;
+  };
   liveStats?: Tank01LivePlayerSnapshot;
   advancedUsage?: InSeasonAdvancedUsageSnapshot;
 };
@@ -797,7 +831,7 @@ export type TradeOfferTierSnapshot = {
 };
 
 export type TradeAnalysisSnapshot = {
-  verdict: "accept" | "consider" | "counter" | "decline";
+  verdict: "accept" | "consider" | "counter" | "decline" | "insufficient-data";
   balance: "advantage-you" | "even" | "advantage-them";
   immediateStarterDelta: number;
   restOfSeasonDelta: number;
@@ -857,6 +891,7 @@ export type InSeasonTeamSnapshot = {
 };
 
 export type TradeIdeaSnapshot = {
+  coverage?: { actionable: boolean; reasons: string[] };
   targetPlayerId: string;
   givePlayerId: string;
   targetPlayerIds: string[];
@@ -891,6 +926,7 @@ export type FaabRangeSnapshot = {
 };
 
 export type WaiverRecommendationSnapshot = {
+  coverage?: { actionable: boolean; reasons: string[] };
   addPlayerId: string;
   dropPlayerId: string | null;
   verdict: "priority" | "bid" | "watch" | "pass";
@@ -899,6 +935,17 @@ export type WaiverRecommendationSnapshot = {
   playoffUpsideDelta: number;
   riskDelta: number;
   faabRange: FaabRangeSnapshot | null;
+  edgeScore: number;
+  confidence: "high" | "medium" | "low";
+  opportunityType: "injury-created" | "usage-breakout" | "efficiency-signal" | "roster-upgrade" | "speculative";
+  expertSupport: {
+    sourceCount: number;
+    rotoballerFaab: string | null;
+    fantasyProsRank: number | null;
+    fantasyProsRange: string | null;
+  };
+  opportunityCase: string;
+  primaryRisk: string;
   summary: string;
   rationale: string[];
   proposedTransaction: ProposedTransaction;
@@ -955,6 +1002,11 @@ export type InSeasonCommandCenterDataset = {
   completedGameReviews: CompletedGameReviewSnapshot[];
   advancedMetricSignals: AdvancedMetricSignalSnapshot[];
   teamOffenseEnvironments: TeamOffenseEnvironmentSnapshot[];
+  rosterSnapshot: {
+    source: string;
+    capturedAt: string;
+    persistence: "device-local" | "server";
+  };
   scenarioNotes: string[];
 };
 

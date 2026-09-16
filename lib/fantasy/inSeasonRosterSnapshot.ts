@@ -119,6 +119,7 @@ export function buildPdfRosterInSeasonSnapshot() {
       const baselineUsage = projectedUsage(candidate);
       return {
         player: candidate.player,
+        projectionBasis: "preseason-prior",
         availability: rosterTeamId === inSeasonSnapshotMyTeamId ? "my-roster" : rosterTeamId ? "league-rostered" : "free-agent",
         rosterTeamId,
         weeklyProjection: {

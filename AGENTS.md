@@ -1061,3 +1061,55 @@ If checks cannot be run, say so clearly.
   - added decision reviews for Dak Prescott, J.K. Dobbins, Kenneth Walker III, and Isaiah Likely
   - aligned Jadarian Price's recommendation with the user's thin RB room: start him again over Dobbins while recognizing the committee-role ceiling
   - applied the user's post-Week 1 roster correction by replacing Hunter Henry with Brock Purdy and updating both players' roster-aware reviews
+  - added contingent-opportunity context so workload spikes caused by an inactive starter are heavily discounted in future value and cannot manufacture a buy-low call; Rhamondre Stevenson's Henderson-driven Week 1 role now appears as a monitor
+- Consolidated the isolated Agent Brief, Advanced, and Buy Low / Sell High tabs into a decision-first `Edge Brief`; advanced usage and price-versus-role signals now sit beside the weekly action queue instead of living as disconnected analytics.
+- Rebuilt the waiver experience as a dedicated Week 2 decision board:
+  - combines league-specific starter/upside math, injury-created opportunity, verified usage/efficiency signals, and explicit downside cases
+  - grounds current candidates against RotoBaller's Week 2 FAAB ranges and the FantasyPros PPR waiver board without letting either external source override roster fit
+  - separates priority claims, measured bids, and low-cost dart throws; shows model bid versus market baseline, confidence, preferred cut, and what would invalidate each case
+  - expanded the surfaced player pool so consensus targets and model-only hidden opportunities can be compared in the same queue
+- Added a browser-side Yahoo Starting Rosters PDF importer as the recommended league-sync path:
+  - accepts the PDF produced by printing Yahoo's league-wide roster page and keeps the source file on-device
+  - previews all ten teams and ownership changes before applying anything
+  - fails closed on missing teams, duplicate ownership, unmatched roster rows, incomplete exports, or abnormal roster sizes
+  - stores only the normalized inventory locally and rebuilds waiver, trade, opportunity, and action-queue recommendations after explicit approval
+  - verified with fantasy integrity validation, 142 model tests, TypeScript, lint, and the production build
+- Added the in-season player coverage gate and searchable League Sync audit:
+  - grades every modeled player as complete, baseline-only, partial, or blocked using position-specific requirements, explicit health/role/market context, sourced current-week observations, finite ordered projections, and a 14-day evidence freshness limit
+  - records observed input provenance and checks TPRR, YPRR, and RYOE-per-carry arithmetic; missing route/air-yard observations remain null
+  - requires complete evidence across the add and comparison roster, or both trading rosters; holds waiver bids/cuts, trade ideas, League Map proposals, news-driven actions, and manual trade verdicts when coverage is incomplete
+  - preserves research candidates and editorial game context with explicit limitations; withheld waivers carry no add/drop payload or FAAB recommendation
+  - current audit: 473 players, 11 complete, 268 partial, 194 baseline-only; 9 of 162 rostered players complete, so the action queue is held pending data completion
+  - verified 147 model tests, TypeScript/production build, lint (existing unrelated font warning), and HTTP 200 for the local fantasy page
+- Iterated player coverage into decision-specific requirements:
+  - baseline valuations, workload claims, receiving/rushing/passing efficiency, trade price context, and confirmed injury-successor opportunities now have separate checks
+  - checks exchanged players and changed lineup replacements instead of requiring every bench player to have every metric; kicker profiles require only identity and projection sanity
+  - distinguishes current observations, prior-based evaluation, confirmed no-playing-sample situations, and lightweight kickers; unknown rows never imply zero activity or an injury
+  - prior-based valuations remain provisional and cannot generate high-confidence waiver claims or automatic accept/pursue trade verdicts
+  - added automatic page-load and manual weekly evidence refresh through `/api/fantasy/evidence`, joining current-season/current-week nflverse stats and snaps plus Sleeper role/injury context; source failures preserve existing records and Yahoo ownership survives refresh
+  - live source audit matched observations for 324 players and context for 418; the resulting 473-player pool had 307 observed evaluations, 31 without an expected playing sample, 101 prior-based evaluations, and 34 lightweight kickers, with no invalid profiles
+  - route charting and weekly projection forecasts remain separate outstanding data inputs; refresh does not claim to fill them
+  - verified with 151 model tests, production build/TypeScript, lint (existing font warning), and local route HTTP 200
+- Narrowed full-profile coverage to top-250 market ranks and rostered non-kickers, with automatic promotion for surfaced waiver/trade candidates, fresh verified injury successors, and meaningful actual opportunity increases (not modeled touches).
+  - retained the entire player pool and broad weekly ingestion; deep reserves now show lightweight monitoring and do not count as incomplete profiles
+  - coverage UI and Edge Brief now report priority-complete / priority-total separately from monitored reserves and lightweight kickers
+  - decision gates audit requested players on demand, retaining duplicate-ID and calculation safeguards even outside the priority pool
+  - added regression coverage for rank boundaries, roster/kicker exclusions, promotions, stale observations, and out-of-pool decision integrity
+  - verified 154 model tests, TypeScript, production build, and lint (existing unrelated font warning); not deployed
+
+### 2026-09-16
+
+- Completed the priority coverage audit and recoverable matching pass:
+  - normalized NFL team aliases and FB/HB-to-RB positions while retaining duplicate and defensive-namesake rejection
+  - added per-source match diagnostics and a read-only `scripts/audit_fantasy_priority_coverage.mjs` command (use the existing TypeScript alias loader; `--live` fetches public feeds)
+  - surfaced overlapping priority-gap counts in Player Coverage; current Out/PUP does not establish historical inactivity, NA is unknown, and expired routes cannot be renewed by a box-score refresh
+  - live audit found 23 of 241 base-priority profiles complete; outstanding gaps are predominantly routes, PROE, RYOE and CPOE, not missing identity matches; UI candidate promotions can change the denominator
+  - 156 model tests passed, plus targeted regression tests after the HB alias addition; projections remain prior-based and these changes are not deployed
+- Finished the first post-waiver in-season release:
+  - made Yahoo's league-wide `Rosters` → `Print` → `Save as PDF` export the primary ownership-sync workflow, with an all-team review, unmatched/ambiguous-row details, explicit ownership changes, and fail-closed apply rules
+  - applied PDF ownership snapshots preserve existing player evidence and rebuild waivers, trades, League Map, Edge Brief, and the action queue; snapshot source/time/freshness are visible throughout League Sync
+  - normalized inventories persist only in the same browser through localStorage; cross-device sync remains intentionally unavailable until an authenticated private league store exists
+  - replaced static preseason-only weekly/ROS totals with conservative, provenance-backed Week 2 updates derived from the immutable preseason baseline plus verified Week 1 usage, role, injury, and available team context; repeat refreshes cannot compound adjustments
+  - refreshed RotoBaller Week 2 FAAB and FantasyPros PPR waiver context with publication/check dates and a seven-day stale-source guard
+  - added NFL Next Gen Stats rushing through nflverse when attempts and source arithmetic reconcile exactly, plus a narrow evidence-backed Travis Hunter WR/CB identity exception that keeps other defensive namesakes rejected
+  - live priority audit now has 25 of 241 base-priority profiles complete with all four public feeds loaded and no invalid profiles; remaining gaps are still predominantly routes/TPRR/YPRR, team PROE, air yards, RYOE, and CPOE

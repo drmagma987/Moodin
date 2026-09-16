@@ -73,9 +73,14 @@ export function buildPbpAdvancedMetricsFromCsv(csv: string, gameId: string) {
 }
 
 export function buildNgsRushingMetricsFromCsv(csv: string, season: number, week: number) {
+  const parsed = parseCsv(csv).filter((row) => Number(row.season) === season);
+  const exact = parsed.filter((row) => Number(row.week) === week);
+  // nflverse's live NGS release uses week=0 for the current season-to-date row.
+  // In Week 1 only, that aggregate is exactly the completed game. Later weeks
+  // must use an exact weekly row so a season aggregate cannot masquerade as one game.
+  const rows = exact.length > 0 ? exact : week === 1 ? parsed.filter((row) => Number(row.week) === 0) : [];
   return new Map(
-    parseCsv(csv)
-      .filter((row) => Number(row.season) === season && Number(row.week) === week)
+    rows
       .map((row) => [
         normalizeName(row.player_display_name),
         {
@@ -132,14 +137,14 @@ export function buildAdvancedMetricSignals(
   const signals: AdvancedMetricSignalSnapshot[] = [];
   for (const player of players) {
     const advanced = player.advancedUsage;
-    if (!advanced) continue;
+    if (!advanced || !advanced.sources.length || advanced.week !== player.evidence?.week) continue;
     const position = primaryPosition(player);
     const context = rosterContext(player, teamsById);
 
-    if ((position === "WR" || position === "TE" || position === "RB") && advanced.routes !== null) {
+    if ((position === "WR" || position === "TE" || position === "RB") && advanced.routes !== null && Number.isFinite(advanced.routes) && advanced.statuses.routes === "verified") {
       const tprr = advanced.targetsPerRouteRun;
       const yprr = advanced.yardsPerRouteRun;
-      const airShare = advanced.airYardsShare;
+      const airShare = advanced.statuses.airYards === "verified" ? advanced.airYardsShare : null;
       const estimatedTargets = advanced.routes * (tprr ?? 0);
       const routeQualified = position === "RB"
         ? advanced.routes >= 8 && estimatedTargets >= 2
@@ -170,9 +175,9 @@ export function buildAdvancedMetricSignals(
       }
     }
 
-    if (position === "RB" && advanced.rushingYardsOverExpectedPerAttempt !== null) {
+    if (position === "RB" && advanced.rushingYardsOverExpectedPerAttempt !== null && Number.isFinite(advanced.rushingYardsOverExpectedPerAttempt) && advanced.rushingYardsOverExpected !== null && advanced.statuses.rushingYardsOverExpected === "verified") {
       const positive = advanced.rushingYardsOverExpectedPerAttempt > 0;
-      const fmtText = advanced.forcedMissedTackleRate === null
+      const fmtText = advanced.forcedMissedTackleRate === null || advanced.statuses.forcedMissedTackles !== "verified"
         ? "FMT rate pending charting"
         : `${(advanced.forcedMissedTackleRate * 100).toFixed(1)}% FMT rate`;
       signals.push({

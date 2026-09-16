@@ -49,6 +49,42 @@ import {
   buildWaiverRecommendationSnapshots,
 } from "@/lib/fantasy/inSeason";
 import { buildPdfRosterInSeasonSnapshot } from "@/lib/fantasy/inSeasonRosterSnapshot";
+import { assessDecisionReadiness, assessPlayerCoverage, buildPlayerCoverageReport, coverageForDecision } from "@/lib/fantasy/playerCoverage";
+import { applyWeeklyEvidenceBundle } from "@/lib/fantasy/weeklyEvidenceRefresh";
+import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
+import { applyCurrentSeasonProjectionUpdates } from "@/lib/fantasy/currentSeasonProjections";
+import { getWeeklyWaiverExpertSignal, weeklyWaiverContextStatus } from "@/lib/fantasy/weeklyWaiverContext";
+
+// Explicit synthetic evidence for strategy tests. Production snapshots are never
+// upgraded by this helper; coverage tests exercise the actual incomplete data.
+function withCompleteCoverage(players: Parameters<typeof assessPlayerCoverage>[0][]) {
+  return structuredClone(players).map((player) => ({ ...player,
+    marketRank: player.marketRank ?? 200,
+    currentRole: player.currentRole && player.currentRole !== "unknown" ? player.currentRole : "projected-starter" as const,
+    injuryStatus: player.injuryStatus && player.injuryStatus !== "unknown" ? player.injuryStatus : "Healthy",
+    projectedReturnDate: player.projectedReturnDate ?? "2026-10-01",
+    evidence: { week: completedGameEvidenceMeta.week, capturedAt: new Date().toISOString(), source: "Synthetic test fixture", boxScore: true, snaps: true, routes: true, observedTargets: 2, observedReceivingYards: 20, observedCarries: 10 },
+    advancedUsage: { week: Number(completedGameEvidenceMeta.week), games: 1, routes: 20, targetsPerRouteRun: 0.1,
+      yardsPerRouteRun: 1, airYards: 20, airYardsShare: 0.1, rushingYardsOverExpected: 0,
+      rushingYardsOverExpectedPerAttempt: 0, forcedMissedTackles: null, forcedMissedTackleRate: null,
+      cpoe: 0, teamProe: 0, sources: ["Synthetic test fixture"], statuses: {
+        routes: "verified" as const, airYards: "verified" as const, rushingYardsOverExpected: "verified" as const,
+        forcedMissedTackles: "pending-source" as const, quarterbackEnvironment: "verified" as const,
+      } },
+  }));
+}
+
+function getCoveredTestDataset() {
+  const dataset = getInSeasonCommandCenterDataset();
+  dataset.players = withCompleteCoverage(dataset.players);
+  dataset.tradeIdeas = buildTradeIdeaSnapshots(dataset.players, dataset.myTeam, dataset.leagueTeams);
+  return dataset;
+}
+import {
+  buildYahooInventoryFromPdfPreview,
+  parseYahooRosterPdfLines,
+  type YahooPdfTextLine,
+} from "@/lib/fantasy/yahooRosterPdf";
 import {
   applyCompletedGameEvidence,
   completedGameEvidenceMeta,
@@ -3921,8 +3957,8 @@ test("tier wipe scenarios produce same-position fallbacks and cross-board pivots
   );
 });
 
-test("breaking injury news identifies a verified available successor and proposes the roster cut", () => {
-  const players = structuredClone(inSeasonFixturePlayers);
+test("provisional injury news identifies a successor but does not approve a claim", () => {
+  const players = withCompleteCoverage(inSeasonFixturePlayers);
   const affected = players.find((player) => player.player.fullName === "Marvin Harrison Jr.");
   const beneficiary = players.find((player) => player.player.fullName === "Tyjae Spears");
   assert.ok(affected && beneficiary);
@@ -3954,9 +3990,8 @@ test("breaking injury news identifies a verified available successor and propose
   assert.equal(response.alert?.urgency, "immediate");
   assert.equal(response.alert?.actionConfidence, "provisional");
   assert.ok(response.beneficiaryPlayerIds.includes(beneficiary.player.id));
-  assert.equal(response.status, "actionable");
-  assert.equal(response.recommendations[0]?.addPlayerId, beneficiary.player.id);
-  assert.ok(response.recommendations[0]?.dropPlayerId);
+  assert.equal(response.status, "monitor");
+  assert.equal(response.recommendations.length, 0);
 });
 
 test("breaking news warns immediately but refuses to invent an unverified next man up", () => {
@@ -3984,7 +4019,7 @@ test("breaking news warns immediately but refuses to invent an unverified next m
 });
 
 test("in-season market board separates actionable rises from sell-high mismatches", () => {
-  const trends = buildOpportunityTrendSnapshots(inSeasonFixturePlayers);
+  const trends = buildOpportunityTrendSnapshots(withCompleteCoverage(inSeasonFixturePlayers));
   const tyjae = trends.find((trend) =>
     inSeasonFixturePlayers.find((player) => player.player.id === trend.playerId)?.player.fullName ===
       "Tyjae Spears",
@@ -4003,7 +4038,7 @@ test("in-season market board separates actionable rises from sell-high mismatche
 });
 
 test("sell-high regression signals become fades when the player is not ours", () => {
-  const players = structuredClone(inSeasonFixturePlayers);
+  const players = withCompleteCoverage(inSeasonFixturePlayers);
   const chaseBrown = players.find((player) => player.player.fullName === "Chase Brown");
   assert.ok(chaseBrown);
   chaseBrown.availability = "league-rostered";
@@ -4017,7 +4052,7 @@ test("sell-high regression signals become fades when the player is not ours", ()
 
 test("in-season trade ideas are driven by two-team lineup impact", () => {
   const ideas = buildTradeIdeaSnapshots(
-    inSeasonFixturePlayers,
+    withCompleteCoverage(inSeasonFixturePlayers),
     inSeasonFixtureMyTeam,
     inSeasonFixtureLeagueTeams,
   );
@@ -4149,17 +4184,13 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   const dataset = getInSeasonCommandCenterDataset();
   const playersById = new Map(dataset.players.map((player) => [player.player.id, player] as const));
 
-  assert.ok(dataset.actionQueue.length > 0);
-  const topWaiverTransaction = dataset.waiverRecommendations[0]?.proposedTransaction;
-  assert.equal(topWaiverTransaction?.kind, "add-drop");
-  assert.equal(topWaiverTransaction?.kind === "add-drop" ? topWaiverTransaction.add[0]?.fullName : null, "Dalton Schultz");
-  assert.equal(dataset.waiverRecommendations[0]?.verdict, "priority");
-  assert.ok(dataset.waiverRecommendations.some((idea) =>
-    playersById.get(idea.addPlayerId)?.player.fullName === "Kaelon Black" && idea.verdict === "priority"
-  ));
+  assert.ok(dataset.actionQueue.length > 0, "observed opportunities can support actions without every advanced field");
+  assert.ok(dataset.waiverRecommendations.length > 0, "research candidates remain visible");
+  assert.ok(dataset.waiverRecommendations.filter((idea) => idea.verdict === "bid" || idea.verdict === "priority").every((idea) => idea.coverage?.actionable));
+  assert.ok(dataset.waiverRecommendations.filter((idea) => !idea.coverage?.actionable).every((idea) => idea.faabRange === null && idea.dropPlayerId === null));
   assert.ok(dataset.waiverRecommendations.every((idea) => playersById.get(idea.addPlayerId)?.availability === "free-agent"));
   assert.ok(dataset.tradeIdeas.filter((idea) => idea.verdict !== "pass").every((idea) => idea.counterpartyStarterDelta >= -1.5));
-  assert.ok(dataset.tradeIdeas.some((idea) => idea.format === "two-for-two"), "live recommendations should include roster-balancing packages");
+  assert.ok(dataset.tradeIdeas.every((idea) => coverageForDecision(dataset.players, [...idea.givePlayerIds, ...idea.targetPlayerIds], "trade").actionable));
   assert.ok(dataset.tradeIdeas.every((idea) => {
     if (idea.format !== "one-for-one") return true;
     const give = playersById.get(idea.givePlayerId);
@@ -4172,12 +4203,15 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   assert.equal(njigba?.classification, "role-confirmation");
   assert.equal(njigba?.priceContext, "elite");
   assert.notEqual(njigba?.actionability, "actionable");
-  assert.match(njigba?.summary ?? "", /already elite price/i);
+  assert.match(njigba?.summary ?? "", /already elite price|evidence incomplete/i);
   const stevenson = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Rhamondre Stevenson");
-  assert.equal(stevenson?.classification, "buy-low");
-  assert.equal(stevenson?.actionability, "actionable");
-  const watson = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Christian Watson");
-  const bryceYoung = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Bryce Young");
+  assert.equal(stevenson?.classification, "watch");
+  assert.equal(stevenson?.actionability, "watch");
+  assert.ok((stevenson?.opportunityScore ?? 99) < 5);
+  assert.match(stevenson?.summary ?? "", /teammate absence|Henderson inactive/i);
+  assert.ok(stevenson?.signals.some((signal) => /TreVeyon Henderson inactive/i.test(signal)));
+  const watson = buildOpportunityTrendSnapshots(dataset.players.filter((player) => player.player.fullName === "Christian Watson"))[0];
+  const bryceYoung = buildOpportunityTrendSnapshots(dataset.players.filter((player) => player.player.fullName === "Bryce Young"))[0];
   assert.equal(watson?.classification, "sell-high");
   assert.equal(watson?.recommendation, "avoid");
   assert.equal(bryceYoung?.classification, "sell-high");
@@ -4185,7 +4219,7 @@ test("live in-season dataset never recommends an impossible rostered add or lops
 });
 
 test("trade recommendations reject depth aggregation that dilutes the best asset", () => {
-  const dataset = getInSeasonCommandCenterDataset();
+  const dataset = getCoveredTestDataset();
   const playersById = new Map(dataset.players.map((player) => [player.player.id, player.player.fullName] as const));
   const signatures = dataset.tradeIdeas.map((idea) => ({
     send: idea.givePlayerIds.map((playerId) => playersById.get(playerId) ?? playerId).sort().join(" + "),
@@ -4204,7 +4238,7 @@ test("trade recommendations reject depth aggregation that dilutes the best asset
 });
 
 test("incoming analyzer counters packages that fail leg balance or elite anchor replacement", () => {
-  const dataset = getInSeasonCommandCenterDataset();
+  const dataset = getCoveredTestDataset();
   const byName = new Map(dataset.players.map((player) => [player.player.fullName, player] as const));
   const analyze = (sendNames: string[], receiveNames: string[]) => analyzeTradeProposal(
     dataset.players,
@@ -4230,7 +4264,7 @@ test("incoming analyzer counters packages that fail leg balance or elite anchor 
 });
 
 test("trade packages expose realistic offer bands without calling a major edge even", () => {
-  const dataset = getInSeasonCommandCenterDataset();
+  const dataset = getCoveredTestDataset();
   const ladders = dataset.tradeIdeas.map((idea) => idea.offerTiers).filter((tiers) => tiers.length > 1);
 
   assert.ok(ladders.length > 0, "at least one multi-player idea should expose an offer ladder");
@@ -4286,7 +4320,7 @@ test("league opportunity grades honor the three-WR, two-FLEX lineup without doub
 });
 
 test("opportunity dashboard activates usage categories after verified regular-season evidence", () => {
-  const dataset = getInSeasonCommandCenterDataset();
+  const dataset = getCoveredTestDataset();
   const dashboard = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
   const oneForOneBoard = dashboard.weeklyBoard.find((item) => item.label === "Best clean 1-for-1");
 
@@ -4301,7 +4335,7 @@ test("opportunity dashboard activates usage categories after verified regular-se
 });
 
 test("opportunity proposals preserve elite anchors and device preferences can block an outgoing player", () => {
-  const dataset = getInSeasonCommandCenterDataset();
+  const dataset = getCoveredTestDataset();
   const byId = new Map(dataset.players.map((player) => [player.player.id, player] as const));
   const baseline = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
   const proposals = baseline.partners.flatMap((partner) => partner.proposals);
@@ -4344,7 +4378,7 @@ test("marginal lineup effects distinguish current replacements from return-adjus
 
 test("waiver recommendations produce add-drop transactions and action queue entries", () => {
   const waiverIdeas = buildWaiverRecommendationSnapshots(
-    inSeasonFixturePlayers,
+    withCompleteCoverage(inSeasonFixturePlayers),
     inSeasonFixtureMyTeam,
   );
   const tradeIdeas = buildTradeIdeaSnapshots(
@@ -5235,4 +5269,361 @@ test("take-now value credits the best expected same-position substitute at the n
     recommendation.explanation.vona,
     Number((recommendation.explanation.valueNow - recommendation.explanation.valueLater).toFixed(2)),
   );
+});
+
+test("coverage separates baseline estimates, partial observations, complete evidence and invalid inputs", () => {
+  const baseline = structuredClone(inSeasonFixturePlayers[0]);
+  delete baseline.evidence;
+  delete baseline.advancedUsage;
+  assert.equal(assessPlayerCoverage(baseline).grade, "baseline-only");
+  const complete = withCompleteCoverage([baseline])[0];
+  assert.equal(assessPlayerCoverage(complete).grade, "complete");
+  const missingRoutes = structuredClone(complete);
+  missingRoutes.advancedUsage.statuses.routes = "pending-source" as "verified";
+  assert.equal(assessPlayerCoverage(missingRoutes).grade, "partial");
+  const broken = structuredClone(complete);
+  broken.rosProjection.p50 = NaN;
+  assert.equal(assessPlayerCoverage(broken).grade, "blocked");
+  const inverted = structuredClone(complete);
+  inverted.weeklyProjection.p10 = inverted.weeklyProjection.p90 + 1;
+  assert.equal(assessPlayerCoverage(inverted).grade, "blocked");
+  const wrongCalculation = structuredClone(complete);
+  wrongCalculation.advancedUsage.targetsPerRouteRun = 0.8;
+  assert.equal(assessPlayerCoverage(wrongCalculation).grade, "blocked");
+  const stale = structuredClone(complete);
+  stale.evidence.capturedAt = "2000-01-01T00:00:00Z";
+  assert.equal(assessPlayerCoverage(stale).actionable, false);
+  const oldWeek = structuredClone(complete);
+  oldWeek.advancedUsage.week = completedGameEvidenceMeta.week - 1;
+  assert.equal(assessPlayerCoverage(oldWeek).actionable, false);
+});
+
+test("coverage applies position requirements and accepts real zero efficiency", () => {
+  for (const position of ["QB", "RB", "WR", "TE"] as const) {
+    const player = withCompleteCoverage([inSeasonFixturePlayers[0]])[0];
+    player.player.positions = [position];
+    assert.equal(assessPlayerCoverage(player).actionable, true, position);
+    if (position === "QB") player.advancedUsage.cpoe = NaN;
+    else if (position === "RB") player.advancedUsage.rushingYardsOverExpectedPerAttempt = NaN;
+    else player.advancedUsage.airYardsShare = NaN;
+    assert.equal(assessPlayerCoverage(player).actionable, false, position);
+  }
+});
+
+test("coverage catches duplicate identities and model omissions without losing universe counts", () => {
+  const players = withCompleteCoverage(inSeasonFixturePlayers);
+  const report = buildPlayerCoverageReport([...players, players[0]]);
+  assert.equal(report.total, players.length + 1);
+  assert.equal(Object.values(report.counts).reduce((sum, count) => sum + count, 0), report.total);
+  assert.equal(report.entries.filter((entry) => entry.playerId === players[0].player.id && entry.grade === "blocked").length, 2);
+  assert.equal(coverageForDecision(players, ["missing-player"]).actionable, false);
+});
+
+test("priority coverage excludes deep reserves and kickers without deleting players", () => {
+  const player = withCompleteCoverage([inSeasonFixturePlayers[0]])[0];
+  player.availability = "free-agent";
+  player.marketRank = 251;
+  const reserve = buildPlayerCoverageReport([player]);
+  assert.equal(reserve.priorityTotal, 0);
+  assert.equal(reserve.monitored, 1);
+  assert.equal(reserve.entries[0].grade, "not-required");
+  assert.deepEqual(reserve.entries[0].missing, []);
+  player.marketRank = 250;
+  assert.equal(buildPlayerCoverageReport([player]).priorityTotal, 1);
+  player.marketRank = 900;
+  player.availability = "my-roster";
+  assert.equal(buildPlayerCoverageReport([player]).priorityTotal, 1);
+  player.player.positions = ["K"];
+  const kicker = buildPlayerCoverageReport([player]);
+  assert.equal(kicker.priorityTotal, 0);
+  assert.equal(kicker.kickers, 1);
+  assert.equal(kicker.total, 1);
+});
+
+test("monitored players promote on observed opportunities, verified injury or explicit candidates", () => {
+  const player: Parameters<typeof assessPlayerCoverage>[0] = withCompleteCoverage([inSeasonFixturePlayers[0]])[0];
+  player.availability = "free-agent";
+  player.marketRank = 800;
+  player.recentUsage.targetsPerGame = 12;
+  assert.equal(buildPlayerCoverageReport([player]).priorityTotal, 0, "modeled usage is not observed breakout evidence");
+  player.baselineUsage.targetsPerGame = 1;
+  player.evidence!.observedTargets = 4;
+  player.evidence!.participation = "played";
+  assert.equal(buildPlayerCoverageReport([player]).priorityTotal, 1);
+  player.evidence!.capturedAt = "2000-01-01";
+  assert.equal(buildPlayerCoverageReport([player]).priorityTotal, 0);
+  player.injuryOpportunity = { source: "Test verified report", capturedAt: new Date().toISOString(), confirmed: true, successorVerified: true };
+  assert.equal(buildPlayerCoverageReport([player]).priorityTotal, 1);
+  player.injuryOpportunity.successorVerified = false;
+  assert.equal(buildPlayerCoverageReport([player]).priorityTotal, 0);
+  const promoted = buildPlayerCoverageReport([player], Date.now(), { candidatePlayerIds: [player.player.id] });
+  assert.equal(promoted.priorityTotal, 1);
+  assert.equal(promoted.priorityComplete, 0);
+});
+
+test("outside-priority players still undergo strict decision audits on demand", () => {
+  const player = withCompleteCoverage([inSeasonFixturePlayers[0]])[0];
+  player.availability = "free-agent";
+  player.marketRank = 800;
+  player.player.positions = ["WR"];
+  player.advancedUsage.targetsPerRouteRun = 0.9;
+  assert.equal(buildPlayerCoverageReport([player]).entries[0].grade, "not-required");
+  assert.equal(coverageForDecision([player], [player.player.id], "receiving-efficiency").actionable, false);
+  assert.equal(coverageForDecision([player, player], [player.player.id]).actionable, false);
+});
+
+test("waiver gate blocks stale add evidence and removes actionable payloads", () => {
+  const players = withCompleteCoverage(inSeasonFixturePlayers);
+  const ready = buildWaiverRecommendationSnapshots(players, inSeasonFixtureMyTeam);
+  const candidate = ready.find((entry) => entry.verdict === "priority" || entry.verdict === "bid");
+  assert.ok(candidate, "complete evidence must still allow qualifying actions");
+  for (const id of [candidate.addPlayerId]) {
+    const broken = structuredClone(players);
+    broken.find((player) => player.player.id === id)!.evidence.capturedAt = "2000-01-01";
+    const ideas = buildWaiverRecommendationSnapshots(broken, inSeasonFixtureMyTeam);
+    const result: ReturnType<typeof buildWaiverRecommendationSnapshots>[number] = ideas.find((idea) => idea.addPlayerId === candidate.addPlayerId)!;
+    assert.equal(result.coverage?.actionable, false);
+    assert.equal(result.verdict, "watch");
+    assert.equal(result.faabRange, null);
+    assert.equal(result.dropPlayerId, null);
+    assert.equal(result.proposedTransaction.kind === "add-drop" && result.proposedTransaction.add.length, 0);
+    assert.ok(!buildTransactionQueue(ideas, []).some((entry) => entry.id.includes(candidate.addPlayerId)));
+  }
+});
+
+test("live coverage gate reaches trade analyzer, League Map, and market calls", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const other = dataset.leagueTeams.find((team) => team.teamId !== dataset.myTeam.teamId)!;
+  const stalePlayer = dataset.players.find((player) => player.player.id === dataset.myTeam.playerIds[0])!;
+  delete stalePlayer.evidence;
+  const analysis = analyzeTradeProposal(dataset.players, dataset.myTeam, dataset.leagueTeams, [dataset.myTeam.playerIds[0]], [other.playerIds[0]]);
+  assert.equal(analysis?.verdict, "insufficient-data");
+  assert.match(analysis?.qualityWarning ?? "", /Verified|evidence|Market|health/);
+  const map = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
+  assert.ok(map.partners.every((partner) => partner.proposals.every((proposal) => !proposal.sendPlayerIds.includes(stalePlayer.player.id))));
+  const report = buildPlayerCoverageReport(dataset.players);
+  assert.equal(report.total, dataset.players.length);
+  for (const trend of dataset.opportunityTrends.filter((entry) => entry.actionability === "actionable")) {
+    if (trend.playerId !== stalePlayer.player.id) assert.ok(assessDecisionReadiness(dataset.players.find((player) => player.player.id === trend.playerId)!, "usage").actionable);
+  }
+});
+
+test("Yahoo roster PDF import matches every team and fails closed before applying partial ownership", () => {
+  const snapshot = buildPdfRosterInSeasonSnapshot();
+  const playersById = new Map(snapshot.players.map((player) => [player.player.id, player] as const));
+  const lines: YahooPdfTextLine[] = snapshot.teams.flatMap((team, index) => {
+    const column = index % 2 === 0 ? "left" as const : "right" as const;
+    const page = Math.floor(index / 2) + 1;
+    return [
+      { page, column, y: 720, text: team.name },
+      ...team.playerIds.map((playerId, playerIndex) => ({
+        page,
+        column,
+        y: 700 - playerIndex * 20,
+        text: `BN ${playersById.get(playerId)!.player.fullName}`,
+      })),
+    ];
+  });
+  const preview = parseYahooRosterPdfLines(lines, snapshot.players, snapshot.teams, "2026-09-15T12:00:00-04:00");
+  assert.equal(preview.ready, true);
+  assert.equal(preview.detectedTeams, snapshot.teams.length);
+  assert.equal(preview.matchedPlayers, snapshot.teams.reduce((total, team) => total + team.playerIds.length, 0));
+  assert.equal(preview.unmatchedRosterRows, 0);
+  assert.equal(preview.ownershipChanges.length, 0);
+  const inventory = buildYahooInventoryFromPdfPreview(preview, snapshot.players, snapshot.myTeam.teamId);
+  assert.equal(inventory.source, "yahoo-roster-pdf");
+  assert.equal(inventory.coverage.partial, false);
+  assert.equal(inventory.players.filter((player) => player.availability === "rostered").length, preview.matchedPlayers);
+  const evidencedPlayers = applyCompletedGameEvidence(snapshot.players).players;
+  const beforeEvidence = structuredClone(evidencedPlayers.find((player) => player.evidence)?.evidence);
+  const applied = applyYahooLeagueInventory(evidencedPlayers, inventory, { now: preview.capturedAt, maxAgeMinutes: 1 });
+  assert.deepEqual(applied.players.find((player) => player.evidence)?.evidence, beforeEvidence, "ownership refresh preserves player evidence");
+
+  const partial = parseYahooRosterPdfLines(lines.slice(0, 12), snapshot.players, snapshot.teams);
+  assert.equal(partial.ready, false);
+  assert.throws(() => buildYahooInventoryFromPdfPreview(partial, snapshot.players, snapshot.myTeam.teamId));
+  const unmatched = parseYahooRosterPdfLines(
+    [...lines, { page: 1, column: "left", y: 5, text: "BN Definitely Not A Modeled Player" }],
+    snapshot.players,
+    snapshot.teams,
+  );
+  assert.equal(unmatched.ready, false);
+  assert.equal(unmatched.unmatchedRows[0]?.text, "BN Definitely Not A Modeled Player");
+});
+
+test("current-season projections are provenance-backed, conservative, and stable across repeat refreshes", () => {
+  const snapshot = buildPdfRosterInSeasonSnapshot();
+  const observed = applyCompletedGameEvidence(snapshot.players).players;
+  const options = { week: completedGameEvidenceMeta.week, capturedAt: completedGameEvidenceMeta.capturedAt, observationWeight: completedGameEvidenceMeta.evidenceWeight };
+  const once = applyCurrentSeasonProjectionUpdates(observed, options);
+  const twice = applyCurrentSeasonProjectionUpdates(once, options);
+  const updated = once.filter((player) => player.projectionBasis === "weekly-updated");
+  assert.ok(updated.length > 0);
+  assert.ok(updated.every((player) => player.projectionUpdate?.sources.length));
+  assert.deepEqual(
+    twice.map((player) => [player.player.id, player.weeklyProjection, player.rosProjection]),
+    once.map((player) => [player.player.id, player.weeklyProjection, player.rosProjection]),
+    "repeated refreshes must rebuild from immutable baselines instead of compounding",
+  );
+  const healthyObserved = updated.find((player) => player.injuryStatus !== "IR" && player.evidence?.participation === "played")!;
+  assert.ok(Math.abs(healthyObserved.weeklyProjection.p50 / healthyObserved.projectionUpdate!.baselineWeekly.p50 - 1) <= 0.16);
+  assert.ok(healthyObserved.rosProjection.p50 < healthyObserved.projectionUpdate!.baselineRos.p50, "ROS removes the completed week");
+});
+
+test("weekly expert context excludes stale ranks instead of silently reusing them", () => {
+  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-16T12:00:00-04:00")).current, true);
+  assert.equal(getWeeklyWaiverExpertSignal("Kaelon Black", Date.parse("2026-09-16T12:00:00-04:00"))?.fantasyPros?.rank, 3);
+  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-10-01T12:00:00-04:00")).current, false);
+  assert.equal(getWeeklyWaiverExpertSignal("Kaelon Black", Date.parse("2026-10-01T12:00:00-04:00")), undefined);
+});
+
+test("optional efficiency gaps, inactive players and kickers do not block baseline evaluation", () => {
+  const player: Parameters<typeof assessPlayerCoverage>[0] = withCompleteCoverage(inSeasonFixturePlayers)[0];
+  delete player.advancedUsage;
+  assert.equal(assessDecisionReadiness(player, "valuation").actionable, true);
+  assert.equal(assessDecisionReadiness(player, "usage").actionable, true);
+  assert.equal(assessDecisionReadiness(player, "receiving-efficiency").actionable, false);
+  player.injuryStatus = "IR";
+  delete player.evidence;
+  delete player.projectedReturnDate;
+  assert.equal(assessPlayerCoverage(player).evaluation, "inactive");
+  assert.ok(!assessPlayerCoverage(player).missing.includes("Verified box score"));
+  assert.equal(assessDecisionReadiness(player, "valuation").actionable, true);
+  player.player.positions = ["K"];
+  player.currentRole = "unknown";
+  player.injuryStatus = "unknown";
+  player.marketRank = null;
+  player.baselineUsage.snapShare = NaN;
+  assert.equal(assessPlayerCoverage(player).evaluation, "lightweight");
+  assert.equal(assessDecisionReadiness(player, "valuation").actionable, true);
+});
+
+test("an unrelated kicker profile cannot suppress waiver or trade choices", () => {
+  const dataset = getCoveredTestDataset();
+  const kicker = dataset.players.find((player) => player.availability === "my-roster" && player.player.positions[0] === "K")!;
+  const before = buildWaiverRecommendationSnapshots(dataset.players, dataset.myTeam);
+  const tradesBefore = buildTradeIdeaSnapshots(dataset.players, dataset.myTeam, dataset.leagueTeams);
+  kicker.weeklyProjection.p50 = NaN;
+  kicker.rosProjection.p50 = NaN;
+  delete kicker.evidence;
+  assert.deepEqual(buildWaiverRecommendationSnapshots(dataset.players, dataset.myTeam), before);
+  assert.deepEqual(buildTradeIdeaSnapshots(dataset.players, dataset.myTeam, dataset.leagueTeams), tradesBefore);
+});
+
+test("confirmed successor opportunity can clear without prior routes; provisional or stale news cannot", () => {
+  const player = structuredClone(inSeasonFixturePlayers[0]);
+  delete player.evidence;
+  delete player.advancedUsage;
+  player.injuryOpportunity = { source: "Verified test report", capturedAt: new Date().toISOString(), confirmed: true, successorVerified: true };
+  assert.equal(assessDecisionReadiness(player, "injury-opportunity").actionable, true);
+  player.injuryOpportunity.confirmed = false;
+  assert.equal(assessDecisionReadiness(player, "injury-opportunity").actionable, false);
+  player.injuryOpportunity.confirmed = true;
+  player.injuryOpportunity.capturedAt = "2000-01-01";
+  assert.equal(assessDecisionReadiness(player, "injury-opportunity").actionable, false);
+});
+
+test("weekly evidence joins exact current-slate records and preserves zero versus absent data", () => {
+  const players = structuredClone(inSeasonFixturePlayers);
+  const player = players[0];
+  delete player.evidence;
+  delete player.advancedUsage;
+  const season = leagueSourceOfTruth.season;
+  const week = completedGameEvidenceMeta.week;
+  const row = `${season},${week},REG,${player.player.fullName},${player.player.team},${player.player.positions[0]},0,0,0`;
+  const statsCsv = `season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards\n${row}`;
+  const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv };
+  const result = applyWeeklyEvidenceBundle(players, bundle);
+  assert.equal(result.observedPlayers, 1);
+  assert.equal(result.players[0].evidence?.observedTargets, 0);
+  assert.equal(result.players[0].advancedUsage, undefined, "box scores cannot manufacture routes");
+  assert.equal(result.players[0].availability, player.availability);
+  assert.equal(result.players[0].rosterTeamId, player.rosterTeamId);
+  assert.deepEqual(result.players[1], players[1], "absent record remains unchanged");
+  assert.equal(applyWeeklyEvidenceBundle(players, { ...bundle, statsCsv: `${statsCsv}\n${row}` }).observedPlayers, 0, "ambiguous duplicate is rejected");
+  assert.throws(() => applyWeeklyEvidenceBundle(players, { ...bundle, season: season - 1 }));
+  const snapsCsv = `season,week,game_type,player,team,position,offense_snaps,offense_pct\n${season},${week},REG,${player.player.fullName},${player.player.team},${player.player.positions[0]},0,0`;
+  const zero = applyWeeklyEvidenceBundle(players, { ...bundle, statsCsv: undefined, snapsCsv });
+  assert.equal(zero.players[0].evidence?.participation, "zero-snaps");
+  assert.equal(zero.players[0].evidence?.boxScore, false);
+  assert.equal(assessDecisionReadiness(zero.players[0], "usage").actionable, false);
+});
+
+test("weekly evidence accepts exact-attempt Week 1 NGS RYOE and rejects mismatched aggregates", () => {
+  const player = structuredClone(inSeasonFixturePlayers.find((entry) => entry.player.positions[0] === "RB")!);
+  delete player.advancedUsage;
+  const season = leagueSourceOfTruth.season;
+  const week = completedGameEvidenceMeta.week;
+  const statsCsv = `season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards\n${season},${week},REG,${player.player.fullName},${player.player.team},RB,2,10,12`;
+  const ngsHeader = "season,season_type,week,player_display_name,player_position,team_abbr,rush_attempts,rush_yards_over_expected,rush_yards_over_expected_per_att";
+  const ngsCsv = `${ngsHeader}\n${season},REG,0,${player.player.fullName},RB,${player.player.team},10,5,0.5`;
+  const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv, ngsRushingCsv: ngsCsv };
+  const accepted = applyWeeklyEvidenceBundle([player], bundle).players[0];
+  assert.equal(accepted.advancedUsage?.statuses.rushingYardsOverExpected, "verified");
+  assert.equal(accepted.advancedUsage?.rushingYardsOverExpectedPerAttempt, 0.5);
+  const rejected = applyWeeklyEvidenceBundle([player], { ...bundle, ngsRushingCsv: ngsCsv.replace(",10,5,0.5", ",9,5,0.5") }).players[0];
+  assert.equal(rejected.advancedUsage, undefined);
+  const inconsistent = applyWeeklyEvidenceBundle([player], { ...bundle, ngsRushingCsv: ngsCsv.replace(",10,5,0.5", ",10,5,0.9") }).players[0];
+  assert.equal(inconsistent.advancedUsage, undefined, "internally inconsistent NGS totals remain unavailable");
+});
+
+test("weekly identity reconciliation handles team aliases and fullbacks without joining defensive namesakes", () => {
+  const player = structuredClone(inSeasonFixturePlayers[0]);
+  player.player.team = "JAC";
+  player.player.positions = ["RB"];
+  const season = leagueSourceOfTruth.season;
+  const week = completedGameEvidenceMeta.week;
+  const header = "season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards";
+  const row = `${season},${week},REG,${player.player.fullName},JAX,FB,2,1,12`;
+  const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv: `${header}\n${row}` };
+  const result = applyWeeklyEvidenceBundle([player], bundle);
+  assert.equal(result.observedPlayers, 1);
+  assert.equal(result.matchAudit[0].stats, "matched");
+  assert.equal(result.matchAudit[0].snaps, "source-unavailable");
+  assert.equal(applyWeeklyEvidenceBundle([player], { ...bundle, statsCsv: `${header}\n${row.replace(",FB,", ",HB,")}` }).observedPlayers, 1);
+  const collision = applyWeeklyEvidenceBundle([player], { ...bundle, statsCsv: `${header}\n${row}\n${row.replace("JAX", "JAC")}` });
+  assert.equal(collision.matchAudit[0].stats, "ambiguous");
+  assert.equal(collision.observedPlayers, 0);
+  const defensive = applyWeeklyEvidenceBundle([player], { ...bundle, statsCsv: `${header}\n${row.replace(",FB,", ",CB,")}` });
+  assert.equal(defensive.matchAudit[0].stats, "position-mismatch");
+  assert.equal(defensive.observedPlayers, 0);
+  const absent = applyWeeklyEvidenceBundle([player], { ...bundle, statsCsv: header });
+  assert.equal(absent.matchAudit[0].stats, "absent");
+});
+
+test("Travis Hunter's verified JAX offensive record reconciles across the official CB designation only", () => {
+  const player = structuredClone(getInSeasonCommandCenterDataset().players.find((entry) => entry.player.fullName === "Travis Hunter")!);
+  delete player.evidence;
+  const season = leagueSourceOfTruth.season;
+  const week = completedGameEvidenceMeta.week;
+  const header = "season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards";
+  const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv: `${header}\n${season},${week},REG,Travis Hunter,JAX,CB,1,1,8` };
+  const result = applyWeeklyEvidenceBundle([player], bundle);
+  assert.equal(result.matchAudit[0].stats, "matched");
+  assert.equal(result.players[0].evidence?.observedTargets, 1);
+  const namesake = structuredClone(player);
+  namesake.player.fullName = "Josh Allen";
+  assert.equal(applyWeeklyEvidenceBundle([namesake], { ...bundle, statsCsv: `${header}\n${season},${week},REG,Josh Allen,JAX,CB,1,1,8` }).matchAudit[0].stats, "position-mismatch");
+});
+
+test("refresh does not renew expired route evidence or treat current Out as historical inactivity", () => {
+  const player: Parameters<typeof assessPlayerCoverage>[0] = withCompleteCoverage([inSeasonFixturePlayers[0]])[0];
+  player.evidence!.capturedAt = "2000-01-01";
+  const season = leagueSourceOfTruth.season;
+  const week = completedGameEvidenceMeta.week;
+  const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [],
+    statsCsv: `season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards\n${season},${week},REG,${player.player.fullName},${player.player.team},${player.player.positions[0]},2,1,12` };
+  const result = applyWeeklyEvidenceBundle([player], bundle).players[0];
+  assert.equal(result.evidence?.routes, false);
+  assert.equal(assessDecisionReadiness(result, "receiving-efficiency").actionable, false);
+  delete player.evidence;
+  player.injuryStatus = "Out";
+  assert.equal(assessPlayerCoverage(player).evaluation, "baseline");
+  assert.ok(assessPlayerCoverage(player).notes.some(note => note.includes("participation is unverified")));
+  const unknown = applyWeeklyEvidenceBundle([player], { ...bundle, statsCsv: undefined,
+    metadata: { test: { full_name: player.player.fullName, team: player.player.team, position: player.player.positions[0], injury_status: "NA" } },
+  }).players[0];
+  assert.equal(unknown.injuryStatus, "unknown");
+  assert.ok(assessPlayerCoverage(unknown).missing.includes("Explicit health status"));
+  assert.equal(unknown.evidence, undefined);
 });

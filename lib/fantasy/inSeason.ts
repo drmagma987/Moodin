@@ -23,6 +23,9 @@ import {
   completedGameTeamEnvironments,
 } from "@/lib/fantasy/completedGameEvidence";
 import { buildAdvancedMetricSignals } from "@/lib/fantasy/inSeasonAdvancedMetrics";
+import { getWeeklyWaiverExpertSignal } from "@/lib/fantasy/weeklyWaiverContext";
+import { assessDecisionReadiness, buildPlayerCoverageReport, coverageForDecision, createDecisionGate } from "@/lib/fantasy/playerCoverage";
+import { applyCurrentSeasonProjectionUpdates } from "@/lib/fantasy/currentSeasonProjections";
 
 const protectedFoundationNames = new Set<string>(
   leagueSourceOfTruth.keepers.myDeclaredPlayers,
@@ -79,9 +82,25 @@ function buildOpportunityTrendMap(players: InSeasonPlayerSnapshot[]) {
 export function buildOpportunityTrendSnapshots(
   players: InSeasonPlayerSnapshot[],
 ): OpportunityTrendSnapshot[] {
+  const coverageById = new Map(buildPlayerCoverageReport(players).entries.map((entry) => [entry.playerId, entry]));
+  const contingentPlayerIds = new Set(
+    players
+      .filter((player) => player.opportunityContext?.stability === "contingent")
+      .map((player) => player.player.id),
+  );
   return players
     .map((player) => {
-      const opportunityScore = opportunityDelta(player);
+      const audit = coverageById.get(player.player.id)!;
+      const claim = assessDecisionReadiness(player, "usage");
+      const coverage = { actionable: !audit.invalid.length && claim.actionable, invalid: audit.invalid, missing: claim.reasons };
+      const rawOpportunityScore = opportunityDelta(player);
+      const contingentRole = player.opportunityContext?.stability === "contingent";
+      // A one-week workload created by another player's absence describes a
+      // replacement ceiling, not a durable role change. Retain a small amount
+      // of information without allowing the spike to drive ROS value or a buy.
+      const opportunityScore = contingentRole && rawOpportunityScore > 0
+        ? Number((rawOpportunityScore * 0.2).toFixed(2))
+        : rawOpportunityScore;
       const market = marketScore(player);
       const opportunityRising = opportunityScore >= 9;
       const opportunityFalling = opportunityScore <= -8;
@@ -104,23 +123,26 @@ export function buildOpportunityTrendSnapshots(
       const trueBuyLow = player.availability === "league-rostered"
         && priceContext !== "elite"
         && opportunityRising
+        && !contingentRole
         && !marketHot
         && meaningfulVolume
         && (marketCold || pointsDelta <= -1.5 || priceContext === "mid-market" || priceContext === "deep" || priceContext === "unknown");
       const trueSellHigh = (marketHot || pointsDelta >= 4)
         && opportunityScore < 5;
 
-      const classification = trueBuyLow
-        ? "buy-low" as const
-        : trueSellHigh
-          ? "sell-high" as const
-          : player.availability === "free-agent" && opportunityRising && meaningfulVolume
-            ? "waiver-rise" as const
-            : opportunityFalling || marketCold
-              ? "role-warning" as const
-              : opportunityRising || priceContext === "elite" && opportunityScore >= 5
-                ? "role-confirmation" as const
-                : "watch" as const;
+      const classification = trueSellHigh
+        ? "sell-high" as const
+        : contingentRole && player.availability !== "free-agent"
+          ? "watch" as const
+          : trueBuyLow
+            ? "buy-low" as const
+            : player.availability === "free-agent" && opportunityRising && meaningfulVolume
+              ? "waiver-rise" as const
+              : opportunityFalling || marketCold
+                ? "role-warning" as const
+                : opportunityRising || priceContext === "elite" && opportunityScore >= 5
+                  ? "role-confirmation" as const
+                  : "watch" as const;
 
       const recommendation = classification === "buy-low"
         ? "trade-for" as const
@@ -170,6 +192,9 @@ export function buildOpportunityTrendSnapshots(
       if (player.currentRole && player.currentRole !== "unknown") {
         signals.push(`Depth-chart context: ${player.currentRole.replaceAll("-", " ")}.`);
       }
+      if (player.opportunityContext) {
+        signals.unshift(`Role stability: ${player.opportunityContext.reason}`);
+      }
       if (player.marketTrend !== "steady") {
         signals.push(
           `Sleeper market ${player.marketTrend} (${player.marketTrendCount} signals).`,
@@ -179,7 +204,9 @@ export function buildOpportunityTrendSnapshots(
         signals.push("Tank01-ready live game hook is available for this player profile.");
       }
 
-      const summary = classification === "buy-low"
+      const summary = contingentRole
+        ? `${player.player.fullName}'s usage spike was created by a teammate absence, so it is replacement-role evidence rather than a durable buy-low signal.`
+        : classification === "buy-low"
         ? `${player.player.fullName} has improving opportunity while production or roster activity still points to a discounted price.`
         : classification === "sell-high" && player.availability === "my-roster"
           ? `${player.player.fullName}'s fantasy result or roster buzz is running ahead of the underlying role. Test the trade market; do not force a deal.`
@@ -202,12 +229,12 @@ export function buildOpportunityTrendSnapshots(
         classification,
         opportunityScore,
         marketScore: market,
-        recommendation,
-        actionability,
+        recommendation: coverage.actionable ? recommendation : "watch",
+        actionability: coverage.actionable ? actionability : "watch",
         priceContext,
         marketLabel,
         marketEvidence,
-        summary,
+        summary: coverage.actionable ? summary : `${player.player.fullName}: evidence incomplete; watch only. ${[...coverage.invalid, ...coverage.missing].join("; ")}.${player.opportunityContext ? ` ${player.opportunityContext.reason}` : ""}`,
         signals: signals.slice(0, 4),
       } satisfies OpportunityTrendSnapshot;
     })
@@ -216,12 +243,14 @@ export function buildOpportunityTrendSnapshots(
       const buried = player && (player.currentRole === "backup" || trend.priceContext === "deep")
         && player.recentUsage.carriesPerGame + player.recentUsage.targetsPerGame < 6
         && player.recentUsage.routeParticipation < 0.45;
-      if (buried && trend.actionability !== "actionable") return false;
+      if (buried && trend.actionability !== "actionable" && trend.classification !== "sell-high") return false;
+      if (player?.opportunityContext?.stability === "contingent") return true;
       return trend.classification !== "watch" || Math.abs(trend.opportunityScore) >= 5 || Math.abs(trend.marketScore) >= 5;
     })
     .sort((a, b) => {
       const priority = { actionable: 3, context: 2, watch: 1 } as const;
       return priority[b.actionability] - priority[a.actionability]
+        || Number(contingentPlayerIds.has(b.playerId)) - Number(contingentPlayerIds.has(a.playerId))
         || Math.abs(b.opportunityScore) + Math.abs(b.marketScore) - (Math.abs(a.opportunityScore) + Math.abs(a.marketScore));
     })
     .slice(0, 16);
@@ -610,6 +639,12 @@ function evaluateTradeImpact(
     .filter((note): note is string => Boolean(note));
 
   return {
+    comparisonPlayerIds: [...new Set([
+      ...changedStarterIds(myNowBefore.starters, myNowAfter.starters),
+      ...changedStarterIds(theirNowBefore.starters, theirNowAfter.starters),
+      ...changedStarterIds(myFutureBefore.starters, myFutureAfter.starters),
+      ...changedStarterIds(theirFutureBefore.starters, theirFutureAfter.starters),
+    ])],
     immediateStarterDelta,
     restOfSeasonDelta,
     counterpartyImmediateDelta,
@@ -619,6 +654,12 @@ function evaluateTradeImpact(
     marketValueDelta,
     injuryNotes,
   };
+}
+
+function changedStarterIds(before: InSeasonPlayerSnapshot[], after: InSeasonPlayerSnapshot[]) {
+  const beforeIds = new Set(before.map((player) => player.player.id));
+  const afterIds = new Set(after.map((player) => player.player.id));
+  return [...beforeIds].filter((id) => !afterIds.has(id)).concat([...afterIds].filter((id) => !beforeIds.has(id)));
 }
 
 export function analyzeTradeProposal(
@@ -641,6 +682,10 @@ export function analyzeTradeProposal(
   if (!targetTeam) return null;
 
   const impact = evaluateTradeImpact(playersById, myTeam, targetTeam, send, receive, returnDateOverrides);
+  const tradedCoverage = coverageForDecision(players, [...sendPlayerIds, ...receivePlayerIds], "trade");
+  const replacementCoverage = coverageForDecision(players, impact.comparisonPlayerIds);
+  const coverage = { actionable: tradedCoverage.actionable && replacementCoverage.actionable, reasons: [...tradedCoverage.reasons, ...replacementCoverage.reasons] };
+  const valuationWarnings = [...new Set([...send, ...receive].flatMap((player) => assessDecisionReadiness(player, "trade").warnings))];
   const quality = packageQualityGuard(send, receive);
   const balance = impact.marketValueDelta >= 10
     ? "advantage-you"
@@ -670,7 +715,7 @@ export function analyzeTradeProposal(
         : "The package does not improve your usable lineup enough at the current price.";
 
   return {
-    verdict,
+    verdict: coverage.actionable ? verdict === "accept" && valuationWarnings.length ? "consider" : verdict : "insufficient-data",
     balance,
     immediateStarterDelta: impact.immediateStarterDelta,
     restOfSeasonDelta: impact.restOfSeasonDelta,
@@ -678,8 +723,8 @@ export function analyzeTradeProposal(
     counterpartyImmediateDelta: impact.counterpartyImmediateDelta,
     counterpartyRestOfSeasonDelta: impact.counterpartyRestOfSeasonDelta,
     marketValueDelta: impact.marketValueDelta,
-    rosterFitSummary,
-    qualityWarning: quality.passes ? null : quality.summary,
+    rosterFitSummary: coverage.actionable ? `${valuationWarnings.length ? `Provisional valuation: ${valuationWarnings.join("; ")}. ` : ""}${rosterFitSummary}` : "Required decision evidence is incomplete. No trade recommendation is approved.",
+    qualityWarning: !coverage.actionable ? coverage.reasons.join(" | ") : quality.passes ? null : quality.summary,
     injuryNotes: impact.injuryNotes,
   };
 }
@@ -689,6 +734,7 @@ export function buildTradeIdeaSnapshots(
   myTeam: InSeasonTeamSnapshot,
   leagueTeams: InSeasonTeamSnapshot[],
 ): TradeIdeaSnapshot[] {
+  const decisionGate = createDecisionGate(players);
   const playersById = new Map(players.map((player) => [player.player.id, player] as const));
   const myRoster = myTeam.playerIds
     .map((playerId) => playersById.get(playerId))
@@ -710,8 +756,10 @@ export function buildTradeIdeaSnapshots(
     receive: InSeasonPlayerSnapshot[],
     targetTeam: InSeasonTeamSnapshot,
   ) {
+    if (!decisionGate([...send, ...receive].map((player) => player.player.id), "trade").actionable) return;
     const format = send.length === 2 ? "two-for-two" : "one-for-one";
     const impact = evaluateTradeImpact(playersById, myTeam, targetTeam, send, receive);
+    if (!decisionGate(impact.comparisonPlayerIds).actionable) return;
     const quality = packageQualityGuard(send, receive);
     const starterDelta = impact.restOfSeasonDelta;
     const playoffUpsideDelta = impact.playoffUpsideDelta;
@@ -733,7 +781,8 @@ export function buildTradeIdeaSnapshots(
     const consider = quality.passes && (format === "two-for-two"
       ? starterDelta >= 1.5 && opponentBenefit >= -0.5 && Math.abs(marketValueGap) <= 22 && impact.immediateStarterDelta >= (incomingIr ? -45 : -2)
       : starterDelta >= 1 && opponentBenefit >= -0.5 && Math.abs(marketValueGap) <= 14 && impact.immediateStarterDelta >= (incomingIr ? -40 : -2));
-    const verdict = pursue ? "pursue" : consider ? "consider" : "pass";
+    const valuationWarnings = [...new Set([...send, ...receive].flatMap((player) => assessDecisionReadiness(player, "trade").warnings))];
+    const verdict = pursue ? valuationWarnings.length ? "consider" : "pursue" : consider ? "consider" : "pass";
 
     const sendNames = send.map((player) => player.player.fullName).join(" + ");
     const receiveNames = receive.map((player) => player.player.fullName).join(" + ");
@@ -755,13 +804,14 @@ export function buildTradeIdeaSnapshots(
     });
 
     const candidate = {
+      coverage: { actionable: true, reasons: [] },
       targetPlayerId: receive[0].player.id,
       givePlayerId: send[0].player.id,
       targetPlayerIds: receive.map((player) => player.player.id),
       givePlayerIds: send.map((player) => player.player.id),
       format,
       constructionSummary,
-      qualitySummary: quality.summary,
+      qualitySummary: `${quality.summary}${valuationWarnings.length ? ` Provisional: ${valuationWarnings.join("; ")}.` : ""}`,
       counterpartyTeamId: targetTeam.teamId,
       counterpartyTeamName: targetTeam.name,
       verdict,
@@ -892,16 +942,18 @@ export function buildWaiverRecommendationSnapshots(
 ): WaiverRecommendationSnapshot[] {
   const playersById = new Map(players.map((player) => [player.player.id, player] as const));
   const trendsByPlayerId = buildOpportunityTrendMap(players);
-  const freeAgents = players.filter((player) => player.availability === "free-agent");
+  const freeAgents = players.filter((player) => player.availability === "free-agent" && primaryPosition(player) !== "K");
   const dropCandidates = myTeam.playerIds
     .map((playerId) => playersById.get(playerId))
     .filter((player): player is InSeasonPlayerSnapshot => player !== undefined)
-    .filter((player) => !protectedFoundationNames.has(player.player.fullName) && player.injuryStatus !== "IR");
+    .filter((player) => !protectedFoundationNames.has(player.player.fullName) && player.injuryStatus !== "IR" && primaryPosition(player) !== "K");
   const baseline = fillFutureValueLineup(myTeam, playersById, trendsByPlayerId);
 
   return freeAgents
     .map((addPlayer) => {
       const addTrend = trendsByPlayerId.get(addPlayer.player.id);
+      const expertSignal = getWeeklyWaiverExpertSignal(addPlayer.player.fullName);
+      const expertSourceCount = Number(Boolean(expertSignal?.rotoballer)) + Number(Boolean(expertSignal?.fantasyPros));
       const observedCarries = addPlayer.recentUsage.games > 0
         ? (addPlayer.recentUsage.carriesPerGame - addPlayer.baselineUsage.carriesPerGame * (1 - completedGameEvidenceMeta.evidenceWeight)) /
           completedGameEvidenceMeta.evidenceWeight
@@ -948,6 +1000,7 @@ export function buildWaiverRecommendationSnapshots(
           );
 
           return {
+            comparisonPlayerIds: changedStarterIds(baseline.starters, after.starters),
             dropPlayer,
             starterDelta,
             weeklyDelta,
@@ -962,30 +1015,82 @@ export function buildWaiverRecommendationSnapshots(
       const weeklyDelta = bestSwap?.weeklyDelta ?? 0;
       const playoffUpsideDelta = bestSwap?.playoffUpsideDelta ?? 0;
       const riskDelta = bestSwap?.riskDelta ?? 0;
-      const verdict =
+      const advanced = addPlayer.advancedUsage;
+      const efficiencySignal = Boolean(
+        advanced && (
+          (assessDecisionReadiness(addPlayer, "receiving-efficiency").actionable && advanced.routes !== null && advanced.routes >= 12 && ((advanced.targetsPerRouteRun ?? 0) >= 0.2 || (advanced.yardsPerRouteRun ?? 0) >= 2)) ||
+          (assessDecisionReadiness(addPlayer, "rushing-efficiency").actionable && (advanced.rushingYardsOverExpectedPerAttempt ?? -99) >= 0.4)
+        ),
+      );
+      const externalBoost = expertSourceCount * 4 + (expertSignal?.fantasyPros?.rank === 1 ? 3 : 0);
+      const edgeScore = Number((bestSwap?.score ?? 0) + externalBoost + (efficiencySignal ? 4 : 0));
+      const rawVerdict =
         verifiedRoleBreakout || starterDelta >= 8 || (starterDelta >= 4 && addTrend?.classification === "waiver-rise")
           ? "priority"
-          : starterDelta >= 2 ||
+          : starterDelta >= 2 || expertSourceCount >= 2 ||
               playoffUpsideDelta >= 8 ||
               addTrend?.recommendation === "add"
             ? "bid"
-            : addTrend && addTrend.classification !== "watch"
+            : expertSourceCount >= 1 || efficiencySignal || addTrend && addTrend.classification !== "watch"
               ? "watch"
               : "pass";
-      const faabRange = verdict === "pass" ? null : buildFaabRange(addPlayer, addTrend, starterDelta, verifiedRoleBreakout);
+      const injuryCase = !verifiedRoleBreakout && addTrend?.classification !== "waiver-rise" && (addPlayer.opportunityContext?.stability === "contingent" || /injury|\bis out\b|return/i.test(`${expertSignal?.opportunity ?? ""} ${expertSignal?.primaryRisk ?? ""}`));
+      const purpose = addPlayer.injuryOpportunity || injuryCase ? "injury-opportunity" : "usage";
+      const claim = assessDecisionReadiness(addPlayer, purpose);
+      const rosterCoverage = coverageForDecision(players, [addPlayer.player.id, ...(bestSwap ? [bestSwap.dropPlayer.player.id, ...bestSwap.comparisonPlayerIds] : [])]);
+      const coverage = { actionable: rosterCoverage.actionable && claim.actionable,
+        reasons: [...rosterCoverage.reasons, ...claim.reasons] };
+      const verdict = coverage.actionable ? rawVerdict === "priority" && addPlayer.projectionBasis === "preseason-prior" ? "bid" : rawVerdict : rawVerdict === "pass" ? "pass" : "watch";
+      const faabRange = !coverage.actionable || verdict === "pass" ? null : buildFaabRange(addPlayer, addTrend, starterDelta, verifiedRoleBreakout);
       const dropPlayer = bestSwap?.dropPlayer ?? null;
+      const opportunityType = verifiedRoleBreakout || addTrend?.classification === "waiver-rise"
+        ? "usage-breakout" as const
+        : purpose === "injury-opportunity"
+          ? "injury-created" as const
+          : efficiencySignal
+            ? "efficiency-signal" as const
+            : starterDelta >= 2
+              ? "roster-upgrade" as const
+              : "speculative" as const;
+      const confidence = (expertSourceCount >= 2 && (verifiedRoleBreakout || starterDelta >= 2))
+        ? "high" as const
+        : expertSourceCount >= 2 || verifiedRoleBreakout || (expertSourceCount >= 1 && efficiencySignal)
+          ? "medium" as const
+          : "low" as const;
+      const opportunityCase = expertSignal?.opportunity
+        ?? (verifiedRoleBreakout
+          ? `${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of snaps is a verified role change worth acting on.`
+          : addTrend?.summary ?? `${addPlayer.player.fullName} only clears as a roster-value bet against your current bench.`);
+      const primaryRisk = expertSignal?.primaryRisk
+        ?? (addPlayer.opportunityContext?.reason
+          ? addPlayer.opportunityContext.reason
+          : efficiencySignal
+            ? "The efficiency signal is useful, but the one-week route and touch sample can still reverse quickly."
+            : "The model does not yet have a strong independent usage or efficiency confirmation.");
 
       return {
+        coverage,
         addPlayerId: addPlayer.player.id,
-        dropPlayerId: dropPlayer?.player.id ?? null,
+        dropPlayerId: coverage.actionable ? dropPlayer?.player.id ?? null : null,
         verdict,
         starterDelta,
         weeklyDelta,
         playoffUpsideDelta,
         riskDelta,
         faabRange,
+        edgeScore,
+        confidence: coverage.actionable && !claim.warnings.length && addPlayer.projectionBasis !== "preseason-prior" ? confidence : "low",
+        opportunityType,
+        expertSupport: {
+          sourceCount: expertSourceCount,
+          rotoballerFaab: expertSignal?.rotoballer?.standard ?? null,
+          fantasyProsRank: expertSignal?.fantasyPros?.rank ?? null,
+          fantasyProsRange: expertSignal?.fantasyPros ? `#${expertSignal.fantasyPros.rank} (${expertSignal.fantasyPros.rankLow}-${expertSignal.fantasyPros.rankHigh})` : null,
+        },
+        opportunityCase: coverage.actionable ? opportunityCase : `Research candidate only. ${opportunityCase}`,
+        primaryRisk: coverage.actionable ? `${primaryRisk}${claim.warnings.length ? ` Valuation caveats: ${claim.warnings.join("; ")}.` : ""}` : `Decision gate: ${coverage.reasons.slice(0, 3).join("; ")}. Review Player coverage in League Sync before acting.`,
         summary:
-          verdict === "priority"
+          !coverage.actionable ? `${addPlayer.player.fullName}: watch only; required player evidence is incomplete. No bid or cut is approved.` : verdict === "priority"
             ? verifiedRoleBreakout
               ? `${addPlayer.player.fullName} is the cleanest immediate add after earning ${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of snaps; cut ${dropPlayer?.player.fullName ?? "a fringe roster spot"}.`
               : `${addPlayer.player.fullName} is the cleanest immediate add if you can cut ${dropPlayer?.player.fullName ?? "a fringe roster spot"}.`
@@ -995,6 +1100,9 @@ export function buildWaiverRecommendationSnapshots(
                 ? `${addPlayer.player.fullName} is not a mandatory click yet, but the usage trend is strong enough to keep live.`
                 : `${addPlayer.player.fullName} does not beat your current bench math enough to force a move right now.`,
         rationale: [
+          ...claim.warnings,
+          ...(expertSignal?.rotoballer ? [`RotoBaller baseline: ${expertSignal.rotoballer.standard} standard; ${expertSignal.rotoballer.aggressive} aggressive.`] : []),
+          ...(expertSignal?.fantasyPros ? [`FantasyPros Week 2 PPR consensus: #${expertSignal.fantasyPros.rank} (expert range ${expertSignal.fantasyPros.rankLow}-${expertSignal.fantasyPros.rankHigh}).`] : []),
           ...(verifiedRoleBreakout ? [`Verified role breakout: ${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of offensive snaps.`] : []),
           `Trend-adjusted starter delta: ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)}.`,
           `Weekly median delta versus ${dropPlayer?.player.fullName ?? "best drop"}: ${weeklyDelta >= 0 ? "+" : ""}${weeklyDelta.toFixed(1)}.`,
@@ -1002,7 +1110,7 @@ export function buildWaiverRecommendationSnapshots(
         ],
         proposedTransaction: {
           kind: "add-drop",
-          add: [
+          add: coverage.actionable ? [
             {
               playerId: addPlayer.player.id,
               yahooPlayerId: addPlayer.player.externalIds.yahoo,
@@ -1010,9 +1118,9 @@ export function buildWaiverRecommendationSnapshots(
               team: addPlayer.player.team,
               positions: addPlayer.player.positions,
             },
-          ],
+          ] : [],
           drop:
-            dropPlayer === null
+            !coverage.actionable || dropPlayer === null
               ? []
               : [
                   {
@@ -1031,9 +1139,10 @@ export function buildWaiverRecommendationSnapshots(
       (a, b) =>
         (b.verdict === "priority" ? 3 : b.verdict === "bid" ? 2 : b.verdict === "watch" ? 1 : 0) -
           (a.verdict === "priority" ? 3 : a.verdict === "bid" ? 2 : a.verdict === "watch" ? 1 : 0) ||
-        b.starterDelta - a.starterDelta,
+        b.starterDelta - a.starterDelta ||
+        b.edgeScore - a.edgeScore,
     )
-    .slice(0, 4);
+    .slice(0, 16);
 }
 
 export function buildTransactionQueue(
@@ -1041,7 +1150,7 @@ export function buildTransactionQueue(
   tradeIdeas: TradeIdeaSnapshot[],
 ): TransactionQueueEntry[] {
   const waiverEntries = waiverRecommendations
-    .filter((idea) => idea.verdict !== "pass")
+    .filter((idea) => (idea.verdict === "priority" || idea.verdict === "bid") && idea.coverage?.actionable === true)
     .map((idea) => ({
       id: `waiver-${idea.addPlayerId}-${idea.dropPlayerId ?? "none"}`,
       kind: "waiver",
@@ -1060,7 +1169,7 @@ export function buildTransactionQueue(
       faabRange: idea.faabRange,
     } satisfies TransactionQueueEntry));
   const tradeEntries = tradeIdeas
-    .filter((idea) => idea.verdict !== "pass")
+    .filter((idea) => idea.verdict !== "pass" && idea.coverage?.actionable === true)
     .map((idea) => ({
       id: `trade-${idea.givePlayerIds.join("-")}-${idea.targetPlayerIds.join("-")}`,
       kind: "trade",
@@ -1084,21 +1193,26 @@ export function buildTransactionQueue(
 export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset {
   const rosterSnapshot = buildPdfRosterInSeasonSnapshot();
   const completedEvidence = applyCompletedGameEvidence(rosterSnapshot.players);
-  const opportunityTrends = buildOpportunityTrendSnapshots(completedEvidence.players);
+  const players = applyCurrentSeasonProjectionUpdates(completedEvidence.players, {
+    week: completedGameEvidenceMeta.week,
+    capturedAt: completedGameEvidenceMeta.capturedAt,
+    observationWeight: completedGameEvidenceMeta.evidenceWeight,
+  });
+  const opportunityTrends = buildOpportunityTrendSnapshots(players);
   const tradeIdeas = buildTradeIdeaSnapshots(
-    completedEvidence.players,
+    players,
     rosterSnapshot.myTeam,
     rosterSnapshot.teams,
   );
   const waiverRecommendations = buildWaiverRecommendationSnapshots(
-    completedEvidence.players,
+    players,
     rosterSnapshot.myTeam,
   );
   const teamNamesById = new Map(rosterSnapshot.teams.map((team) => [team.teamId, team.name] as const));
-  const advancedMetricSignals = buildAdvancedMetricSignals(completedEvidence.players, teamNamesById);
+  const advancedMetricSignals = buildAdvancedMetricSignals(players, teamNamesById);
 
   return {
-    players: completedEvidence.players,
+    players,
     myTeam: rosterSnapshot.myTeam,
     leagueTeams: rosterSnapshot.teams,
     opportunityTrends,
@@ -1122,6 +1236,11 @@ export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset 
       ...environment,
       quarterbacks: environment.quarterbacks.map((quarterback) => ({ ...quarterback })),
     })),
+    rosterSnapshot: {
+      source: inSeasonRosterSnapshotMeta.source,
+      capturedAt: inSeasonRosterSnapshotMeta.capturedAt,
+      persistence: "device-local",
+    },
     scenarioNotes: [
       `League ownership comes from the ${inSeasonRosterSnapshotMeta.source} captured ${inSeasonRosterSnapshotMeta.capturedAt}.`,
       `${rosterSnapshot.unmatchedRosterPlayers.length} roster entries could not be matched to the current modeled player board.`,
