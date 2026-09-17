@@ -94,6 +94,10 @@ export async function extractYahooRosterPdfLines(file: File): Promise<YahooPdfTe
 function normalize(value: string) {
   return value
     .toLowerCase()
+    // Chrome's printed Yahoo PDF can split an ff ligature into three text
+    // items (for example, "McCa ff rey" or "Sta ff ord"). Repair only that
+    // observed glyph boundary before normal name normalization.
+    .replace(/([a-z])\s+ff\s+([a-z])/g, "$1ff$2")
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
@@ -159,11 +163,12 @@ export function parseYahooRosterPdfLines(
       const team = knownTeams.find((entry) => containsNormalized(normalizedLine, entry.normalized));
       return team ? [team.teamId] : [];
     }));
-    if (exactIds.size === 1) {
-      inferredTeamByBlock.set(key, [...exactIds][0]);
-      continue;
-    }
-    if (exactIds.size > 1) continue;
+    // A Yahoo page-column often begins with a roster continued from the
+    // previous page and ends with the next team's header. Known headers must
+    // therefore be handled in reading order below, never assigned to the
+    // entire page-column. Ownership-majority inference is only for a block
+    // with no recognizable team header at all.
+    if (exactIds.size > 0) continue;
     const ownerCounts = new Map<string, number>();
     let matchedRows = 0;
     for (const line of blockLines.filter((entry) => hasRosterSlot(entry.text))) {

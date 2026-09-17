@@ -1119,4 +1119,5 @@ If checks cannot be run, say so clearly.
   - preserved team aliases and manager preferences when applying a new Yahoo inventory
   - added fail-closed reconciliation for future team renames only when one existing owner has a strong majority of recognized players in that PDF block; ambiguous blocks still cannot be applied
   - moved the PDF picker to the top of League Sync so the primary upload path is immediately reachable on mobile instead of sitting below the full coverage report
-  - a real failing Yahoo PDF is still required to validate and repair any remaining extraction/layout differences beyond the synthetic fixture
+  - validated against the real Sep. 16 Yahoo Chrome print export: fixed continued rosters being assigned to the next team header at the bottom of a page-column and repaired Chrome-split `ff` ligatures in names such as McCaffrey, Stafford, and Jefferson
+  - the real export now previews 10/10 teams, 165 players, zero unmatched/ambiguous rows, plausible 16-17 player rosters, and 27 explicit changes versus the older saved snapshot; apply/recompute removed newly rostered Kaelon Black from waivers and persisted the new snapshot after reload

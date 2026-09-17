@@ -5456,6 +5456,30 @@ test("Yahoo roster PDF import matches every team and fails closed before applyin
   const previousNamePreview = parseYahooRosterPdfLines(previousNameLines, snapshot.players, snapshot.teams);
   assert.equal(previousNamePreview.ready, true, "the prior Yahoo team name remains a safe import alias");
   assert.equal(previousNamePreview.teams.find((team) => team.teamId === "dakked-raw")?.teamName, "Nabers think I did 9🏈11");
+  const continuedLines: YahooPdfTextLine[] = snapshot.teams.flatMap((team, index) => {
+    const column = index % 2 === 0 ? "left" as const : "right" as const;
+    const columnIndex = Math.floor(index / 2);
+    return [
+      { page: columnIndex === 0 ? 1 : columnIndex, column, y: columnIndex === 0 ? 760 : 20, text: team.name },
+      ...team.playerIds.map((playerId, playerIndex) => ({
+        page: columnIndex + 1,
+        column,
+        y: 700 - playerIndex * 20,
+        text: `BN ${playersById.get(playerId)!.player.fullName}`,
+      })),
+    ];
+  });
+  const chromePrintLines = continuedLines.map((line) => ({
+    ...line,
+    text: line.text
+      .replace("Christian McCaffrey", "Christian McCa ff rey")
+      .replace("Matthew Stafford", "Matthew Sta ff ord")
+      .replace("Justin Jefferson", "Justin Je ff erson"),
+  }));
+  const chromePrintPreview = parseYahooRosterPdfLines(chromePrintLines, snapshot.players, snapshot.teams);
+  assert.equal(chromePrintPreview.ready, true, "continued page columns and Chrome-split ff ligatures import safely");
+  assert.equal(chromePrintPreview.matchedPlayers, snapshot.teams.reduce((total, team) => total + team.playerIds.length, 0));
+  assert.equal(chromePrintPreview.ownershipChanges.length, 0);
   const futureRenameLines = lines.map((line) => line.text === "Nabers think I did 9🏈11" ? { ...line, text: "A Brand New Team Name" } : line);
   const futureRenamePreview = parseYahooRosterPdfLines(futureRenameLines, snapshot.players, snapshot.teams);
   assert.equal(futureRenamePreview.ready, true, "a strong prior-ownership majority can safely reconcile a future rename");
