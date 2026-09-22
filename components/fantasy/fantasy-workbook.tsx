@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { InSeasonCommandCenterDataset, TransactionQueueEntry } from "@/lib/fantasy/types";
-import { DataSyncSheet, DraftArchiveSheet, LeagueSheet, TradesSheet, WaiversSheet } from "./fantasy-workbook-sheets";
+import { applyWorkbookEvidenceResponse, DataSyncSheet, DraftArchiveSheet, NextGenStatsSheet, TradesSheet, WaiversSheet } from "./fantasy-workbook-sheets";
 import styles from "./fantasy-workbook.module.css";
 
 type WorkbookMode = "work" | "fantasy";
@@ -24,7 +24,7 @@ const FANTASY_SHEETS: Array<{ id: FantasySheet; label: string }> = [
   { id: "edge", label: "Edge Brief" },
   { id: "waivers", label: "Waivers" },
   { id: "trades", label: "Trade Lab" },
-  { id: "league", label: "League Map" },
+  { id: "league", label: "Next Gen Stats" },
   { id: "sync", label: "Data Sync" },
   { id: "draft", label: "Draft Archive" },
 ];
@@ -103,6 +103,20 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
     return () => window.removeEventListener("keydown", activateWorkMode);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/fantasy/evidence", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok || !Array.isArray(body.players)) throw new Error(body.error ?? "Refresh failed");
+        if (!cancelled) setDataset((current) => applyWorkbookEvidenceResponse(current, body));
+      })
+      .catch(() => {
+        // Retain the verified bundled snapshot when live evidence is unavailable.
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const selectedAction = useMemo(
     () => dataset.actionQueue.find((entry) => entry.id === selectedActionId) ?? null,
     [dataset.actionQueue, selectedActionId],
@@ -167,7 +181,7 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
                   const confidence = waiver?.confidence ?? trade?.verdict ?? "review";
                   const countermove = action.proposedTransaction.kind === "add-drop" ? playerName(action.proposedTransaction.drop[0]?.playerId ?? null, dataset) : trade?.counterpartyTeamName ?? "League manager";
                   const isSelected = action.id === selectedActionId;
-                  return <tr key={action.id} className={`${styles.dataRow} ${isSelected ? styles.selectedRow : ""}`} onClick={() => setSelectedActionId(action.id)}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{action.priority.replace("-", " ")}</td><td className={styles.primaryCell}>{action.title}</td><td>{countermove}</td><td className={`${styles.numberCell} ${edge >= 0 ? styles.positiveCell : styles.negativeCell}`}>{signed(edge)}</td><td className={confidence === "high" || confidence === "pursue" ? styles.positiveCell : styles.warningCell}>{confidence}</td><td className={`${styles.actionCell} ${isSelected ? styles.selectedCell : ""}`}>Review</td></tr>;
+                  return <tr key={action.id} className={`${styles.dataRow} ${isSelected ? styles.selectedRow : ""}`} onClick={() => setSelectedActionId(action.id)}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{action.priority.replace("-", " ")}</td><td>{action.kind === "waiver" ? "Add / drop" : "Trade proposal"}</td><td className={styles.primaryCell}>{transactionLabel(action)}</td><td>{countermove}</td><td className={`${styles.numberCell} ${edge >= 0 ? styles.positiveCell : styles.negativeCell}`}>{signed(edge)}</td><td className={confidence === "high" || confidence === "pursue" ? styles.positiveCell : styles.warningCell}>{confidence}</td><td className={`${styles.actionCell} ${isSelected ? styles.selectedCell : ""}`}>Review</td></tr>;
                 })}</tbody>
               </table>
             </div>
@@ -175,7 +189,7 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
           </div>
         ) : fantasySheet === "waivers" ? <WaiversSheet dataset={dataset} />
           : fantasySheet === "trades" ? <TradesSheet dataset={dataset} />
-            : fantasySheet === "league" ? <LeagueSheet dataset={dataset} />
+            : fantasySheet === "league" ? <NextGenStatsSheet dataset={dataset} />
               : fantasySheet === "sync" ? <DataSyncSheet dataset={dataset} onDatasetChange={setDataset} />
                 : fantasySheet === "draft" ? <DraftArchiveSheet />
                   : <div className={styles.emptySheet}><div><strong>{activeSheetLabel}</strong></div></div>}

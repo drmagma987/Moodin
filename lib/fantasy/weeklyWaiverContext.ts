@@ -1,6 +1,7 @@
 export type WeeklyWaiverExpertSignal = {
   playerName: string;
   position: "QB" | "RB" | "WR" | "TE";
+  sourceCount?: 1 | 2;
   rotoballer?: {
     standard: string;
     aggressive: string;
@@ -17,84 +18,65 @@ export type WeeklyWaiverExpertSignal = {
 
 export const weeklyWaiverContext = {
   season: 2026,
-  week: 2,
-  checkedAt: "2026-09-16T10:30:00-04:00",
+  week: 3,
+  checkedAt: "2026-09-21T11:30:00-04:00",
   sources: {
     rotoballer: {
-      label: "RotoBaller Week 2 FAAB",
-      url: "https://www.rotoballer.com/faab-waiver-wire-advice-week-2-fantasy-pickups-2026/1931602",
-      publishedAt: "2026-09-15",
+      label: "PFF Week 3 waiver targets",
+      url: "https://www.pff.com/news/fantasy-football-waiver-wire-targets-2026",
+      publishedAt: "2026-09-21",
     },
     fantasyPros: {
-      label: "FantasyPros PPR waiver consensus",
-      url: "https://www.fantasypros.com/nfl/rankings/waiver-wire-ppr-overall.php",
-      updatedAt: "2026-09-16",
+      label: "FantasyPros Week 3 waiver advice",
+      url: "https://www.fantasypros.com/2026/09/fantasy-football-waiver-wire-advice-players-to-add-stash-drop-week-3-2026/",
+      updatedAt: "2026-09-21",
     },
   },
   signals: [
     {
-      playerName: "Kaelon Black", position: "RB",
-      rotoballer: { standard: "6-10%", aggressive: "10-14%", desperation: "14-20%" },
-      fantasyPros: { rank: 3, rankLow: 4, rankHigh: 19 },
-      opportunity: "Fourteen carries and a 43% snap share created possible standalone flex value plus premium handcuff upside.",
-      primaryRisk: "Christian McCaffrey's managed Australia workload may have made the split look more durable than it is.",
+      playerName: "Jonah Coleman", position: "RB", sourceCount: 2,
+      opportunity: "Ten carries, three targets, a touchdown, and the stronger post-injury snap role put Coleman at the front of Denver's uncertain backfield for Week 3.",
+      primaryRisk: "J.K. Dobbins and RJ Harvey can both compress the role if their hamstring injuries clear quickly.",
     },
     {
-      playerName: "Devaughn Vele", position: "WR",
-      rotoballer: { standard: "7-10%", aggressive: "10-15%", desperation: "15-20%" },
-      fantasyPros: { rank: 10, rankLow: 1, rankHigh: 27 },
-      opportunity: "An every-down role and nine targets while Jordyn Tyson is out create immediate PPR usability.",
-      primaryRisk: "New Orleans' 90-play overtime game is not a repeatable volume baseline.",
+      playerName: "Denzel Boston", position: "WR", sourceCount: 2,
+      opportunity: "Boston stayed in Cleveland's lead-receiver role and converted the Week 2 volume into a breakout fantasy result.",
+      primaryRisk: "Cleveland's passing environment can still make a rookie WR1 volatile even when the route share is secure.",
     },
     {
-      playerName: "Tyler Shough", position: "QB",
-      rotoballer: { standard: "1%", aggressive: "2-4%" },
-      fantasyPros: { rank: 4, rankLow: 5, rankHigh: 12 },
-      opportunity: "Aggressive downfield volume and a friendly Week 3-4 home runway make him a useful early stash.",
-      primaryRisk: "The 56-attempt overtime comeback inflated Week 1, and Baltimore is a difficult immediate matchup.",
+      playerName: "Tyler Shough", position: "QB", sourceCount: 2,
+      opportunity: "Back-to-back 22-plus point games, high passing volume, and three upcoming home dates make Shough a legitimate streaming option.",
+      primaryRisk: "Quarterback is replaceable in a one-QB league, so he should not outrank a scarce RB or WR role.",
     },
     {
-      playerName: "Michael Mayer", position: "TE",
-      rotoballer: { standard: "3-4%", aggressive: "4-5%", desperation: "5-8%" },
-      fantasyPros: { rank: 13, rankLow: 7, rankHigh: 30 },
-      opportunity: "Seven targets and a team-leading receiving role make him a short-term tight-end answer.",
-      primaryRisk: "Brock Bowers' return could erase the temporary route and target ceiling quickly.",
+      playerName: "Adonai Mitchell", position: "WR", sourceCount: 1,
+      opportunity: "A team-high 12 targets in Week 2 followed a productive opener and strengthens his claim as the Jets' No. 2 receiver.",
+      primaryRisk: "The role sits behind Garrett Wilson and remains attached to a passing offense with a modest weekly ceiling.",
     },
     {
-      playerName: "Caleb Douglas", position: "WR",
-      rotoballer: { standard: "7-10%", aggressive: "10-15%", desperation: "15-20%" },
-      opportunity: "Seven targets, 94 yards, and downfield usage give him the cleanest claim to Miami's emerging WR pecking order.",
-      primaryRisk: "Miami's pass volume and quarterback efficiency may not support consistent weekly production.",
+      playerName: "Dalton Schultz", position: "TE", sourceCount: 2,
+      opportunity: "Two weeks of usable involvement have returned Schultz to the streaming tier at a position with few bankable routes.",
+      primaryRisk: "Houston's target tree can rotate behind its lead wideouts, leaving a touchdown-sensitive ceiling.",
     },
     {
-      playerName: "Dontayvion Wicks", position: "WR",
-      rotoballer: { standard: "6-8%", aggressive: "8-12%", desperation: "12-16%" },
-      opportunity: "Near-full route participation and a large air-yards role offer spike-week upside in a strong offense.",
-      primaryRisk: "Only two catches means the Week 1 fantasy result was highly efficiency dependent.",
+      playerName: "Keon Coleman", position: "WR", sourceCount: 1,
+      opportunity: "Coleman's Week 2 involvement keeps him live as a high-leverage outside receiver in Buffalo's productive offense.",
+      primaryRisk: "The Bills can spread low-volume passing production across several targets from week to week.",
     },
     {
-      playerName: "Denzel Boston", position: "WR",
-      rotoballer: { standard: "2-4%", aggressive: "4-5%", desperation: "5-8%" },
-      opportunity: "A team-high 27 routes and 115 air yards are the sort of underlying workload that can precede a breakout.",
-      primaryRisk: "Most production came on one late touchdown inside a low-floor Cleveland passing environment.",
+      playerName: "Kaleb Johnson", position: "RB", sourceCount: 2,
+      opportunity: "Johnson earned more late work after MarShawn Lloyd's fumble and offers contingent value while Josh Jacobs is unavailable.",
+      primaryRisk: "A 3.2-point Week 2 and an unsettled Green Bay rotation make this a stash, not a proven starter.",
     },
     {
-      playerName: "Kendre Miller", position: "RB",
-      rotoballer: { standard: "2-3%", aggressive: "3-5%", desperation: "5-8%" },
-      opportunity: "Nine carries and a touchdown keep him live as a cheap contingent-backfield bet.",
-      primaryRisk: "Alvin Kamara's return can compress a role that already sits behind Travis Etienne.",
+      playerName: "Darren Waller", position: "TE", sourceCount: 1,
+      opportunity: "Five catches through two games and repeated red-zone usage, including two Week 2 scores, create immediate tight-end streaming appeal.",
+      primaryRisk: "The touchdown rate is unsustainable and the five total targets leave a thin floor.",
     },
     {
-      playerName: "Demarcus Robinson", position: "WR",
-      rotoballer: { standard: "1-2%", aggressive: "2-4%", desperation: "4-6%" },
-      opportunity: "An injury-created every-play role plus 2.38 YPRR and a 30% air-yards share makes him a model-backed dart throw.",
-      primaryRisk: "Three targets and one long touchdown leave a fragile floor once San Francisco's pass catchers get healthier.",
-    },
-    {
-      playerName: "Bryce Young", position: "QB",
-      rotoballer: { standard: "1%", aggressive: "2-4%" },
-      opportunity: "A four-touchdown opener and improving weapon set create streaming upside in Atlanta's dome.",
-      primaryRisk: "Previous spike games have not held, and the underlying opportunity model does not yet confirm a durable jump.",
+      playerName: "Bryce Young", position: "QB", sourceCount: 2,
+      opportunity: "Young followed his opener with another useful fantasy result and remains widely available as a matchup streamer.",
+      primaryRisk: "His history of uneven efficiency makes him a weekly matchup play rather than a set-and-forget starter.",
     },
   ] satisfies WeeklyWaiverExpertSignal[],
 } as const;
@@ -114,5 +96,5 @@ export function weeklyWaiverContextStatus(now = Date.now()) {
 
 export function getWeeklyWaiverExpertSignal(playerName: string, now = Date.now()) {
   if (!weeklyWaiverContextStatus(now).current) return undefined;
-  return weeklyWaiverContext.signals.find((signal) => signal.playerName === playerName);
+  return weeklyWaiverContext.signals.find((signal) => signal.playerName === playerName) as WeeklyWaiverExpertSignal | undefined;
 }

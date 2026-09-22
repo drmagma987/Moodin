@@ -1,5 +1,5 @@
 import type { InSeasonPlayerSnapshot, InSeasonTeamSnapshot, PlayerRange } from "@/lib/fantasy/types";
-import { completedGameEvidenceMeta } from "@/lib/fantasy/completedGameEvidence";
+import { activeWeeklySlate } from "@/lib/fantasy/activeWeeklySlate";
 
 export type CoverageGrade = "complete" | "baseline-only" | "partial" | "blocked" | "not-required";
 export type CoverageOptions = { candidatePlayerIds?: readonly string[] };
@@ -17,7 +17,7 @@ export function playerCoverageScope(player: InSeasonPlayerSnapshot, now = Date.n
   const targets = evidence?.observedTargets;
   const carries = evidence?.observedCarries;
   // Use actual game opportunities, never modeled/blended touches, for discovery.
-  if (evidence?.week === completedGameEvidenceMeta.week && evidence.boxScore && evidence.source.trim() && age >= -86_400_000 && age <= 14 * 86_400_000 && evidence.participation === "played"
+  if (evidence?.week === activeWeeklySlate.week && evidence.boxScore && evidence.source.trim() && age >= -86_400_000 && age <= 14 * 86_400_000 && evidence.participation === "played"
     && ((Number.isFinite(targets) && targets! >= 4 && targets! >= player.baselineUsage.targetsPerGame + 2)
       || (Number.isFinite(carries) && carries! >= 8 && carries! >= player.baselineUsage.carriesPerGame + 4))) reasons.push("Observed opportunity increase");
   return { scope: reasons.length ? "priority" as const : "monitor" as const, reasons };
@@ -53,7 +53,7 @@ export function assessPlayerCoverage(player: InSeasonPlayerSnapshot, now = Date.
   const notes: string[] = [];
   const advanced = player.advancedUsage;
   const evidence = player.evidence;
-  const participationCurrent = evidence?.week === completedGameEvidenceMeta.week && Boolean(evidence.source.trim()) && Number.isFinite(Date.parse(evidence.capturedAt)) && now - Date.parse(evidence.capturedAt) <= 14 * 86_400_000 && now - Date.parse(evidence.capturedAt) >= -86_400_000;
+  const participationCurrent = evidence?.week === activeWeeklySlate.week && Boolean(evidence.source.trim()) && Number.isFinite(Date.parse(evidence.capturedAt)) && now - Date.parse(evidence.capturedAt) <= 14 * 86_400_000 && now - Date.parse(evidence.capturedAt) >= -86_400_000;
   const noOpportunity = participationCurrent && (evidence?.participation === "inactive" || evidence?.participation === "zero-snaps" || evidence?.participation === "bye") || player.injuryStatus === "IR";
   if (!player.player.id || !player.player.fullName || !player.player.team) invalid.push("Missing player identity or NFL team");
   if (!["QB", "RB", "WR", "TE", "K"].includes(position)) invalid.push("Unsupported position");
@@ -79,12 +79,12 @@ export function assessPlayerCoverage(player: InSeasonPlayerSnapshot, now = Date.
   if (!player.injuryStatus || /unknown|^(NA|N\/A)$/i.test(player.injuryStatus)) missing.push("Explicit health status");
   if (player.injuryStatus === "IR" && !player.projectedReturnDate) missing.push("Injured player's return estimate");
   const age = evidence ? now - Date.parse(evidence.capturedAt) : NaN;
-  const current = Boolean(evidence && evidence.week === completedGameEvidenceMeta.week && evidence.source.trim()
+  const current = Boolean(evidence && evidence.week === activeWeeklySlate.week && evidence.source.trim()
     && finite(age) && age >= -86_400_000 && age <= 14 * 86_400_000);
   if (!current && !noOpportunity) missing.push("Current-week sourced evidence (at most 14 days old)");
   if (!evidence?.boxScore && !noOpportunity) missing.push("Verified box score");
   if (position !== "QB" && !evidence?.snaps && !noOpportunity) missing.push("Verified snap usage");
-  const advancedCurrent = advanced?.week === completedGameEvidenceMeta.week && (advanced?.games ?? 0) > 0 && Boolean(advanced?.sources.length);
+  const advancedCurrent = advanced?.week === activeWeeklySlate.week && (advanced?.games ?? 0) > 0 && Boolean(advanced?.sources.length);
   if (!noOpportunity && (position === "WR" || position === "TE" || position === "RB")) {
     if (!advancedCurrent || !evidence?.routes || advanced?.statuses.routes !== "verified" || !finite(advanced.routes) || advanced.routes <= 0) missing.push("Verified routes with a nonzero denominator");
     if (!finite(advanced?.targetsPerRouteRun) || !finite(advanced?.yardsPerRouteRun)) missing.push("TPRR and YPRR");
@@ -131,7 +131,7 @@ export function assessDecisionReadiness(player: InSeasonPlayerSnapshot, purpose:
   const warnings = [...report.notes];
   const evidence = player.evidence;
   const advanced = player.advancedUsage;
-  const current = evidence?.week === completedGameEvidenceMeta.week && Boolean(evidence.source.trim())
+  const current = evidence?.week === activeWeeklySlate.week && Boolean(evidence.source.trim())
     && Number.isFinite(Date.parse(evidence.capturedAt)) && now - Date.parse(evidence.capturedAt) <= 14 * 86_400_000
     && now - Date.parse(evidence.capturedAt) >= -86_400_000;
   if (player.player.positions[0] === "K") return { actionable: !reasons.length, reasons, warnings };

@@ -23,9 +23,10 @@ import {
   completedGameTeamEnvironments,
 } from "@/lib/fantasy/completedGameEvidence";
 import { buildAdvancedMetricSignals } from "@/lib/fantasy/inSeasonAdvancedMetrics";
-import { getWeeklyWaiverExpertSignal } from "@/lib/fantasy/weeklyWaiverContext";
+import { getWeeklyWaiverExpertSignal, weeklyWaiverContext } from "@/lib/fantasy/weeklyWaiverContext";
 import { assessDecisionReadiness, buildPlayerCoverageReport, coverageForDecision, createDecisionGate } from "@/lib/fantasy/playerCoverage";
 import { applyCurrentSeasonProjectionUpdates } from "@/lib/fantasy/currentSeasonProjections";
+import { activeWeeklySlate } from "@/lib/fantasy/activeWeeklySlate";
 
 const protectedFoundationNames = new Set<string>(
   leagueSourceOfTruth.keepers.myDeclaredPlayers,
@@ -969,14 +970,15 @@ export function buildWaiverRecommendationSnapshots(
     .map((addPlayer) => {
       const addTrend = trendsByPlayerId.get(addPlayer.player.id);
       const expertSignal = getWeeklyWaiverExpertSignal(addPlayer.player.fullName);
-      const expertSourceCount = Number(Boolean(expertSignal?.rotoballer)) + Number(Boolean(expertSignal?.fantasyPros));
+      const expertSourceCount = expertSignal?.sourceCount ?? Number(Boolean(expertSignal?.rotoballer)) + Number(Boolean(expertSignal?.fantasyPros));
+      const observationWeight = addPlayer.projectionUpdate?.observationWeight ?? completedGameEvidenceMeta.evidenceWeight;
       const observedCarries = addPlayer.recentUsage.games > 0
-        ? (addPlayer.recentUsage.carriesPerGame - addPlayer.baselineUsage.carriesPerGame * (1 - completedGameEvidenceMeta.evidenceWeight)) /
-          completedGameEvidenceMeta.evidenceWeight
+        ? (addPlayer.recentUsage.carriesPerGame - addPlayer.baselineUsage.carriesPerGame * (1 - observationWeight)) /
+          observationWeight
         : 0;
       const observedSnapShare = addPlayer.recentUsage.games > 0
-        ? (addPlayer.recentUsage.snapShare - addPlayer.baselineUsage.snapShare * (1 - completedGameEvidenceMeta.evidenceWeight)) /
-          completedGameEvidenceMeta.evidenceWeight
+        ? (addPlayer.recentUsage.snapShare - addPlayer.baselineUsage.snapShare * (1 - observationWeight)) /
+          observationWeight
         : 0;
       const verifiedRoleBreakout = primaryPosition(addPlayer) === "RB" &&
         addPlayer.advancedUsage?.statuses.routes === "verified" &&
@@ -1118,7 +1120,7 @@ export function buildWaiverRecommendationSnapshots(
         rationale: [
           ...claim.warnings,
           ...(expertSignal?.rotoballer ? [`RotoBaller baseline: ${expertSignal.rotoballer.standard} standard; ${expertSignal.rotoballer.aggressive} aggressive.`] : []),
-          ...(expertSignal?.fantasyPros ? [`FantasyPros Week 2 PPR consensus: #${expertSignal.fantasyPros.rank} (expert range ${expertSignal.fantasyPros.rankLow}-${expertSignal.fantasyPros.rankHigh}).`] : []),
+          ...(expertSignal?.fantasyPros ? [`FantasyPros Week ${weeklyWaiverContext.week} PPR consensus: #${expertSignal.fantasyPros.rank} (expert range ${expertSignal.fantasyPros.rankLow}-${expertSignal.fantasyPros.rankHigh}).`] : []),
           ...(verifiedRoleBreakout ? [`Verified role breakout: ${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of offensive snaps.`] : []),
           `Trend-adjusted starter delta: ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)}.`,
           `Weekly median delta versus ${dropPlayer?.player.fullName ?? "best drop"}: ${weeklyDelta >= 0 ? "+" : ""}${weeklyDelta.toFixed(1)}.`,
@@ -1237,14 +1239,14 @@ export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset 
     actionQueue: buildTransactionQueue(waiverRecommendations, tradeIdeas),
     tank01Status: getTank01ProviderStatus(),
     evidenceStatus: {
-      week: completedGameEvidenceMeta.week,
-      completedGames: completedGameEvidenceMeta.completedGames,
-      scheduledGames: completedGameEvidenceMeta.scheduledGames,
-      capturedAt: completedGameEvidenceMeta.capturedAt,
-      latestGame: completedGameEvidenceMeta.latestGame,
-      evidenceWeight: completedGameEvidenceMeta.evidenceWeight,
-      matchedPlayers: completedEvidence.matchedPlayers,
-      sources: completedGameEvidenceMeta.sources.map((source) => ({ ...source })),
+      week: activeWeeklySlate.week,
+      completedGames: activeWeeklySlate.completedGames,
+      scheduledGames: activeWeeklySlate.scheduledGames,
+      capturedAt: activeWeeklySlate.capturedAt,
+      latestGame: activeWeeklySlate.latestGame,
+      evidenceWeight: activeWeeklySlate.evidenceWeight,
+      matchedPlayers: 0,
+      sources: activeWeeklySlate.sources.map((source) => ({ ...source })),
     },
     completedGameReviews,
     advancedMetricSignals,
@@ -1260,8 +1262,8 @@ export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset 
     scenarioNotes: [
       `League ownership comes from the ${inSeasonRosterSnapshotMeta.source} captured ${inSeasonRosterSnapshotMeta.capturedAt}.`,
       `${rosterSnapshot.unmatchedRosterPlayers.length} roster entries could not be matched to the current modeled player board.`,
-      `Week 1 analysis is active after ${completedGameEvidenceMeta.latestGame}; ${completedEvidence.matchedPlayers} modeled players received verified game evidence. Box scores update carries, targets, target share, and scoring while snap and route feeds remain pending.`,
-      `Early Week 1 evidence is blended at ${Math.round(completedGameEvidenceMeta.evidenceWeight * 100)}% so role signals can surface without treating one-week observations as stable season-long rates.`,
+      `${activeWeeklySlate.latestGame}. The client refreshes finalized Week ${activeWeeklySlate.week} box scores and snaps without assigning zeros to pending MNF players.`,
+      `Week ${activeWeeklySlate.week} evidence is blended at ${Math.round(activeWeeklySlate.evidenceWeight * 100)}% so role signals can surface without treating an early-season observation as a stable rate.`,
       "Tank01 is treated as an experimental live-state provider seam, not a core dependency, until live value is proven.",
       "Trade ideas are evaluated by starter-range and playoff-upside impact, not generic name value.",
       "Waiver recommendations lean on trend-adjusted future value so quiet usage breakouts can outrank stale median projections before the market fully catches up.",

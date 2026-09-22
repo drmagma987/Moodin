@@ -783,6 +783,24 @@ export type InSeasonAdvancedUsageSnapshot = {
   forcedMissedTackleRate: number | null;
   cpoe: number | null;
   teamProe: number | null;
+  nextGenPassing?: {
+    attempts: number;
+    avgTimeToThrow: number | null;
+    avgCompletedAirYards: number | null;
+    avgIntendedAirYards: number | null;
+    aggressiveness: number | null;
+    completionPercentageAboveExpectation: number | null;
+    passerRating: number | null;
+  };
+  nextGenReceiving?: {
+    targets: number;
+    avgCushion: number | null;
+    avgSeparation: number | null;
+    avgIntendedAirYards: number | null;
+    intendedAirYardsShare: number | null;
+    catchPercentage: number | null;
+    avgYacAboveExpectation: number | null;
+  };
   statuses: {
     routes: AdvancedMetricStatus;
     airYards: AdvancedMetricStatus;

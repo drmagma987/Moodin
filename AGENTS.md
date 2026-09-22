@@ -1121,3 +1121,33 @@ If checks cannot be run, say so clearly.
   - moved the PDF picker to the top of League Sync so the primary upload path is immediately reachable on mobile instead of sitting below the full coverage report
   - validated against the real Sep. 16 Yahoo Chrome print export: fixed continued rosters being assigned to the next team header at the bottom of a page-column and repaired Chrome-split `ff` ligatures in names such as McCaffrey, Stafford, and Jefferson
   - the real export now previews 10/10 teams, 165 players, zero unmatched/ambiguous rows, plausible 16-17 player rosters, and 27 explicit changes versus the older saved snapshot; apply/recompute removed newly rostered Kaelon Black from waivers and persisted the new snapshot after reload
+
+### 2026-09-21
+
+- Advanced the Fantasy Football Supertool to the partial Week 2 close:
+  - current evidence covers 15 of 16 finalized games while Giants-Rams remains explicitly pending for MNF
+  - Week 2 box scores, snaps, and rushing efficiency pass through the live nflverse refresh without assigning pending-game players zero production
+  - fantasy-point observations now use the league's actual six-point passing-touchdown, yardage-bonus, PPR, turnover, return, and kicker scoring
+  - evidence and transaction gates now require Week 2 observations instead of incorrectly treating refreshed Week 2 rows as stale
+  - waiver context advanced to Week 3 with current PFF and FantasyPros targets
+  - stale Week 1 editorial cards are withheld until the full Week 2 slate closes
+- Verified the real partial-week feed against 1,044 Week 2 stat rows and 1,409 snap rows: 322 modeled players matched and no Giants/Rams player received Week 2 evidence.
+- Verified with `npm run fantasy:test` (161 passing), `npm run lint` (existing bachelor-party font warning only), and `npx tsc --noEmit`.
+
+### 2026-09-22
+
+- Rebuilt the in-season Fantasy Football Supertool as a workbook-native interface:
+  - added Excel-style title, ribbon, formula, grid, sheet-tab, inspector, and status-bar presentation
+  - converted Edge Brief, waivers, trade analysis, league inventory, data sync, and Draft Archive access into compact worksheets backed by the existing decision models
+  - added a real `Work / FF` privacy mode; Work mode is the safe default, `Esc` switches to it immediately, fantasy worksheet content is not rendered while it is active, and returning to FF preserves the active analysis state
+  - added deterministic busy-work variations across Summary, Forecast, Capacity, Variance, and Notes sheets plus neutral route metadata
+  - added `/ops-model` as a neutral entry route while retaining `/fantasy-football?ui=classic` as a rollout fallback
+  - preserved current Yahoo bridge, validated roster-PDF, weekly evidence refresh, trade analyzer, and canonical league integrity behavior
+  - verified canonical league integrity and all 161 fantasy model tests; TypeScript and lint passed apart from the existing bachelor-party font warning
+- Closed the Week 2 evidence cycle and refined the workbook:
+  - advanced the active slate to all 16 games final and verified Giants–Rams player evidence in the public weekly feed
+  - expanded live Next Gen Stats ingestion to exact-week passing, receiving, and rushing feeds with volume reconciliation before any player row is accepted
+  - replaced League Map with a sortable Next Gen Stats worksheet spanning RYOE, separation, YAC over expected, CPOE, time to throw, and intended air yards
+  - made the workbook auto-refresh verified weekly evidence on load, fixed Edge Brief names so Yahoo IDs never appear as the visible decision, and pinned the worksheet/status selector to the bottom of the viewport
+  - live validation matched 348 modeled Week 2 players and 119 exact-week NGS rows (30 passing, 64 receiving, 25 rushing)
+  - verified with 162 fantasy model tests, TypeScript, lint, and the production build

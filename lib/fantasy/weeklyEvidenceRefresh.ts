@@ -1,8 +1,8 @@
 import { parseCsv } from "@/lib/fantasy/csv";
 import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
-import { completedGameEvidenceMeta } from "@/lib/fantasy/completedGameEvidence";
+import { activeWeeklySlate } from "@/lib/fantasy/activeWeeklySlate";
 import type { InSeasonPlayerSnapshot } from "@/lib/fantasy/types";
-import { buildNgsRushingMetricsFromCsv } from "@/lib/fantasy/inSeasonAdvancedMetrics";
+import { buildNgsPassingMetricsFromCsv, buildNgsReceivingMetricsFromCsv, buildNgsRushingMetricsFromCsv } from "@/lib/fantasy/inSeasonAdvancedMetrics";
 
 export type WeeklyEvidenceBundle = {
   season: number;
@@ -11,6 +11,8 @@ export type WeeklyEvidenceBundle = {
   statsCsv?: string;
   snapsCsv?: string;
   ngsRushingCsv?: string;
+  ngsPassingCsv?: string;
+  ngsReceivingCsv?: string;
   metadata?: Record<string, { full_name?: string; first_name?: string; last_name?: string; team?: string; position?: string; depth_chart_order?: number | null; injury_status?: string | null }>;
   sources: Array<{ label: string; url: string; status: "loaded" | "unavailable"; detail: string }>;
 };
@@ -22,13 +24,54 @@ const normalizeTeam = (team: string) => ({ JAC: "JAX", LA: "LAR", WSH: "WAS", OA
 const normalizePosition = (position?: string) => ["FB", "HB"].includes(position?.toUpperCase() ?? "") ? "RB" : position?.toUpperCase();
 const key = (name: string, team: string) => `${normalize(name)}:${normalizeTeam(team)}`;
 
+function calculateLeagueFantasyPoints(row: Record<string, string>) {
+  const value = (field: string) => number(row[field]) ?? 0;
+  const scoring = leagueSourceOfTruth.scoring;
+  const passingYards = value("passing_yards");
+  const rushingYards = value("rushing_yards");
+  const receivingYards = value("receiving_yards");
+  const hasScoringFields = [
+    "passing_yards", "rushing_yards", "receiving_yards", "receptions",
+    "passing_tds", "rushing_tds", "receiving_tds",
+  ].some((field) => row[field] !== undefined && row[field] !== "");
+  if (!hasScoringFields) return null;
+
+  const fieldGoalPoints =
+    value("fg_made_0_19") * scoring.kickerPoints.fieldGoals0to19 +
+    value("fg_made_20_29") * scoring.kickerPoints.fieldGoals20to29 +
+    value("fg_made_30_39") * scoring.kickerPoints.fieldGoals30to39 +
+    value("fg_made_40_49") * scoring.kickerPoints.fieldGoals40to49 +
+    (value("fg_made_50_59") + value("fg_made_60_")) * scoring.kickerPoints.fieldGoals50Plus;
+
+  return Number((
+    passingYards / scoring.passingYardsPerPoint +
+    value("passing_tds") * scoring.passingTouchdownPoints +
+    value("passing_interceptions") * scoring.interceptionPoints +
+    rushingYards / scoring.rushingYardsPerPoint +
+    value("rushing_tds") * scoring.rushingTouchdownPoints +
+    value("receptions") * scoring.receptionPoints +
+    receivingYards / scoring.receivingYardsPerPoint +
+    value("receiving_tds") * scoring.receivingTouchdownPoints +
+    value("fumbles_lost_total") * scoring.fumbleLostPoints +
+    (value("passing_2pt_conversions") + value("rushing_2pt_conversions") + value("receiving_2pt_conversions")) * scoring.twoPointConversionPoints +
+    value("special_teams_tds") * scoring.returnTouchdownPoints +
+    value("fumble_recovery_tds") * scoring.offensiveFumbleReturnTouchdownPoints +
+    (passingYards >= 300 ? scoring.passing300Bonus : 0) +
+    (rushingYards >= 100 ? scoring.rushing100Bonus : 0) +
+    (receivingYards >= 100 ? scoring.receiving100Bonus : 0) +
+    fieldGoalPoints +
+    value("pat_made") * scoring.kickerPoints.pointAfterMakes +
+    value("pat_missed") * scoring.kickerPoints.pointAfterMisses
+  ).toFixed(2));
+}
+
 export type EvidenceMatchStatus = "matched" | "source-unavailable" | "absent" | "ambiguous" | "position-mismatch" | "invalid-values";
 export type EvidenceMatchAudit = { playerId: string; name: string; stats: EvidenceMatchStatus; snaps: EvidenceMatchStatus; context: EvidenceMatchStatus };
 
 /** Join only unique identities in the requested season/week. An absent row is
  * unknown, never zero activity or an inferred injury. No ownership is changed. */
 export function applyWeeklyEvidenceBundle(players: InSeasonPlayerSnapshot[], bundle: WeeklyEvidenceBundle) {
-  if (bundle.season !== leagueSourceOfTruth.season || bundle.week !== completedGameEvidenceMeta.week) throw new Error("Evidence season/week does not match the active slate.");
+  if (bundle.season !== leagueSourceOfTruth.season || bundle.week !== activeWeeklySlate.week) throw new Error("Evidence season/week does not match the active slate.");
   if (!Number.isFinite(Date.parse(bundle.capturedAt)) || Date.now() - Date.parse(bundle.capturedAt) > 14 * 86_400_000 || Date.parse(bundle.capturedAt) - Date.now() > 86_400_000) throw new Error("Evidence timestamp is invalid or stale.");
   const rows = (csv?: string) => csv ? parseCsv(csv).filter((row) => Number(row.season) === bundle.season && Number(row.week) === bundle.week && (row.season_type ?? row.game_type) === "REG") : [];
   const index = (records: Record<string, string>[], nameField: string) => {
@@ -43,6 +86,8 @@ export function applyWeeklyEvidenceBundle(players: InSeasonPlayerSnapshot[], bun
   const snaps = index(rows(bundle.snapsCsv), "player");
   const metadata = new Map<string, NonNullable<WeeklyEvidenceBundle["metadata"]>[string] | null>();
   const ngsRushing = bundle.ngsRushingCsv ? buildNgsRushingMetricsFromCsv(bundle.ngsRushingCsv, bundle.season, bundle.week) : new Map();
+  const ngsPassing = bundle.ngsPassingCsv ? buildNgsPassingMetricsFromCsv(bundle.ngsPassingCsv, bundle.season, bundle.week) : new Map();
+  const ngsReceiving = bundle.ngsReceivingCsv ? buildNgsReceivingMetricsFromCsv(bundle.ngsReceivingCsv, bundle.season, bundle.week) : new Map();
   for (const record of Object.values(bundle.metadata ?? {})) {
     const identity = key(record.full_name ?? [record.first_name, record.last_name].filter(Boolean).join(" "), record.team ?? "");
     metadata.set(identity, metadata.has(identity) ? null : record);
@@ -112,24 +157,32 @@ export function applyWeeklyEvidenceBundle(players: InSeasonPlayerSnapshot[], bun
       }
       player.evidence.capturedAt = bundle.capturedAt;
       player.recentUsage.games = 1;
-      const weight = completedGameEvidenceMeta.evidenceWeight;
+      const weight = activeWeeklySlate.evidenceWeight;
       const blend = (prior: number, observed: number) => Number((prior * (1 - weight) + observed * weight).toFixed(3));
       if (validBox) {
         player.recentUsage.targetsPerGame = blend(player.baselineUsage.targetsPerGame, targets!);
         player.recentUsage.carriesPerGame = blend(player.baselineUsage.carriesPerGame, carries!);
         const targetShare = number(stat?.target_share);
         if (targetShare !== null && targetShare >= 0 && targetShare <= 1) player.recentUsage.targetShare = blend(player.baselineUsage.targetShare, targetShare);
+        const fantasyPoints = calculateLeagueFantasyPoints(stat!);
+        if (fantasyPoints !== null) player.recentUsage.fantasyPointsPerGame = blend(player.baselineUsage.fantasyPointsPerGame, fantasyPoints);
         // Reconcile ratios only when a verified same-week route denominator exists.
         if (player.evidence.routes && player.advancedUsage?.week === bundle.week && player.advancedUsage.statuses.routes === "verified" && (player.advancedUsage.routes ?? 0) > 0) {
           player.advancedUsage.targetsPerRouteRun = Number((targets! / player.advancedUsage.routes!).toFixed(3));
           player.advancedUsage.yardsPerRouteRun = Number((yards! / player.advancedUsage.routes!).toFixed(3));
         }
         const ngs = player.player.positions[0] === "RB" ? ngsRushing.get(normalizeMetricName(player.player.fullName)) : undefined;
+        const ngsPass = player.player.positions[0] === "QB" ? ngsPassing.get(normalizeMetricName(player.player.fullName)) : undefined;
+        const ngsReceive = ["RB", "WR", "TE"].includes(player.player.positions[0] ?? "") ? ngsReceiving.get(normalizeMetricName(player.player.fullName)) : undefined;
         const ngsArithmeticMatches = ngs
           && ngs.rushingYardsOverExpected !== null
           && ngs.rushingYardsOverExpectedPerAttempt !== null
           && Math.abs((ngs.rushingYardsOverExpected / ngs.attempts) - ngs.rushingYardsOverExpectedPerAttempt) <= 0.02;
-        if (ngs && ngs.attempts === carries && ngs.attempts > 0 && ngsArithmeticMatches) {
+        const ngsRushMatches = Boolean(ngs && ngs.attempts === carries && ngs.attempts > 0 && ngsArithmeticMatches);
+        const passingAttempts = number(stat?.attempts) ?? number(stat?.passing_attempts);
+        const ngsPassMatches = ngsPass && passingAttempts !== null && ngsPass.attempts === passingAttempts && ngsPass.attempts > 0;
+        const ngsReceiveMatches = ngsReceive && ngsReceive.targets === targets && ngsReceive.targets > 0;
+        if (ngsRushMatches || ngsPassMatches || ngsReceiveMatches) {
           const previousAdvanced = player.advancedUsage;
           player.advancedUsage = {
             week: bundle.week,
@@ -139,16 +192,18 @@ export function applyWeeklyEvidenceBundle(players: InSeasonPlayerSnapshot[], bun
             yardsPerRouteRun: previousAdvanced?.week === bundle.week ? previousAdvanced.yardsPerRouteRun : null,
             airYards: previousAdvanced?.week === bundle.week ? previousAdvanced.airYards : null,
             airYardsShare: previousAdvanced?.week === bundle.week ? previousAdvanced.airYardsShare : null,
-            rushingYardsOverExpected: ngs.rushingYardsOverExpected,
-            rushingYardsOverExpectedPerAttempt: ngs.rushingYardsOverExpectedPerAttempt,
+            rushingYardsOverExpected: ngsRushMatches ? ngs!.rushingYardsOverExpected : previousAdvanced?.week === bundle.week ? previousAdvanced.rushingYardsOverExpected : null,
+            rushingYardsOverExpectedPerAttempt: ngsRushMatches ? ngs!.rushingYardsOverExpectedPerAttempt : previousAdvanced?.week === bundle.week ? previousAdvanced.rushingYardsOverExpectedPerAttempt : null,
             forcedMissedTackles: previousAdvanced?.week === bundle.week ? previousAdvanced.forcedMissedTackles : null,
             forcedMissedTackleRate: previousAdvanced?.week === bundle.week ? previousAdvanced.forcedMissedTackleRate : null,
             cpoe: previousAdvanced?.week === bundle.week ? previousAdvanced.cpoe : null,
             teamProe: previousAdvanced?.week === bundle.week ? previousAdvanced.teamProe : null,
+            ...(ngsPassMatches ? { nextGenPassing: ngsPass } : previousAdvanced?.week === bundle.week && previousAdvanced.nextGenPassing ? { nextGenPassing: previousAdvanced.nextGenPassing } : {}),
+            ...(ngsReceiveMatches ? { nextGenReceiving: ngsReceive } : previousAdvanced?.week === bundle.week && previousAdvanced.nextGenReceiving ? { nextGenReceiving: previousAdvanced.nextGenReceiving } : {}),
             statuses: {
               routes: previousAdvanced?.week === bundle.week ? previousAdvanced.statuses.routes : "pending-source",
               airYards: previousAdvanced?.week === bundle.week ? previousAdvanced.statuses.airYards : "pending-source",
-              rushingYardsOverExpected: "verified",
+              rushingYardsOverExpected: ngsRushMatches ? "verified" : previousAdvanced?.week === bundle.week ? previousAdvanced.statuses.rushingYardsOverExpected : "pending-source",
               forcedMissedTackles: previousAdvanced?.week === bundle.week ? previousAdvanced.statuses.forcedMissedTackles : "pending-source",
               quarterbackEnvironment: previousAdvanced?.week === bundle.week ? previousAdvanced.statuses.quarterbackEnvironment : "pending-source",
             },
@@ -171,16 +226,21 @@ export async function fetchWeeklyEvidenceBundle(): Promise<WeeklyEvidenceBundle>
     { label: "nflverse/PFR snaps", url: `https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_${season}.csv`, field: "snapsCsv" },
     { label: "Sleeper player context", url: "https://api.sleeper.app/v1/players/nfl", field: "metadata" },
     { label: "NFL Next Gen Stats rushing via nflverse", url: "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_rushing.csv.gz", field: "ngsRushingCsv" },
+    { label: "NFL Next Gen Stats passing via nflverse", url: "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_passing.csv.gz", field: "ngsPassingCsv" },
+    { label: "NFL Next Gen Stats receiving via nflverse", url: "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_receiving.csv.gz", field: "ngsReceivingCsv" },
   ] as const;
-  const bundle: WeeklyEvidenceBundle = { season, week: completedGameEvidenceMeta.week, capturedAt: new Date().toISOString(), sources: [] };
+  const bundle: WeeklyEvidenceBundle = { season, week: activeWeeklySlate.week, capturedAt: new Date().toISOString(), sources: [] };
   await Promise.all(sources.map(async (source) => {
     try {
       const response = await fetch(source.url, { cache: "no-store", signal: AbortSignal.timeout(12_000) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       if (source.field === "metadata") bundle.metadata = await response.json();
-      else if (source.field === "ngsRushingCsv") {
+      else if (source.field === "ngsRushingCsv" || source.field === "ngsPassingCsv" || source.field === "ngsReceivingCsv") {
         if (!response.body) throw new Error("Empty compressed response");
-        bundle.ngsRushingCsv = await new Response(response.body.pipeThrough(new DecompressionStream("gzip"))).text();
+        const csv = await new Response(response.body.pipeThrough(new DecompressionStream("gzip"))).text();
+        if (source.field === "ngsRushingCsv") bundle.ngsRushingCsv = csv;
+        else if (source.field === "ngsPassingCsv") bundle.ngsPassingCsv = csv;
+        else bundle.ngsReceivingCsv = csv;
       } else bundle[source.field] = await response.text();
       bundle.sources.push({ label: source.label, url: source.url, status: "loaded", detail: "Downloaded; season/week and identity checks apply before use." });
     } catch (error) {

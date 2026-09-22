@@ -62,6 +62,43 @@ function rebuildFromInventory(base: InSeasonCommandCenterDataset, inventory: Yah
   };
 }
 
+export function applyWorkbookEvidenceResponse(dataset: InSeasonCommandCenterDataset, body: Record<string, unknown>) {
+  const responsePlayers = Array.isArray(body.players) ? body.players as InSeasonPlayerSnapshot[] : [];
+  const refreshed = new Map<string, InSeasonPlayerSnapshot>(responsePlayers.map((player) => [player.player.id, player]));
+  const players = applyCurrentSeasonProjectionUpdates(dataset.players.map((player) => {
+    const update = refreshed.get(player.player.id);
+    return update ? {
+      ...update,
+      availability: player.availability,
+      rosterTeamId: player.rosterTeamId,
+      injuryStatus: player.injuryStatus === "IR" && update.injuryStatus !== "IR" ? "IR" : update.injuryStatus,
+    } : player;
+  }), {
+    week: typeof body.week === "number" ? body.week : dataset.evidenceStatus.week,
+    capturedAt: typeof body.capturedAt === "string" ? body.capturedAt : new Date().toISOString(),
+    observationWeight: dataset.evidenceStatus.evidenceWeight,
+  });
+  const waiverRecommendations = buildWaiverRecommendationSnapshots(players, dataset.myTeam);
+  const tradeIdeas = buildTradeIdeaSnapshots(players, dataset.myTeam, dataset.leagueTeams);
+  const slate = body.slate && typeof body.slate === "object" ? body.slate as Partial<InSeasonCommandCenterDataset["evidenceStatus"]> : {};
+  return {
+    ...dataset,
+    players,
+    waiverRecommendations,
+    tradeIdeas,
+    opportunityTrends: buildOpportunityTrendSnapshots(players),
+    advancedMetricSignals: buildAdvancedMetricSignals(players, new Map(dataset.leagueTeams.map((team) => [team.teamId, team.name]))),
+    actionQueue: buildTransactionQueue(waiverRecommendations, tradeIdeas),
+    evidenceStatus: {
+      ...dataset.evidenceStatus,
+      ...slate,
+      week: typeof body.week === "number" ? body.week : dataset.evidenceStatus.week,
+      capturedAt: typeof body.capturedAt === "string" ? body.capturedAt : dataset.evidenceStatus.capturedAt,
+      matchedPlayers: typeof body.observedPlayers === "number" ? body.observedPlayers : dataset.evidenceStatus.matchedPlayers,
+    },
+  };
+}
+
 function Inspector({ eyebrow, title, meta, children, onClose }: { eyebrow: string; title: string; meta?: string; children: React.ReactNode; onClose: () => void }) {
   return <aside className={styles.inspector}><button className={styles.closeInspector} onClick={onClose} aria-label="Close details">×</button><p className={styles.inspectorEyebrow}>{eyebrow}</p><h2 className={styles.inspectorTitle}>{title}</h2>{meta ? <p className={styles.inspectorMeta}>{meta}</p> : null}{children}</aside>;
 }
@@ -97,14 +134,91 @@ function TradeInspector({ idea, dataset, onClose }: { idea: TradeIdeaSnapshot; d
   return <Inspector eyebrow={`${idea.verdict} · ${idea.format.replaceAll("-", " ")}`} title={`Get ${idea.targetPlayerIds.map((id) => nameFor(id, dataset)).join(" + ")}`} meta={`Send ${idea.givePlayerIds.map((id) => nameFor(id, dataset)).join(" + ")} · ${idea.counterpartyTeamName}`} onClose={onClose}><p className={styles.inspectorText}>{idea.summary}</p><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Lineup impact</p><p className={styles.inspectorValue}>{signed(idea.immediateStarterDelta)} now · {signed(idea.restOfSeasonDelta)} return-adjusted · {signed(idea.playoffUpsideDelta)} upside</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Why they might accept</p><p className={styles.inspectorValue}>{signed(idea.counterpartyStarterDelta)} immediate value · {idea.constructionSummary}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Anchor check</p><p className={styles.inspectorValue}>{idea.qualitySummary}</p></div></Inspector>;
 }
 
-export function LeagueSheet({ dataset }: { dataset: InSeasonCommandCenterDataset }) {
+type NextGenSortKey = "player" | "position" | "team" | "rushAttempts" | "ryoe" | "ryoePerAttempt" | "targets" | "separation" | "yacoe" | "passAttempts" | "cpoe" | "timeToThrow" | "intendedAirYards";
+
+type NextGenRow = {
+  player: InSeasonPlayerSnapshot;
+  playerName: string;
+  position: string;
+  team: string;
+  owner: string;
+  rushAttempts: number | null;
+  ryoe: number | null;
+  ryoePerAttempt: number | null;
+  targets: number | null;
+  separation: number | null;
+  yacoe: number | null;
+  passAttempts: number | null;
+  cpoe: number | null;
+  timeToThrow: number | null;
+  intendedAirYards: number | null;
+};
+
+const nextGenColumns: Array<{ key: NextGenSortKey; label: string; numeric?: boolean }> = [
+  { key: "player", label: "A · Player" },
+  { key: "position", label: "B · Pos" },
+  { key: "team", label: "C · Team" },
+  { key: "rushAttempts", label: "D · Rush Att", numeric: true },
+  { key: "ryoe", label: "E · RYOE", numeric: true },
+  { key: "ryoePerAttempt", label: "F · RYOE/Att", numeric: true },
+  { key: "targets", label: "G · Targets", numeric: true },
+  { key: "separation", label: "H · Separation", numeric: true },
+  { key: "yacoe", label: "I · YACOE", numeric: true },
+  { key: "passAttempts", label: "J · Pass Att", numeric: true },
+  { key: "cpoe", label: "K · CPOE", numeric: true },
+  { key: "timeToThrow", label: "L · Time to Throw", numeric: true },
+  { key: "intendedAirYards", label: "M · Intended Air", numeric: true },
+];
+
+function metric(value: number | null, digits = 1, suffix = "") {
+  return value === null ? "—" : `${value.toFixed(digits)}${suffix}`;
+}
+
+export function NextGenStatsSheet({ dataset }: { dataset: InSeasonCommandCenterDataset }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<NextGenSortKey>("ryoePerAttempt");
+  const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const teamNames = new Map(dataset.leagueTeams.map((team) => [team.teamId, team.name] as const));
-  const trends = new Map(dataset.opportunityTrends.map((trend) => [trend.playerId, trend] as const));
-  const rows = [...dataset.players].sort((a, b) => (a.marketRank ?? 999) - (b.marketRank ?? 999));
-  const selected = dataset.players.find((player) => player.player.id === selectedId) ?? null;
-  const selectedTrend = selected ? trends.get(selected.player.id) : null;
-  return <div className={`${styles.workspace} ${selected ? styles.workspaceWithInspector : ""}`}><div className={styles.gridRegion}><table className={styles.table} aria-label="League player map"><thead><tr><th className={styles.rowNumber}></th>{["A · Player", "B · Pos", "C · Team", "D · Owner", "E · Market Rank", "F · ROS Median", "G · Usage", "H · Recommendation"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{rows.map((player, index) => { const trend = trends.get(player.player.id); const owner = player.availability === "my-roster" ? "My Team" : player.availability === "free-agent" ? "Free Agent" : teamNames.get(player.rosterTeamId ?? "") ?? "League roster"; return <tr key={player.player.id} className={`${styles.dataRow} ${selectedId === player.player.id ? styles.selectedRow : ""}`} onClick={() => setSelectedId(player.player.id)}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{player.player.fullName}</td><td>{position(player)}</td><td>{player.player.team}</td><td>{owner}</td><td className={styles.numberCell}>{player.marketRank ?? "—"}</td><td className={styles.numberCell}>{player.rosProjection.p50.toFixed(1)}</td><td className={`${styles.numberCell} ${(trend?.opportunityScore ?? 0) >= 0 ? styles.positiveCell : styles.negativeCell}`}>{trend ? signed(trend.opportunityScore) : "—"}</td><td className={styles.actionCell}>{trend?.recommendation ?? "hold"}</td></tr>; })}</tbody></table></div>{selected ? <Inspector eyebrow={`${position(selected)} · ${selected.player.team} · ${selected.availability.replaceAll("-", " ")}`} title={selected.player.fullName} meta={`Market rank ${selected.marketRank ?? "—"} · ROS ${selected.rosProjection.p50.toFixed(1)}`} onClose={() => setSelectedId(null)}><p className={styles.inspectorText}>{selectedTrend?.summary ?? selected.opportunityContext?.reason ?? "No actionable role change is currently modeled."}</p><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Current call</p><p className={styles.inspectorValue}>{selectedTrend?.recommendation ?? "Hold"} · {selectedTrend?.classification.replaceAll("-", " ") ?? "priced normally"}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Usage window</p><p className={styles.inspectorValue}>{Math.round(selected.recentUsage.snapShare * 100)}% snaps · {selected.recentUsage.targetsPerGame.toFixed(1)} targets · {selected.recentUsage.carriesPerGame.toFixed(1)} carries per game</p></div></Inspector> : null}</div>;
+  const rows: NextGenRow[] = dataset.players.flatMap((player) => {
+    const advanced = player.advancedUsage;
+    if (!advanced || advanced.week !== dataset.evidenceStatus.week) return [];
+    const passing = advanced.nextGenPassing;
+    const receiving = advanced.nextGenReceiving;
+    const hasRushing = advanced.statuses.rushingYardsOverExpected === "verified" && advanced.rushingYardsOverExpectedPerAttempt !== null;
+    if (!passing && !receiving && !hasRushing) return [];
+    return [{
+      player,
+      playerName: player.player.fullName,
+      position: position(player),
+      team: player.player.team,
+      owner: player.availability === "my-roster" ? "My Team" : player.availability === "free-agent" ? "Free Agent" : teamNames.get(player.rosterTeamId ?? "") ?? "League roster",
+      rushAttempts: hasRushing ? player.evidence?.observedCarries ?? null : null,
+      ryoe: hasRushing ? advanced.rushingYardsOverExpected : null,
+      ryoePerAttempt: hasRushing ? advanced.rushingYardsOverExpectedPerAttempt : null,
+      targets: receiving?.targets ?? null,
+      separation: receiving?.avgSeparation ?? null,
+      yacoe: receiving?.avgYacAboveExpectation ?? null,
+      passAttempts: passing?.attempts ?? null,
+      cpoe: passing?.completionPercentageAboveExpectation ?? null,
+      timeToThrow: passing?.avgTimeToThrow ?? null,
+      intendedAirYards: passing?.avgIntendedAirYards ?? receiving?.avgIntendedAirYards ?? null,
+    }];
+  }).sort((a, b) => {
+    const left = a[sortKey];
+    const right = b[sortKey];
+    if (left === null) return 1;
+    if (right === null) return -1;
+    const comparison = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right));
+    return direction === "asc" ? comparison : -comparison;
+  });
+  const selected = rows.find((row) => row.player.player.id === selectedId) ?? null;
+
+  function chooseSort(key: NextGenSortKey) {
+    if (sortKey === key) setDirection((current) => current === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setDirection(key === "player" || key === "position" || key === "team" ? "asc" : "desc"); }
+  }
+
+  return <div className={`${styles.workspace} ${selected ? styles.workspaceWithInspector : ""}`}><div className={styles.gridRegion}><table className={`${styles.table} ${styles.nextGenTable}`} aria-label={`Week ${dataset.evidenceStatus.week} Next Gen Stats`}><thead><tr><th className={styles.rowNumber}></th>{nextGenColumns.map((column) => <th key={column.key}><button className={styles.sortHeader} onClick={() => chooseSort(column.key)}>{column.label}{sortKey === column.key ? direction === "asc" ? " ▲" : " ▼" : ""}</button></th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.player.player.id} className={`${styles.dataRow} ${selectedId === row.player.player.id ? styles.selectedRow : ""}`} onClick={() => setSelectedId(row.player.player.id)}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{row.playerName}</td><td>{row.position}</td><td>{row.team}</td><td className={styles.numberCell}>{row.rushAttempts ?? "—"}</td><td className={styles.numberCell}>{metric(row.ryoe, 1)}</td><td className={`${styles.numberCell} ${row.ryoePerAttempt !== null ? row.ryoePerAttempt >= 0 ? styles.positiveCell : styles.negativeCell : ""}`}>{metric(row.ryoePerAttempt, 2)}</td><td className={styles.numberCell}>{row.targets ?? "—"}</td><td className={styles.numberCell}>{metric(row.separation, 2)}</td><td className={`${styles.numberCell} ${row.yacoe !== null ? row.yacoe >= 0 ? styles.positiveCell : styles.negativeCell : ""}`}>{metric(row.yacoe, 2)}</td><td className={styles.numberCell}>{row.passAttempts ?? "—"}</td><td className={`${styles.numberCell} ${row.cpoe !== null ? row.cpoe >= 0 ? styles.positiveCell : styles.negativeCell : ""}`}>{metric(row.cpoe, 1, "%")}</td><td className={styles.numberCell}>{metric(row.timeToThrow, 2, "s")}</td><td className={styles.numberCell}>{metric(row.intendedAirYards, 1)}</td></tr>)}</tbody></table>{rows.length === 0 ? <div className={styles.emptySheet}>Refresh evidence to load exact-week Next Gen Stats.</div> : null}</div>{selected ? <Inspector eyebrow={`Week ${dataset.evidenceStatus.week} Next Gen Stats · ${selected.position} · ${selected.owner}`} title={selected.playerName} meta={`${selected.team} · verified nflverse NGS row`} onClose={() => setSelectedId(null)}><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Rushing</p><p className={styles.inspectorValue}>{selected.rushAttempts ?? "—"} attempts · {metric(selected.ryoe, 1)} RYOE · {metric(selected.ryoePerAttempt, 2)} per attempt</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Receiving</p><p className={styles.inspectorValue}>{selected.targets ?? "—"} targets · {metric(selected.separation, 2)} yards separation · {metric(selected.yacoe, 2)} YAC over expected</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Passing</p><p className={styles.inspectorValue}>{selected.passAttempts ?? "—"} attempts · {metric(selected.cpoe, 1, "%")} CPOE · {metric(selected.timeToThrow, 2, "s")} time to throw · {metric(selected.intendedAirYards, 1)} intended air yards</p></div></Inspector> : null}</div>;
 }
 
 export function DataSyncSheet({ dataset, onDatasetChange }: { dataset: InSeasonCommandCenterDataset; onDatasetChange: (next: InSeasonCommandCenterDataset) => void }) {
@@ -118,11 +232,7 @@ export function DataSyncSheet({ dataset, onDatasetChange }: { dataset: InSeasonC
       const response = await fetch("/api/fantasy/evidence", { cache: "no-store" });
       const body = await response.json();
       if (!response.ok || !Array.isArray(body.players)) throw new Error(body.error ?? "Refresh failed");
-      const refreshed = new Map<string, InSeasonPlayerSnapshot>(body.players.map((player: InSeasonPlayerSnapshot) => [player.player.id, player]));
-      const players = applyCurrentSeasonProjectionUpdates(dataset.players.map((player) => { const update = refreshed.get(player.player.id); return update ? { ...update, availability: player.availability, rosterTeamId: player.rosterTeamId, injuryStatus: player.injuryStatus === "IR" && update.injuryStatus !== "IR" ? "IR" : update.injuryStatus } : player; }), { week: body.week ?? dataset.evidenceStatus.week, capturedAt: body.capturedAt ?? new Date().toISOString(), observationWeight: dataset.evidenceStatus.evidenceWeight });
-      const waiverRecommendations = buildWaiverRecommendationSnapshots(players, dataset.myTeam);
-      const tradeIdeas = buildTradeIdeaSnapshots(players, dataset.myTeam, dataset.leagueTeams);
-      onDatasetChange({ ...dataset, players, waiverRecommendations, tradeIdeas, opportunityTrends: buildOpportunityTrendSnapshots(players), advancedMetricSignals: buildAdvancedMetricSignals(players, new Map(dataset.leagueTeams.map((team) => [team.teamId, team.name]))), actionQueue: buildTransactionQueue(waiverRecommendations, tradeIdeas), evidenceStatus: { ...dataset.evidenceStatus, ...(body.slate ?? {}), week: body.week ?? dataset.evidenceStatus.week, capturedAt: body.capturedAt ?? dataset.evidenceStatus.capturedAt, matchedPlayers: body.observedPlayers ?? dataset.evidenceStatus.matchedPlayers } });
+      onDatasetChange(applyWorkbookEvidenceResponse(dataset, body));
       setStatus(`${body.observedPlayers ?? 0} player observations refreshed. Missing records remain unknown rather than zero.`);
     } catch (error) { setStatus(error instanceof Error ? error.message : "Evidence refresh failed; the previous snapshot was retained."); } finally { setBusy(false); }
   }

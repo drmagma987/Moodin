@@ -92,6 +92,44 @@ export function buildNgsRushingMetricsFromCsv(csv: string, season: number, week:
   );
 }
 
+export function buildNgsPassingMetricsFromCsv(csv: string, season: number, week: number) {
+  return new Map(
+    parseCsv(csv)
+      .filter((row) => Number(row.season) === season && Number(row.week) === week && row.season_type === "REG")
+      .map((row) => [
+        normalizeName(row.player_display_name),
+        {
+          attempts: numberValue(row.attempts) ?? 0,
+          avgTimeToThrow: numberValue(row.avg_time_to_throw),
+          avgCompletedAirYards: numberValue(row.avg_completed_air_yards),
+          avgIntendedAirYards: numberValue(row.avg_intended_air_yards),
+          aggressiveness: numberValue(row.aggressiveness),
+          completionPercentageAboveExpectation: numberValue(row.completion_percentage_above_expectation),
+          passerRating: numberValue(row.passer_rating),
+        },
+      ] as const),
+  );
+}
+
+export function buildNgsReceivingMetricsFromCsv(csv: string, season: number, week: number) {
+  return new Map(
+    parseCsv(csv)
+      .filter((row) => Number(row.season) === season && Number(row.week) === week && row.season_type === "REG")
+      .map((row) => [
+        normalizeName(row.player_display_name),
+        {
+          targets: numberValue(row.targets) ?? 0,
+          avgCushion: numberValue(row.avg_cushion),
+          avgSeparation: numberValue(row.avg_separation),
+          avgIntendedAirYards: numberValue(row.avg_intended_air_yards),
+          intendedAirYardsShare: numberValue(row.percent_share_of_intended_air_yards),
+          catchPercentage: numberValue(row.catch_percentage),
+          avgYacAboveExpectation: numberValue(row.avg_yac_above_expectation),
+        },
+      ] as const),
+  );
+}
+
 export function buildForcedMissedTackleMetricsFromCsv(csv: string, season: number, week: number) {
   const metrics = new Map<string, { attempts: number; forcedMissedTackles: number; forcedMissedTackleRate: number }>();
   for (const row of parseCsv(csv)) {

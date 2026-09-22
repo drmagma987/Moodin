@@ -54,6 +54,7 @@ import { applyWeeklyEvidenceBundle } from "@/lib/fantasy/weeklyEvidenceRefresh";
 import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
 import { applyCurrentSeasonProjectionUpdates } from "@/lib/fantasy/currentSeasonProjections";
 import { getWeeklyWaiverExpertSignal, weeklyWaiverContextStatus } from "@/lib/fantasy/weeklyWaiverContext";
+import { activeWeeklySlate } from "@/lib/fantasy/activeWeeklySlate";
 
 // Explicit synthetic evidence for strategy tests. Production snapshots are never
 // upgraded by this helper; coverage tests exercise the actual incomplete data.
@@ -63,8 +64,8 @@ function withCompleteCoverage(players: Parameters<typeof assessPlayerCoverage>[0
     currentRole: player.currentRole && player.currentRole !== "unknown" ? player.currentRole : "projected-starter" as const,
     injuryStatus: player.injuryStatus && player.injuryStatus !== "unknown" ? player.injuryStatus : "Healthy",
     projectedReturnDate: player.projectedReturnDate ?? "2026-10-01",
-    evidence: { week: completedGameEvidenceMeta.week, capturedAt: new Date().toISOString(), source: "Synthetic test fixture", boxScore: true, snaps: true, routes: true, observedTargets: 2, observedReceivingYards: 20, observedCarries: 10 },
-    advancedUsage: { week: Number(completedGameEvidenceMeta.week), games: 1, routes: 20, targetsPerRouteRun: 0.1,
+    evidence: { week: activeWeeklySlate.week, capturedAt: new Date().toISOString(), source: "Synthetic test fixture", boxScore: true, snaps: true, routes: true, observedTargets: 2, observedReceivingYards: 20, observedCarries: 10 },
+    advancedUsage: { week: Number(activeWeeklySlate.week), games: 1, routes: 20, targetsPerRouteRun: 0.1,
       yardsPerRouteRun: 1, airYards: 20, airYardsShare: 0.1, rushingYardsOverExpected: 0,
       rushingYardsOverExpectedPerAttempt: 0, forcedMissedTackles: null, forcedMissedTackleRate: null,
       cpoe: 0, teamProe: 0, sources: ["Synthetic test fixture"], statuses: {
@@ -91,6 +92,8 @@ import {
 } from "@/lib/fantasy/completedGameEvidence";
 import {
   buildForcedMissedTackleMetricsFromCsv,
+  buildNgsPassingMetricsFromCsv,
+  buildNgsReceivingMetricsFromCsv,
   buildNgsRushingMetricsFromCsv,
   buildPbpAdvancedMetricsFromCsv,
 } from "@/lib/fantasy/inSeasonAdvancedMetrics";
@@ -4206,7 +4209,8 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   const dataset = getInSeasonCommandCenterDataset();
   const playersById = new Map(dataset.players.map((player) => [player.player.id, player] as const));
 
-  assert.ok(dataset.actionQueue.length > 0, "observed opportunities can support actions without every advanced field");
+  assert.equal(dataset.evidenceStatus.week, activeWeeklySlate.week);
+  assert.equal(dataset.actionQueue.length, 0, "the server snapshot fails closed until current-week evidence refreshes in the client");
   assert.ok(dataset.waiverRecommendations.length > 0, "research candidates remain visible");
   assert.ok(dataset.waiverRecommendations.filter((idea) => idea.verdict === "bid" || idea.verdict === "priority").every((idea) => idea.coverage?.actionable));
   assert.ok(dataset.waiverRecommendations.filter((idea) => !idea.coverage?.actionable).every((idea) => idea.faabRange === null && idea.dropPlayerId === null));
@@ -4235,9 +4239,9 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   const watson = buildOpportunityTrendSnapshots(dataset.players.filter((player) => player.player.fullName === "Christian Watson"))[0];
   const bryceYoung = buildOpportunityTrendSnapshots(dataset.players.filter((player) => player.player.fullName === "Bryce Young"))[0];
   assert.equal(watson?.classification, "sell-high");
-  assert.equal(watson?.recommendation, "avoid");
+  assert.equal(watson?.recommendation, "watch", "Week 1 sell calls stay non-actionable until Week 2 evidence refreshes");
   assert.equal(bryceYoung?.classification, "sell-high");
-  assert.equal(bryceYoung?.recommendation, "avoid");
+  assert.equal(bryceYoung?.recommendation, "watch", "Week 1 sell calls stay non-actionable until Week 2 evidence refreshes");
 });
 
 test("trade recommendations reject depth aggregation that dilutes the best asset", () => {
@@ -5525,10 +5529,10 @@ test("current-season projections are provenance-backed, conservative, and stable
 });
 
 test("weekly expert context excludes stale ranks instead of silently reusing them", () => {
-  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-16T12:00:00-04:00")).current, true);
-  assert.equal(getWeeklyWaiverExpertSignal("Kaelon Black", Date.parse("2026-09-16T12:00:00-04:00"))?.fantasyPros?.rank, 3);
+  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-21T12:00:00-04:00")).current, true);
+  assert.equal(getWeeklyWaiverExpertSignal("Jonah Coleman", Date.parse("2026-09-21T12:00:00-04:00"))?.sourceCount, 2);
   assert.equal(weeklyWaiverContextStatus(Date.parse("2026-10-01T12:00:00-04:00")).current, false);
-  assert.equal(getWeeklyWaiverExpertSignal("Kaelon Black", Date.parse("2026-10-01T12:00:00-04:00")), undefined);
+  assert.equal(getWeeklyWaiverExpertSignal("Jonah Coleman", Date.parse("2026-10-01T12:00:00-04:00")), undefined);
 });
 
 test("optional efficiency gaps, inactive players and kickers do not block baseline evaluation", () => {
@@ -5583,7 +5587,7 @@ test("weekly evidence joins exact current-slate records and preserves zero versu
   delete player.evidence;
   delete player.advancedUsage;
   const season = leagueSourceOfTruth.season;
-  const week = completedGameEvidenceMeta.week;
+  const week = activeWeeklySlate.week;
   const row = `${season},${week},REG,${player.player.fullName},${player.player.team},${player.player.positions[0]},0,0,0`;
   const statsCsv = `season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards\n${row}`;
   const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv };
@@ -5603,14 +5607,14 @@ test("weekly evidence joins exact current-slate records and preserves zero versu
   assert.equal(assessDecisionReadiness(zero.players[0], "usage").actionable, false);
 });
 
-test("weekly evidence accepts exact-attempt Week 1 NGS RYOE and rejects mismatched aggregates", () => {
+test("weekly evidence accepts exact-attempt current-week NGS RYOE and rejects mismatched aggregates", () => {
   const player = structuredClone(inSeasonFixturePlayers.find((entry) => entry.player.positions[0] === "RB")!);
   delete player.advancedUsage;
   const season = leagueSourceOfTruth.season;
-  const week = completedGameEvidenceMeta.week;
+  const week = activeWeeklySlate.week;
   const statsCsv = `season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards\n${season},${week},REG,${player.player.fullName},${player.player.team},RB,2,10,12`;
   const ngsHeader = "season,season_type,week,player_display_name,player_position,team_abbr,rush_attempts,rush_yards_over_expected,rush_yards_over_expected_per_att";
-  const ngsCsv = `${ngsHeader}\n${season},REG,0,${player.player.fullName},RB,${player.player.team},10,5,0.5`;
+  const ngsCsv = `${ngsHeader}\n${season},REG,${week},${player.player.fullName},RB,${player.player.team},10,5,0.5`;
   const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv, ngsRushingCsv: ngsCsv };
   const accepted = applyWeeklyEvidenceBundle([player], bundle).players[0];
   assert.equal(accepted.advancedUsage?.statuses.rushingYardsOverExpected, "verified");
@@ -5621,12 +5625,36 @@ test("weekly evidence accepts exact-attempt Week 1 NGS RYOE and rejects mismatch
   assert.equal(inconsistent.advancedUsage, undefined, "internally inconsistent NGS totals remain unavailable");
 });
 
+test("weekly evidence attaches exact-volume Week 2 NGS passing and receiving rows", () => {
+  const season = leagueSourceOfTruth.season;
+  const week = activeWeeklySlate.week;
+  const quarterback = structuredClone(inSeasonFixturePlayers.find((entry) => entry.player.positions[0] === "QB")!);
+  const receiver = structuredClone(inSeasonFixturePlayers.find((entry) => entry.player.positions[0] === "WR")!);
+  delete quarterback.advancedUsage;
+  delete receiver.advancedUsage;
+  const statsHeader = "season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards,attempts";
+  const statsCsv = `${statsHeader}\n${season},${week},REG,${quarterback.player.fullName},${quarterback.player.team},QB,0,2,0,35\n${season},${week},REG,${receiver.player.fullName},${receiver.player.team},WR,9,0,88,0`;
+  const passingHeader = "season,season_type,week,player_display_name,player_position,team_abbr,attempts,avg_time_to_throw,avg_completed_air_yards,avg_intended_air_yards,aggressiveness,completion_percentage_above_expectation,passer_rating";
+  const ngsPassingCsv = `${passingHeader}\n${season},REG,${week},${quarterback.player.fullName},QB,${quarterback.player.team},35,2.65,6.4,8.1,14.2,3.7,98.4`;
+  const receivingHeader = "season,season_type,week,player_display_name,player_position,team_abbr,targets,avg_cushion,avg_separation,avg_intended_air_yards,percent_share_of_intended_air_yards,catch_percentage,avg_yac_above_expectation";
+  const ngsReceivingCsv = `${receivingHeader}\n${season},REG,${week},${receiver.player.fullName},WR,${receiver.player.team},9,6.2,3.4,10.8,31.2,66.7,1.9`;
+  assert.equal(buildNgsPassingMetricsFromCsv(ngsPassingCsv, season, week).size, 1);
+  assert.equal(buildNgsReceivingMetricsFromCsv(ngsReceivingCsv, season, week).size, 1);
+  const accepted = applyWeeklyEvidenceBundle([quarterback, receiver], { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv, ngsPassingCsv, ngsReceivingCsv }).players;
+  assert.equal(accepted[0].advancedUsage?.nextGenPassing?.completionPercentageAboveExpectation, 3.7);
+  assert.equal(accepted[0].advancedUsage?.nextGenPassing?.avgTimeToThrow, 2.65);
+  assert.equal(accepted[1].advancedUsage?.nextGenReceiving?.avgSeparation, 3.4);
+  assert.equal(accepted[1].advancedUsage?.nextGenReceiving?.avgYacAboveExpectation, 1.9);
+  const rejected = applyWeeklyEvidenceBundle([receiver], { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv: `${statsHeader}\n${season},${week},REG,${receiver.player.fullName},${receiver.player.team},WR,8,0,88,0`, ngsReceivingCsv }).players[0];
+  assert.equal(rejected.advancedUsage, undefined, "target-count mismatches cannot attach an NGS row");
+});
+
 test("weekly identity reconciliation handles team aliases and fullbacks without joining defensive namesakes", () => {
   const player = structuredClone(inSeasonFixturePlayers[0]);
   player.player.team = "JAC";
   player.player.positions = ["RB"];
   const season = leagueSourceOfTruth.season;
-  const week = completedGameEvidenceMeta.week;
+  const week = activeWeeklySlate.week;
   const header = "season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards";
   const row = `${season},${week},REG,${player.player.fullName},JAX,FB,2,1,12`;
   const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv: `${header}\n${row}` };
@@ -5649,7 +5677,7 @@ test("Travis Hunter's verified JAX offensive record reconciles across the offici
   const player = structuredClone(getInSeasonCommandCenterDataset().players.find((entry) => entry.player.fullName === "Travis Hunter")!);
   delete player.evidence;
   const season = leagueSourceOfTruth.season;
-  const week = completedGameEvidenceMeta.week;
+  const week = activeWeeklySlate.week;
   const header = "season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards";
   const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [], statsCsv: `${header}\n${season},${week},REG,Travis Hunter,JAX,CB,1,1,8` };
   const result = applyWeeklyEvidenceBundle([player], bundle);
@@ -5664,7 +5692,7 @@ test("refresh does not renew expired route evidence or treat current Out as hist
   const player: Parameters<typeof assessPlayerCoverage>[0] = withCompleteCoverage([inSeasonFixturePlayers[0]])[0];
   player.evidence!.capturedAt = "2000-01-01";
   const season = leagueSourceOfTruth.season;
-  const week = completedGameEvidenceMeta.week;
+  const week = activeWeeklySlate.week;
   const bundle = { season, week, capturedAt: new Date().toISOString(), sources: [],
     statsCsv: `season,week,season_type,player_display_name,team,position,targets,carries,receiving_yards\n${season},${week},REG,${player.player.fullName},${player.player.team},${player.player.positions[0]},2,1,12` };
   const result = applyWeeklyEvidenceBundle([player], bundle).players[0];
