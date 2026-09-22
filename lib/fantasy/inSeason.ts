@@ -27,12 +27,17 @@ import { getWeeklyWaiverExpertSignal, weeklyWaiverContext } from "@/lib/fantasy/
 import { assessDecisionReadiness, buildPlayerCoverageReport, coverageForDecision, createDecisionGate } from "@/lib/fantasy/playerCoverage";
 import { applyCurrentSeasonProjectionUpdates } from "@/lib/fantasy/currentSeasonProjections";
 import { activeWeeklySlate } from "@/lib/fantasy/activeWeeklySlate";
+import { buildLeaguePositionGrades, type TeamOpportunityProfile } from "@/lib/fantasy/leagueOpportunity";
 
 const protectedFoundationNames = new Set<string>(
   leagueSourceOfTruth.keepers.myDeclaredPlayers,
 );
 
 const FLEX_ELIGIBLE: PlayerPosition[] = ["RB", "WR", "TE"];
+
+function isMaterialTradeWarning(warning: string) {
+  return !/missed-tackle charting unavailable|route-based receiving efficiency remains unavailable/i.test(warning);
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -376,6 +381,20 @@ function tradeValue(
   };
 }
 
+// Season-long fantasy points are not comparable across positions in a one-QB
+// league. A QB2 can outscore a useful RB without carrying more trade value.
+function comparableMarketValue(player: InSeasonPlayerSnapshot, returnDateOverrides?: Record<string, string>) {
+  const healthyMedian = Math.max(1, player.rosProjection.p50);
+  const availabilityFactor = clamp(tradeValue(player, returnDateOverrides).p50 / healthyMedian, 0.05, 1);
+  if (player.marketRank !== null && player.marketRank !== undefined && Number.isFinite(player.marketRank)) {
+    return Math.max(4, 150 - player.marketRank) * availabilityFactor;
+  }
+  if (player.marketTier !== null && player.marketTier !== undefined && Number.isFinite(player.marketTier)) {
+    return Math.max(4, 135 - player.marketTier * 14) * availabilityFactor;
+  }
+  return tradeValue(player, returnDateOverrides).p50 / 8;
+}
+
 function futureValueScore(
   player: InSeasonPlayerSnapshot,
   trend: OpportunityTrendSnapshot | undefined,
@@ -536,6 +555,12 @@ function packageQualityGuard(
   });
   const bestUpgrade = Math.max(0, ...legRankDeltas.map((leg) => leg.delta));
   const largestDowngrade = Math.max(0, ...legRankDeltas.map((leg) => -leg.delta));
+  const projectionLegDeltas = send.map((sent) => {
+    const incoming = receive.find((candidate) => primaryPosition(candidate) === primaryPosition(sent));
+    return (incoming ? tradeValue(incoming).p50 : 0) - tradeValue(sent).p50;
+  });
+  const bestProjectionUpgrade = Math.max(0, ...projectionLegDeltas);
+  const largestProjectionDowngrade = Math.max(0, ...projectionLegDeltas.map((delta) => -delta));
   const outgoingAnchor = [...send].sort((a, b) => (a.marketRank ?? 999) - (b.marketRank ?? 999))[0];
   const incomingAnchor = [...receive].sort((a, b) => (a.marketRank ?? 999) - (b.marketRank ?? 999))[0];
   const outgoingEliteTier = outgoingAnchor.marketTier !== null && outgoingAnchor.marketTier !== undefined && outgoingAnchor.marketTier <= 3;
@@ -543,15 +568,19 @@ function packageQualityGuard(
     player.marketTier !== null && player.marketTier !== undefined && player.marketTier <= (outgoingAnchor.marketTier ?? 3),
   );
   const legBalancePasses = largestDowngrade <= 8 || bestUpgrade >= largestDowngrade * 1.1;
+  const currentLegBalancePasses = bestProjectionUpgrade >= 4 &&
+    (largestProjectionDowngrade <= 3 || bestProjectionUpgrade >= largestProjectionDowngrade * 0.75);
   const packageCeilingDelta =
     receive.reduce((sum, player) => sum + tradeValue(player).p90, 0) -
     send.reduce((sum, player) => sum + tradeValue(player).p90, 0);
   const ceilingPasses = packageCeilingDelta >= -10;
-  const passes = equivalentEliteReturns && legBalancePasses && ceilingPasses;
+  const passes = equivalentEliteReturns && legBalancePasses && currentLegBalancePasses && ceilingPasses;
   const summary = !equivalentEliteReturns
     ? `${outgoingAnchor.player.fullName} is an elite-tier anchor, but the return does not include an equally strong market-tier centerpiece.`
     : !legBalancePasses
       ? `The ${legRankDeltas.sort((a, b) => a.delta - b.delta)[0]?.position ?? "primary"} downgrade is larger than the best positional upgrade, so the package relies too heavily on depth aggregation.`
+      : !currentLegBalancePasses
+        ? "The best current-value upgrade is too small to justify the other positional downgrade, so the package is only cosmetically balanced."
       : !ceilingPasses
         ? "The package gives away too much ceiling even though its median lineup math is competitive."
         : `${incomingAnchor.player.fullName} preserves the package's anchor quality, and the strongest positional upgrade clears the downgrade premium.`;
@@ -647,8 +676,8 @@ function evaluateTradeImpact(
   const playoffUpsideDelta = Number((myFutureAfter.upsideTotal - myFutureBefore.upsideTotal).toFixed(2));
   const riskDelta = Number((myFutureBefore.riskTotal - myFutureAfter.riskTotal).toFixed(2));
   const marketValueDelta = Number((
-    receive.reduce((sum, player) => sum + tradeValue(player, returnDateOverrides).p50, 0) -
-    send.reduce((sum, player) => sum + tradeValue(player, returnDateOverrides).p50, 0)
+    receive.reduce((sum, player) => sum + comparableMarketValue(player, returnDateOverrides), 0) -
+    send.reduce((sum, player) => sum + comparableMarketValue(player, returnDateOverrides), 0)
   ).toFixed(2));
   const injuryNotes = [...send, ...receive]
     .map((player) => injuryReturnProfile(player, returnDateOverrides).note)
@@ -669,6 +698,53 @@ function evaluateTradeImpact(
     riskDelta,
     marketValueDelta,
     injuryNotes,
+  };
+}
+
+function structureFit(
+  targetProfile: TeamOpportunityProfile | undefined,
+  targetTeam: InSeasonTeamSnapshot,
+  playersById: Map<string, InSeasonPlayerSnapshot>,
+  send: InSeasonPlayerSnapshot[],
+  receive: InSeasonPlayerSnapshot[],
+) {
+  if (!targetProfile || send.length !== 1 || receive.length !== 1) return { strong: false, summary: null as string | null };
+  const sendPosition = primaryPosition(send[0]);
+  const receivePosition = primaryPosition(receive[0]);
+  if (sendPosition === "K" || sendPosition === "DST" || receivePosition === "K" || receivePosition === "DST" || sendPosition === receivePosition) return { strong: false, summary: null as string | null };
+  const needGroup = targetProfile.groups[sendPosition];
+  const depthGroup = targetProfile.groups[receivePosition];
+  const injuredAtNeed = targetTeam.playerIds
+    .map((id) => playersById.get(id))
+    .filter((player): player is InSeasonPlayerSnapshot => player !== undefined)
+    .filter((player) => primaryPosition(player) === sendPosition)
+    .filter((player) => /^(IR|PUP|NFI|Out|O|Doubtful|D)$/i.test(player.injuryStatus ?? ""));
+  const hasNeed = injuredAtNeed.length > 0 || targetProfile.needs.includes(sendPosition) || needGroup.grade < 35;
+  const receiveIsStarter = targetProfile.currentLineup.some((assignment) => assignment.playerId === receive[0].player.id);
+  const healthyPositionDepth = targetTeam.playerIds
+    .map((id) => playersById.get(id))
+    .filter((player): player is InSeasonPlayerSnapshot => player !== undefined)
+    .filter((player) => primaryPosition(player) === receivePosition)
+    .filter((player) => !/^(IR|PUP|NFI|Out|O|Doubtful|D)$/i.test(player.injuryStatus ?? ""))
+    .sort((a, b) => tradeValue(b).p50 - tradeValue(a).p50);
+  const receiveDepthIndex = healthyPositionDepth.findIndex((player) => player.player.id === receive[0].player.id);
+  const movableDepth = !receiveIsStarter || (
+    receivePosition === "RB" &&
+    healthyPositionDepth.length >= 4 &&
+    receiveDepthIndex >= 2
+  );
+  const hasDepth = movableDepth && (
+    depthGroup.percentiles.depth >= 65 ||
+    depthGroup.percentiles.surplus >= 55 ||
+    (receivePosition === "RB" && healthyPositionDepth.length >= 4)
+  );
+  if (!hasNeed || !hasDepth) return { strong: false, summary: null as string | null };
+  const injuryContext = injuredAtNeed.length
+    ? ` after ${injuredAtNeed.map((player) => `${player.player.fullName}${player.player.fullName.endsWith("s") ? "'" : "'s"} injury`).join(" and ")}`
+    : "";
+  return {
+    strong: true,
+    summary: `Targets ${targetTeam.name}'s ${sendPosition} shortage${injuryContext} and converts your ${sendPosition} surplus into their ${receivePosition} depth.`,
   };
 }
 
@@ -696,6 +772,8 @@ export function analyzeTradeProposal(
   const counterpartyTeamId = [...counterpartyIds][0];
   const targetTeam = leagueTeams.find((team) => team.teamId === counterpartyTeamId);
   if (!targetTeam) return null;
+  const targetProfile = buildLeaguePositionGrades(players, leagueTeams).find((profile) => profile.teamId === targetTeam.teamId);
+  const fit = structureFit(targetProfile, targetTeam, playersById, send, receive);
 
   const impact = evaluateTradeImpact(playersById, myTeam, targetTeam, send, receive, returnDateOverrides);
   const tradedCoverage = coverageForDecision(players, [...sendPlayerIds, ...receivePlayerIds], "trade");
@@ -711,6 +789,8 @@ export function analyzeTradeProposal(
   const hasIncomingIr = receive.some((player) => player.injuryStatus === "IR");
   const verdict = !quality.passes
     ? "counter"
+    : fit.strong && impact.restOfSeasonDelta >= 2 && impact.counterpartyImmediateDelta >= 2
+      ? "accept"
     : impact.restOfSeasonDelta >= 3 && impact.marketValueDelta >= -8 && impact.immediateStarterDelta >= (hasIncomingIr ? -35 : 0)
       ? "accept"
       : impact.restOfSeasonDelta >= 0 && impact.marketValueDelta >= -16
@@ -724,6 +804,8 @@ export function analyzeTradeProposal(
     ? impact.restOfSeasonDelta > 0
       ? "This is a patience trade: you give the other manager usable points now and bank the stronger post-return lineup."
       : "The injured-player discount is not large enough to compensate for the points you surrender now."
+    : fit.summary
+      ? fit.summary
     : impact.immediateStarterDelta > 0 && impact.counterpartyImmediateDelta > 0
       ? "The proposal addresses different roster weaknesses and improves both active lineups."
       : impact.immediateStarterDelta > 0
@@ -731,7 +813,7 @@ export function analyzeTradeProposal(
         : "The package does not improve your usable lineup enough at the current price.";
 
   return {
-    verdict: coverage.actionable ? verdict === "accept" && valuationWarnings.length ? "consider" : verdict : "insufficient-data",
+    verdict: coverage.actionable ? verdict === "accept" && valuationWarnings.some(isMaterialTradeWarning) ? "consider" : verdict : "insufficient-data",
     balance,
     immediateStarterDelta: impact.immediateStarterDelta,
     restOfSeasonDelta: impact.restOfSeasonDelta,
@@ -755,9 +837,14 @@ export function buildTradeIdeaSnapshots(
   const myRoster = myTeam.playerIds
     .map((playerId) => playersById.get(playerId))
     .filter((player): player is InSeasonPlayerSnapshot => player !== undefined);
+  const myQuarterbacks = myRoster
+    .filter((player) => primaryPosition(player) === "QB")
+    .sort((a, b) => b.weeklyProjection.p50 - a.weeklyProjection.p50 || b.rosProjection.p50 - a.rosProjection.p50);
+  const protectedStartingQbId = myQuarterbacks.length > 1 ? myQuarterbacks[0]?.player.id : null;
   const myTradeable = myRoster.filter(
     (player) =>
       !protectedFoundationNames.has(player.player.fullName) &&
+      player.player.id !== protectedStartingQbId &&
       primaryPosition(player) !== "K",
   );
   const myNflTeamCounts = myRoster.reduce((counts, player) => {
@@ -766,6 +853,7 @@ export function buildTradeIdeaSnapshots(
   }, new Map<string, number>());
   const ideas: TradeIdeaSnapshot[] = [];
   const structuredCandidates: TradeIdeaSnapshot[] = [];
+  const profilesByTeamId = new Map(buildLeaguePositionGrades(players, leagueTeams).map((profile) => [profile.teamId, profile] as const));
 
   function evaluate(
     send: InSeasonPlayerSnapshot[],
@@ -785,6 +873,7 @@ export function buildTradeIdeaSnapshots(
     const opponentBenefit = Math.max(impact.counterpartyImmediateDelta, impact.counterpartyRestOfSeasonDelta);
     const marketValueGap = impact.marketValueDelta;
     const samePositionOneForOne = format === "one-for-one" && primaryPosition(send[0]) === primaryPosition(receive[0]);
+    const fit = structureFit(profilesByTeamId.get(targetTeam.teamId), targetTeam, playersById, send, receive);
     const correlationRelief = samePositionOneForOne &&
       (myNflTeamCounts.get(send[0].player.team) ?? 0) >= 2 &&
       send[0].player.team !== receive[0].player.team && riskDelta >= 0;
@@ -792,19 +881,23 @@ export function buildTradeIdeaSnapshots(
     if (samePositionOneForOne && !correlationRelief && !meaningfulRiskUpgrade) return;
 
     const incomingIr = receive.some((player) => player.injuryStatus === "IR");
-    const pursue = quality.passes && (format === "two-for-two"
-      ? starterDelta >= 3 && opponentBenefit >= 1 && Math.abs(marketValueGap) <= 30 && impact.immediateStarterDelta >= (incomingIr ? -35 : 0)
+    const pursue = quality.passes && (fit.strong
+      ? starterDelta >= 2 && opponentBenefit >= 2 && marketValueGap >= -12
+      : format === "two-for-two"
+      ? starterDelta >= 4 && opponentBenefit >= 1 && Math.abs(marketValueGap) <= 30 && impact.immediateStarterDelta >= (incomingIr ? -35 : 0)
       : starterDelta >= 2 && opponentBenefit >= 1 && Math.abs(marketValueGap) <= 18 && impact.immediateStarterDelta >= (incomingIr ? -30 : 0));
     const consider = quality.passes && (format === "two-for-two"
-      ? starterDelta >= 1.5 && opponentBenefit >= -0.5 && Math.abs(marketValueGap) <= 22 && impact.immediateStarterDelta >= (incomingIr ? -45 : -2)
-      : starterDelta >= 1 && opponentBenefit >= -0.5 && Math.abs(marketValueGap) <= 14 && impact.immediateStarterDelta >= (incomingIr ? -40 : -2));
+      ? starterDelta >= 3 && opponentBenefit >= -0.5 && Math.abs(marketValueGap) <= 22 && impact.immediateStarterDelta >= (incomingIr ? -45 : -2)
+      : starterDelta >= 1 && opponentBenefit >= -0.5 && (fit.strong ? marketValueGap >= -18 : Math.abs(marketValueGap) <= 14) && impact.immediateStarterDelta >= (incomingIr ? -40 : -2));
     const valuationWarnings = [...new Set([...send, ...receive].flatMap((player) => assessDecisionReadiness(player, "trade").warnings))];
-    const verdict = pursue ? valuationWarnings.length ? "consider" : "pursue" : consider ? "consider" : "pass";
+    const verdict = pursue ? valuationWarnings.some(isMaterialTradeWarning) ? "consider" : "pursue" : consider ? "consider" : "pass";
 
     const sendNames = send.map((player) => player.player.fullName).join(" + ");
     const receiveNames = receive.map((player) => player.player.fullName).join(" + ");
     const constructionSummary = incomingIr
       ? "Send playable depth to a win-now manager and stash an injured player whose post-return value can strengthen your stretch run."
+      : fit.summary
+        ? fit.summary
       : format === "two-for-two"
         ? packageConstructionSummary(send, receive)
       : samePositionOneForOne
@@ -902,9 +995,10 @@ export function buildTradeIdeaSnapshots(
       (a, b) =>
         (b.verdict === "pursue" ? 2 : b.verdict === "consider" ? 1 : 0) -
           (a.verdict === "pursue" ? 2 : a.verdict === "consider" ? 1 : 0) ||
-        (b.format === "two-for-two" ? 1 : 0) - (a.format === "two-for-two" ? 1 : 0) ||
-        b.counterpartyStarterDelta - a.counterpartyStarterDelta ||
-        b.starterDelta - a.starterDelta,
+        Number(/shortage/.test(b.constructionSummary)) - Number(/shortage/.test(a.constructionSummary)) ||
+        (a.format === "two-for-two" ? 1 : 0) - (b.format === "two-for-two" ? 1 : 0) ||
+        b.starterDelta - a.starterDelta ||
+        b.counterpartyStarterDelta - a.counterpartyStarterDelta,
     );
   const selected: TradeIdeaSnapshot[] = [];
   const ideasPerTeam = new Map<string, number>();
@@ -1101,9 +1195,9 @@ export function buildWaiverRecommendationSnapshots(
         opportunityType,
         expertSupport: {
           sourceCount: expertSourceCount,
-          rotoballerFaab: expertSignal?.rotoballer?.standard ?? null,
+          rotoballerFaab: expertSignal?.rotoballer?.move ?? null,
           fantasyProsRank: expertSignal?.fantasyPros?.rank ?? null,
-          fantasyProsRange: expertSignal?.fantasyPros ? `#${expertSignal.fantasyPros.rank} (${expertSignal.fantasyPros.rankLow}-${expertSignal.fantasyPros.rankHigh})` : null,
+          fantasyProsRange: expertSignal?.fantasyPros ? `#${expertSignal.fantasyPros.rank} · $${expertSignal.fantasyPros.trueValue} true value` : null,
         },
         opportunityCase: coverage.actionable ? opportunityCase : `Research candidate only. ${opportunityCase}`,
         primaryRisk: coverage.actionable ? `${primaryRisk}${claim.warnings.length ? ` Valuation caveats: ${claim.warnings.join("; ")}.` : ""}` : `Decision gate: ${coverage.reasons.slice(0, 3).join("; ")}. Review Player coverage in League Sync before acting.`,
@@ -1119,8 +1213,8 @@ export function buildWaiverRecommendationSnapshots(
                 : `${addPlayer.player.fullName} does not beat your current bench math enough to force a move right now.`,
         rationale: [
           ...claim.warnings,
-          ...(expertSignal?.rotoballer ? [`RotoBaller baseline: ${expertSignal.rotoballer.standard} standard; ${expertSignal.rotoballer.aggressive} aggressive.`] : []),
-          ...(expertSignal?.fantasyPros ? [`FantasyPros Week ${weeklyWaiverContext.week} PPR consensus: #${expertSignal.fantasyPros.rank} (expert range ${expertSignal.fantasyPros.rankLow}-${expertSignal.fantasyPros.rankHigh}).`] : []),
+          ...(expertSignal?.rotoballer ? [`RotoBaller Week ${weeklyWaiverContext.week}: #${expertSignal.rotoballer.rank}, ${expertSignal.rotoballer.move}.`] : []),
+          ...(expertSignal?.fantasyPros ? [`FantasyPros Week ${weeklyWaiverContext.week} PPR highlighted rank: #${expertSignal.fantasyPros.rank}; $${expertSignal.fantasyPros.trueValue} true value on a $100 budget.`] : []),
           ...(verifiedRoleBreakout ? [`Verified role breakout: ${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of offensive snaps.`] : []),
           `Trend-adjusted starter delta: ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)}.`,
           `Weekly median delta versus ${dropPlayer?.player.fullName ?? "best drop"}: ${weeklyDelta >= 0 ? "+" : ""}${weeklyDelta.toFixed(1)}.`,

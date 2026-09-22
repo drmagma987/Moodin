@@ -603,7 +603,7 @@ export function buildLeagueOpportunityDashboard(
   const allProposals = partners.flatMap((partner) => partner.proposals);
   const best = (format: OpportunityProposal["format"] | OpportunityProposal["format"][]) => allProposals.find((proposal) => (Array.isArray(format) ? format : [format]).includes(proposal.format));
   const formatProposal = (proposal: OpportunityProposal | undefined) => proposal
-    ? `${proposal.sendPlayerIds.map((id) => byId.get(id)?.player.fullName ?? id).join(" + ")} for ${proposal.receivePlayerIds.map((id) => byId.get(id)?.player.fullName ?? id).join(" + ")}`
+    ? `${proposal.sendPlayerIds.map((id) => byId.get(id)?.player.fullName ?? "Unknown player").join(" + ")} for ${proposal.receivePlayerIds.map((id) => byId.get(id)?.player.fullName ?? "Unknown player").join(" + ")}`
     : "No worthwhile structure clears the safeguards";
   const injuredDiscount = allProposals.find((proposal) => proposal.receivePlayerIds.some((id) => byId.get(id)?.injuryStatus === "IR"));
   const usageEvidenceAvailable = players.some((player) => player.recentUsage.games > 0);

@@ -4263,6 +4263,59 @@ test("trade recommendations reject depth aggregation that dilutes the best asset
   assert.ok(dataset.tradeIdeas.every((idea) => idea.qualitySummary.length > 0));
 });
 
+test("trade recommendations exploit an injured-QB need with a clean QB-for-RB surplus swap", () => {
+  const dataset = getCoveredTestDataset();
+  const byName = new Map(dataset.players.map((player) => [player.player.fullName, player] as const));
+  const purdy = byName.get("Brock Purdy");
+  const dak = byName.get("Dak Prescott");
+  const warren = byName.get("Jaylen Warren");
+  const daniels = byName.get("Jayden Daniels");
+  assert.ok(purdy && dak && warren && daniels);
+  dak.weeklyProjection = { p10: 20, p50: 25, p90: 31 };
+  dak.rosProjection = { p10: 300, p50: 360, p90: 425 };
+  daniels.injuryStatus = "Out";
+  daniels.weeklyProjection = { p10: 0, p50: 1, p90: 3 };
+  daniels.rosProjection = { p10: 160, p50: 220, p90: 300 };
+
+  const fit = analyzeTradeProposal(
+    dataset.players,
+    dataset.myTeam,
+    dataset.leagueTeams,
+    [purdy.player.id],
+    [warren.player.id],
+  );
+  assert.ok(fit, "Purdy for Warren should be analyzable when Daniels is out and the counterparty has RB depth");
+  assert.equal(fit.verdict, "accept");
+  assert.match(fit.rosterFitSummary, /Jayden Daniels' injury/i);
+  const generated = buildTradeIdeaSnapshots(dataset.players, dataset.myTeam, dataset.leagueTeams);
+  assert.ok(generated.some((idea) =>
+    idea.givePlayerIds.length === 1 &&
+    idea.givePlayerIds[0] === purdy.player.id &&
+    idea.targetPlayerIds.length === 1 &&
+    idea.targetPlayerIds[0] === warren.player.id
+  ), "the recommendation list should surface the clean Purdy-for-Warren construction");
+});
+
+test("trade analyzer rejects cosmetically balanced packages with no meaningful upgraded leg", () => {
+  const dataset = getCoveredTestDataset();
+  const byName = new Map(dataset.players.map((player) => [player.player.fullName, player] as const));
+  const london = byName.get("Drake London");
+  assert.ok(london);
+  london.rosProjection = { p10: 160, p50: 210, p90: 270 };
+  const names = ["Brock Purdy", "Chris Olave", "Jalen Hurts", "Drake London"];
+  const [purdy, olave, hurts] = names.map((name) => byName.get(name));
+  assert.ok(purdy && olave && hurts);
+  const result = analyzeTradeProposal(
+    dataset.players,
+    dataset.myTeam,
+    dataset.leagueTeams,
+    [purdy.player.id, olave.player.id],
+    [hurts.player.id, london.player.id],
+  );
+  assert.equal(result?.verdict, "counter");
+  assert.match(result?.qualityWarning ?? "", /cosmetically balanced/i);
+});
+
 test("incoming analyzer counters packages that fail leg balance or elite anchor replacement", () => {
   const dataset = getCoveredTestDataset();
   const byName = new Map(dataset.players.map((player) => [player.player.fullName, player] as const));
@@ -5529,8 +5582,8 @@ test("current-season projections are provenance-backed, conservative, and stable
 });
 
 test("weekly expert context excludes stale ranks instead of silently reusing them", () => {
-  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-21T12:00:00-04:00")).current, true);
-  assert.equal(getWeeklyWaiverExpertSignal("Jonah Coleman", Date.parse("2026-09-21T12:00:00-04:00"))?.sourceCount, 2);
+  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-22T13:00:00-04:00")).current, true);
+  assert.equal(getWeeklyWaiverExpertSignal("Jonah Coleman", Date.parse("2026-09-22T13:00:00-04:00"))?.sourceCount, 2);
   assert.equal(weeklyWaiverContextStatus(Date.parse("2026-10-01T12:00:00-04:00")).current, false);
   assert.equal(getWeeklyWaiverExpertSignal("Jonah Coleman", Date.parse("2026-10-01T12:00:00-04:00")), undefined);
 });

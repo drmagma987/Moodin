@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { InSeasonCommandCenterDataset, TransactionQueueEntry } from "@/lib/fantasy/types";
-import { applyWorkbookEvidenceResponse, DataSyncSheet, DraftArchiveSheet, NextGenStatsSheet, TradesSheet, WaiversSheet } from "./fantasy-workbook-sheets";
+import { applyWorkbookEvidenceResponse, DataSyncSheet, DraftArchiveSheet, NextGenStatsSheet, TradesSheet, WaiverMarketSheet, WaiversSheet } from "./fantasy-workbook-sheets";
 import styles from "./fantasy-workbook.module.css";
 
 type WorkbookMode = "work" | "fantasy";
-type FantasySheet = "edge" | "waivers" | "trades" | "league" | "sync" | "draft";
+type FantasySheet = "edge" | "waivers" | "market" | "trades" | "league" | "sync" | "draft";
 
 type WorkRow = {
   unit: string;
@@ -23,6 +23,7 @@ const WORK_SHEETS = ["Summary", "Forecast", "Capacity", "Variance", "Notes"] as 
 const FANTASY_SHEETS: Array<{ id: FantasySheet; label: string }> = [
   { id: "edge", label: "Edge Brief" },
   { id: "waivers", label: "Waivers" },
+  { id: "market", label: "Waiver Market" },
   { id: "trades", label: "Trade Lab" },
   { id: "league", label: "Next Gen Stats" },
   { id: "sync", label: "Data Sync" },
@@ -60,7 +61,7 @@ function signed(value: number) {
 
 function playerName(playerId: string | null, dataset: InSeasonCommandCenterDataset) {
   if (!playerId) return "Open roster spot";
-  return dataset.players.find((entry) => entry.player.id === playerId)?.player.fullName ?? playerId;
+  return dataset.players.find((entry) => entry.player.id === playerId)?.player.fullName ?? "Unknown player";
 }
 
 function transactionLabel(action: InSeasonCommandCenterDataset["actionQueue"][number]) {
@@ -188,6 +189,7 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
             {selectedAction ? <aside className={styles.inspector} aria-label="Selected recommendation details"><button className={styles.closeInspector} onClick={() => setSelectedActionId(null)} aria-label="Close details">×</button><p className={styles.inspectorEyebrow}>{selectedAction.kind} · {selectedAction.priority}</p><h2 className={styles.inspectorTitle}>{selectedAction.title}</h2><p className={styles.inspectorMeta}>{transactionLabel(selectedAction)}</p><p className={styles.inspectorText}>{selectedAction.summary}</p><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Model call</p><p className={styles.inspectorValue}>{selectedWaiver ? `${selectedWaiver.verdict.toUpperCase()} · ${selectedWaiver.faabRange?.label ?? "Watch only"}` : selectedTrade ? `${selectedTrade.verdict.toUpperCase()} · ${signed(selectedTrade.starterDelta)} starter value` : "Review supporting evidence"}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>What could break the case</p><p className={styles.inspectorValue}>{selectedWaiver?.primaryRisk ?? selectedTrade?.qualitySummary ?? "Recheck roster ownership and current injury context before acting."}</p></div></aside> : null}
           </div>
         ) : fantasySheet === "waivers" ? <WaiversSheet dataset={dataset} />
+          : fantasySheet === "market" ? <WaiverMarketSheet dataset={dataset} />
           : fantasySheet === "trades" ? <TradesSheet dataset={dataset} />
             : fantasySheet === "league" ? <NextGenStatsSheet dataset={dataset} />
               : fantasySheet === "sync" ? <DataSyncSheet dataset={dataset} onDatasetChange={setDataset} />

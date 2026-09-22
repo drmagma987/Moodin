@@ -10,6 +10,7 @@ import { buildYahooInventoryFromPdfPreview, extractYahooRosterPdfLines, parseYah
 import type { YahooLeagueInventorySnapshot } from "@/lib/fantasy/yahooBridge";
 import type { InSeasonCommandCenterDataset, InSeasonPlayerSnapshot, TradeIdeaSnapshot, WaiverRecommendationSnapshot } from "@/lib/fantasy/types";
 import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
+import { weeklyWaiverContext, weeklyWaiverMarketRows } from "@/lib/fantasy/weeklyWaiverContext";
 import styles from "./fantasy-workbook.module.css";
 
 function signed(value: number) {
@@ -22,7 +23,7 @@ function position(player: InSeasonPlayerSnapshot) {
 
 function nameFor(playerId: string | null, dataset: InSeasonCommandCenterDataset) {
   if (!playerId) return "Open roster spot";
-  return dataset.players.find((entry) => entry.player.id === playerId)?.player.fullName ?? playerId;
+  return dataset.players.find((entry) => entry.player.id === playerId)?.player.fullName ?? "Unknown player";
 }
 
 function rebuildFromInventory(base: InSeasonCommandCenterDataset, inventory: YahooLeagueInventorySnapshot) {
@@ -108,6 +109,11 @@ export function WaiversSheet({ dataset }: { dataset: InSeasonCommandCenterDatase
   const [selectedId, setSelectedId] = useState<string | null>(recommendations[0]?.addPlayerId ?? null);
   const selected = recommendations.find((entry) => entry.addPlayerId === selectedId) ?? null;
   return <div className={`${styles.workspace} ${selected ? styles.workspaceWithInspector : ""}`}><div className={styles.gridRegion}><table className={styles.table} aria-label="Waiver recommendations"><thead><tr><th className={styles.rowNumber}></th>{["A · Rank", "B · Add", "C · Position", "D · Drop", "E · Bid Range", "F · Starter Δ", "G · Upside Δ", "H · Confidence", "I · Verdict"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{recommendations.map((recommendation, index) => { const player = dataset.players.find((entry) => entry.player.id === recommendation.addPlayerId); if (!player) return null; const active = recommendation.addPlayerId === selectedId; return <tr key={recommendation.addPlayerId} className={`${styles.dataRow} ${active ? styles.selectedRow : ""}`} onClick={() => setSelectedId(recommendation.addPlayerId)}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{index + 1}</td><td className={styles.primaryCell}>{player.player.fullName}</td><td>{position(player)}</td><td>{nameFor(recommendation.dropPlayerId, dataset)}</td><td className={styles.numberCell}>{recommendation.faabRange?.label ?? "Watch"}</td><td className={`${styles.numberCell} ${recommendation.starterDelta >= 0 ? styles.positiveCell : styles.negativeCell}`}>{signed(recommendation.starterDelta)}</td><td className={styles.numberCell}>{signed(recommendation.playoffUpsideDelta)}</td><td className={recommendation.confidence === "high" ? styles.positiveCell : styles.warningCell}>{recommendation.confidence}</td><td className={`${styles.actionCell} ${active ? styles.selectedCell : ""}`}>{recommendation.verdict}</td></tr>; })}</tbody></table></div>{selected ? <WaiverInspector recommendation={selected} dataset={dataset} onClose={() => setSelectedId(null)} /> : null}</div>;
+}
+
+export function WaiverMarketSheet({ dataset }: { dataset: InSeasonCommandCenterDataset }) {
+  const availabilityByName = new Map(dataset.players.map((player) => [player.player.fullName, player.availability] as const));
+  return <div className={styles.sheetStack}><div className={styles.marketNote}><strong>Week {weeklyWaiverContext.week} external market</strong><span>RotoBaller has published its priority order and Baller Move; its Week 3 FAAB dollar article was not live at the last check. FantasyPros PPR highlighted ranks and $100-budget bids are shown where published.</span><span className={styles.sourceLinks}><a href={weeklyWaiverContext.sources.rotoballer.url} target="_blank" rel="noreferrer">RotoBaller source ↗</a><a href={weeklyWaiverContext.sources.fantasyPros.url} target="_blank" rel="noreferrer">FantasyPros source ↗</a></span></div><div className={styles.gridRegion}><table className={`${styles.table} ${styles.marketTable}`} aria-label={`Week ${weeklyWaiverContext.week} external waiver market`}><thead><tr><th className={styles.rowNumber}></th>{["A · Player", "B · Pos", "C · RotoBaller Rank", "D · RotoBaller Move", "E · FP PPR Rank", "F · FP True Value", "G · FP Budget", "H · FP Desperate", "I · Yahoo Status"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{weeklyWaiverMarketRows.map((row, index) => <tr key={row.playerName}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{row.playerName}</td><td>{row.position}</td><td className={styles.numberCell}>#{row.rotoballerRank}</td><td className={styles.wrapCell}>{row.rotoballerMove}</td><td className={styles.numberCell}>{row.fantasyProsPprRank ? `#${row.fantasyProsPprRank}` : "—"}</td><td className={styles.numberCell}>{row.fantasyProsTrueValue === undefined ? "—" : `$${row.fantasyProsTrueValue}`}</td><td className={styles.numberCell}>{row.fantasyProsBudget === undefined ? "—" : `$${row.fantasyProsBudget}`}</td><td className={styles.numberCell}>{row.fantasyProsDesperate === undefined ? "—" : `$${row.fantasyProsDesperate}`}</td><td>{(availabilityByName.get(row.playerName) ?? "not in model").replaceAll("-", " ")}</td></tr>)}</tbody></table></div></div>;
 }
 
 function WaiverInspector({ recommendation, dataset, onClose }: { recommendation: WaiverRecommendationSnapshot; dataset: InSeasonCommandCenterDataset; onClose: () => void }) {

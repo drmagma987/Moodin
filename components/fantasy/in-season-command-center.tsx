@@ -89,7 +89,7 @@ function rebuildDatasetFromInventory(
 
 function playerName(playerId: string | null, players: InSeasonPlayerSnapshot[]) {
   if (!playerId) return "Open roster spot";
-  return players.find((entry) => entry.player.id === playerId)?.player.fullName ?? playerId;
+  return players.find((entry) => entry.player.id === playerId)?.player.fullName ?? "Unknown player";
 }
 
 function playerNames(playerIds: string[], players: InSeasonPlayerSnapshot[]) {

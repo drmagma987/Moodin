@@ -1151,3 +1151,11 @@ If checks cannot be run, say so clearly.
   - made the workbook auto-refresh verified weekly evidence on load, fixed Edge Brief names so Yahoo IDs never appear as the visible decision, and pinned the worksheet/status selector to the bottom of the viewport
   - live validation matched 348 modeled Week 2 players and 119 exact-week NGS rows (30 passing, 64 receiving, 25 rushing)
   - verified with 162 fantasy model tests, TypeScript, lint, and the production build
+- Repaired in-season trade construction and added the external waiver market worksheet:
+  - cross-position trade balance now uses comparable overall market rank instead of raw QB-versus-RB season points
+  - clean one-for-one need/surplus trades are prioritized when both lineups improve; the live Week 2 model surfaces Brock Purdy for Jaylen Warren by recognizing Jayden Daniels' injury and Husky Fever's RB depth
+  - two-for-two packages must contain a meaningful current-value upgrade on at least one positional leg, blocking the Brock Purdy/Chris Olave for Jalen Hurts/Drake London false positive
+  - added a `Waiver Market` tab with Week 3 RotoBaller priority guidance, FantasyPros PPR highlighted ranks and published $100-budget FAAB values, direct source links, Yahoo availability, and explicit source-coverage notes
+  - raw Yahoo player IDs now fail closed as `Unknown player` across the workbook, classic in-season view, and league opportunity dashboard
+  - Trade Lab player/package columns wrap and receive more width so complete offers are visible without opening the inspector
+  - verified with canonical league integrity, 164 fantasy model tests, TypeScript, lint (existing unrelated font warning only), and the production build

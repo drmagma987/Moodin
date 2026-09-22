@@ -39,7 +39,7 @@ function formatLabel(value: string) {
 }
 
 function proposalNames(ids: string[], byId: Map<string, InSeasonPlayerSnapshot>) {
-  return ids.map((id) => byId.get(id)?.player.fullName ?? id).join(" + ");
+  return ids.map((id) => byId.get(id)?.player.fullName ?? "Unknown player").join(" + ");
 }
 
 function PlayerPreferenceControls({
