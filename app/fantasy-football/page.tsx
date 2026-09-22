@@ -1,5 +1,6 @@
 import { DraftCommandCenter } from "@/components/fantasy/draft-command-center";
 import { InSeasonCommandCenter } from "@/components/fantasy/in-season-command-center";
+import { FantasyWorkbook } from "@/components/fantasy/fantasy-workbook";
 import { getBoardPlan, getDraftLabDataset } from "@/lib/fantasy/draftLab";
 import { getInSeasonCommandCenterDataset } from "@/lib/fantasy/inSeason";
 import { warRoomArtifact } from "@/lib/fantasy/warRoomArtifact";
@@ -13,7 +14,7 @@ export const revalidate = 0;
 const BOARD_MODES: DraftBoardMode[] = ["working", "draft-week", "final"];
 
 type FantasyFootballPageProps = {
-  searchParams?: Promise<{ board?: string; view?: string }>;
+  searchParams?: Promise<{ board?: string; view?: string; ui?: string }>;
 };
 
 export default async function FantasyFootballPage({ searchParams }: FantasyFootballPageProps) {
@@ -29,7 +30,10 @@ export default async function FantasyFootballPage({ searchParams }: FantasyFootb
   );
 
   if (view === "season") {
-    return <>{sectionTabs}<InSeasonCommandCenter dataset={getInSeasonCommandCenterDataset()} /></>;
+    const dataset = getInSeasonCommandCenterDataset();
+    return params.ui === "classic"
+      ? <>{sectionTabs}<InSeasonCommandCenter dataset={dataset} /></>
+      : <FantasyWorkbook dataset={dataset} />;
   }
 
   const boardMode = BOARD_MODES.includes(params.board as DraftBoardMode)
