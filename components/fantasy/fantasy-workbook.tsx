@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { InSeasonCommandCenterDataset, TransactionQueueEntry } from "@/lib/fantasy/types";
-import { applyWorkbookEvidenceResponse, DataSyncSheet, DraftArchiveSheet, NextGenStatsSheet, TradesSheet, WaiverMarketSheet, WaiversSheet } from "./fantasy-workbook-sheets";
+import { applyWorkbookEvidenceResponse, DataSyncSheet, DraftArchiveSheet, NextGenStatsSheet, ProductionOpportunitySheet, TradesSheet, WaiverMarketSheet, WaiversSheet } from "./fantasy-workbook-sheets";
 import styles from "./fantasy-workbook.module.css";
 
 type WorkbookMode = "work" | "fantasy";
-type FantasySheet = "edge" | "waivers" | "market" | "trades" | "league" | "sync" | "draft";
+type FantasySheet = "edge" | "opportunity" | "waivers" | "market" | "trades" | "league" | "sync" | "draft";
 
 type WorkRow = {
   unit: string;
@@ -22,6 +22,7 @@ type WorkRow = {
 const WORK_SHEETS = ["Summary", "Forecast", "Capacity", "Variance", "Notes"] as const;
 const FANTASY_SHEETS: Array<{ id: FantasySheet; label: string }> = [
   { id: "edge", label: "Edge Brief" },
+  { id: "opportunity", label: "xFP Monitor" },
   { id: "waivers", label: "Waivers" },
   { id: "market", label: "Waiver Market" },
   { id: "trades", label: "Trade Lab" },
@@ -188,7 +189,8 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
             </div>
             {selectedAction ? <aside className={styles.inspector} aria-label="Selected recommendation details"><button className={styles.closeInspector} onClick={() => setSelectedActionId(null)} aria-label="Close details">×</button><p className={styles.inspectorEyebrow}>{selectedAction.kind} · {selectedAction.priority}</p><h2 className={styles.inspectorTitle}>{selectedAction.title}</h2><p className={styles.inspectorMeta}>{transactionLabel(selectedAction)}</p><p className={styles.inspectorText}>{selectedAction.summary}</p><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Model call</p><p className={styles.inspectorValue}>{selectedWaiver ? `${selectedWaiver.verdict.toUpperCase()} · ${selectedWaiver.faabRange?.label ?? "Watch only"}` : selectedTrade ? `${selectedTrade.verdict.toUpperCase()} · ${signed(selectedTrade.starterDelta)} starter value` : "Review supporting evidence"}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>What could break the case</p><p className={styles.inspectorValue}>{selectedWaiver?.primaryRisk ?? selectedTrade?.qualitySummary ?? "Recheck roster ownership and current injury context before acting."}</p></div></aside> : null}
           </div>
-        ) : fantasySheet === "waivers" ? <WaiversSheet dataset={dataset} />
+        ) : fantasySheet === "opportunity" ? <ProductionOpportunitySheet dataset={dataset} />
+          : fantasySheet === "waivers" ? <WaiversSheet dataset={dataset} />
           : fantasySheet === "market" ? <WaiverMarketSheet dataset={dataset} />
           : fantasySheet === "trades" ? <TradesSheet dataset={dataset} />
             : fantasySheet === "league" ? <NextGenStatsSheet dataset={dataset} />

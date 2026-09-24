@@ -301,8 +301,15 @@ export function InSeasonCommandCenter({ dataset: initialDataset }: { dataset: In
         const waiverRecommendations = buildWaiverRecommendationSnapshots(players, current.myTeam);
         const tradeIdeas = buildTradeIdeaSnapshots(players, current.myTeam, current.leagueTeams);
         const slate = body.slate as Partial<InSeasonCommandCenterDataset["evidenceStatus"]> | undefined;
+        const refreshedSources = Array.isArray(body.sources)
+          ? body.sources.filter((source: unknown): source is InSeasonCommandCenterDataset["evidenceStatus"]["sources"][number] =>
+              Boolean(source) && typeof source === "object" && typeof (source as { label?: unknown }).label === "string" && typeof (source as { url?: unknown }).url === "string")
+          : null;
         return { ...current, players, waiverRecommendations, tradeIdeas,
           opportunityTrends: buildOpportunityTrendSnapshots(players),
+          productionOpportunity: Array.isArray(body.productionOpportunity)
+            ? body.productionOpportunity as InSeasonCommandCenterDataset["productionOpportunity"]
+            : current.productionOpportunity,
           advancedMetricSignals: buildAdvancedMetricSignals(players, new Map(current.leagueTeams.map((team) => [team.teamId, team.name]))),
           actionQueue: buildTransactionQueue(waiverRecommendations, tradeIdeas),
           evidenceStatus: {
@@ -311,7 +318,7 @@ export function InSeasonCommandCenter({ dataset: initialDataset }: { dataset: In
             week: body.week ?? current.evidenceStatus.week,
             capturedAt: body.capturedAt ?? current.evidenceStatus.capturedAt,
             matchedPlayers: body.observedPlayers ?? current.evidenceStatus.matchedPlayers,
-            sources: Array.isArray(slate?.sources) ? slate.sources : current.evidenceStatus.sources,
+            sources: refreshedSources ?? (Array.isArray(slate?.sources) ? slate.sources : current.evidenceStatus.sources),
           } };
       });
       setEvidenceRefreshMessage(`${body.observedPlayers} players matched weekly observations; ${body.contextPlayers} matched context records. ${(body.sources as Array<{ label: string; status: string; detail: string }>).map((source) => `${source.label}: ${source.status === "loaded" ? "downloaded" : source.detail}`).join(". ")}. Missing rows remain unknown. Refresh applies to this session; roster ownership is preserved.`);

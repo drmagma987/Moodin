@@ -55,6 +55,7 @@ import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
 import { applyCurrentSeasonProjectionUpdates } from "@/lib/fantasy/currentSeasonProjections";
 import { getWeeklyWaiverExpertSignal, weeklyWaiverContextStatus } from "@/lib/fantasy/weeklyWaiverContext";
 import { activeWeeklySlate } from "@/lib/fantasy/activeWeeklySlate";
+import { buildProductionOpportunitySnapshots } from "@/lib/fantasy/productionOpportunity";
 
 // Explicit synthetic evidence for strategy tests. Production snapshots are never
 // upgraded by this helper; coverage tests exercise the actual incomplete data.
@@ -4112,6 +4113,8 @@ test("PDF roster snapshot matches all 10 Yahoo teams without ownership gaps", ()
     .filter((player) => player.rosterTeamId === snapshot.myTeam.teamId)
     .map((player) => player.player.fullName);
   assert.ok(myPlayerNames.includes("Brock Purdy"));
+  assert.ok(myPlayerNames.includes("Denzel Boston"));
+  assert.ok(!myPlayerNames.includes("Kenny Gainwell"));
   assert.ok(!myPlayerNames.includes("Hunter Henry"));
   assert.equal(snapshot.unmatchedRosterPlayers.length, 0);
   assert.equal(new Set(rosteredIds).size, rosteredIds.length, "a player cannot appear on two teams");
@@ -5531,7 +5534,9 @@ test("Yahoo roster PDF import matches every team and fails closed before applyin
     text: line.text
       .replace("Christian McCaffrey", "Christian McCa ff rey")
       .replace("Matthew Stafford", "Matthew Sta ff ord")
-      .replace("Justin Jefferson", "Justin Je ff erson"),
+      .replace("Justin Jefferson", "Justin Je ff erson")
+      .replace("Jared Goff", "Jared Go ff")
+      .replace("Baker Mayfield", "Baker May fi eld"),
   }));
   const chromePrintPreview = parseYahooRosterPdfLines(chromePrintLines, snapshot.players, snapshot.teams);
   assert.equal(chromePrintPreview.ready, true, "continued page columns and Chrome-split ff ligatures import safely");
@@ -5761,4 +5766,23 @@ test("refresh does not renew expired route evidence or treat current Out as hist
   assert.equal(unknown.injuryStatus, "unknown");
   assert.ok(assessPlayerCoverage(unknown).missing.includes("Explicit health status"));
   assert.equal(unknown.evidence, undefined);
+});
+
+test("production opportunity separates touchdown overperformance from a forward role breakout", () => {
+  const dataset = getInSeasonCommandCenterDataset();
+  const gadsden = structuredClone(dataset.players.find((player) => player.player.fullName === "Oronde Gadsden II"));
+  assert.ok(gadsden);
+  gadsden.recentUsage.snapShare = gadsden.baselineUsage.snapShare + 0.25;
+  const csv = [
+    "season,week,posteam,player_id,full_name,position,total_fantasy_points,total_fantasy_points_exp,total_touchdown,total_touchdown_exp",
+    "2026,1,LAC,og,Oronde Gadsden II,TE,5.2,3.0,0,0.15",
+    "2026,2,LAC,og,Oronde Gadsden II,TE,9.8,4.4,1,0.20",
+  ].join("\n");
+
+  const [snapshot] = buildProductionOpportunitySnapshots([gadsden], csv);
+  assert.equal(snapshot.classification, "role-breakout");
+  assert.equal(snapshot.expectedPointsPerGame, 3.7);
+  assert.equal(snapshot.actualPointsPerGame, 7.5);
+  assert.equal(snapshot.opportunityGapPerGame, -3.8);
+  assert.equal(snapshot.source, "ffopportunity");
 });

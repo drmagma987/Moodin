@@ -82,12 +82,19 @@ export function applyWorkbookEvidenceResponse(dataset: InSeasonCommandCenterData
   const waiverRecommendations = buildWaiverRecommendationSnapshots(players, dataset.myTeam);
   const tradeIdeas = buildTradeIdeaSnapshots(players, dataset.myTeam, dataset.leagueTeams);
   const slate = body.slate && typeof body.slate === "object" ? body.slate as Partial<InSeasonCommandCenterDataset["evidenceStatus"]> : {};
+  const refreshedSources = Array.isArray(body.sources)
+    ? body.sources.filter((source): source is InSeasonCommandCenterDataset["evidenceStatus"]["sources"][number] =>
+        Boolean(source) && typeof source === "object" && typeof (source as { label?: unknown }).label === "string" && typeof (source as { url?: unknown }).url === "string")
+    : null;
   return {
     ...dataset,
     players,
     waiverRecommendations,
     tradeIdeas,
     opportunityTrends: buildOpportunityTrendSnapshots(players),
+    productionOpportunity: Array.isArray(body.productionOpportunity)
+      ? body.productionOpportunity as InSeasonCommandCenterDataset["productionOpportunity"]
+      : dataset.productionOpportunity,
     advancedMetricSignals: buildAdvancedMetricSignals(players, new Map(dataset.leagueTeams.map((team) => [team.teamId, team.name]))),
     actionQueue: buildTransactionQueue(waiverRecommendations, tradeIdeas),
     evidenceStatus: {
@@ -96,6 +103,7 @@ export function applyWorkbookEvidenceResponse(dataset: InSeasonCommandCenterData
       week: typeof body.week === "number" ? body.week : dataset.evidenceStatus.week,
       capturedAt: typeof body.capturedAt === "string" ? body.capturedAt : dataset.evidenceStatus.capturedAt,
       matchedPlayers: typeof body.observedPlayers === "number" ? body.observedPlayers : dataset.evidenceStatus.matchedPlayers,
+      sources: refreshedSources ?? (Array.isArray(slate.sources) ? slate.sources : dataset.evidenceStatus.sources),
     },
   };
 }
@@ -118,6 +126,60 @@ export function WaiverMarketSheet({ dataset }: { dataset: InSeasonCommandCenterD
 
 function WaiverInspector({ recommendation, dataset, onClose }: { recommendation: WaiverRecommendationSnapshot; dataset: InSeasonCommandCenterDataset; onClose: () => void }) {
   return <Inspector eyebrow={`${recommendation.verdict} · ${recommendation.confidence} confidence`} title={nameFor(recommendation.addPlayerId, dataset)} meta={`${recommendation.opportunityType.replaceAll("-", " ")} · edge ${recommendation.edgeScore.toFixed(1)}`} onClose={onClose}><p className={styles.inspectorText}>{recommendation.opportunityCase}</p><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Transaction</p><p className={styles.inspectorValue}>Add {nameFor(recommendation.addPlayerId, dataset)}{recommendation.dropPlayerId ? ` · Drop ${nameFor(recommendation.dropPlayerId, dataset)}` : " · Use open spot"}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Bid guidance</p><p className={styles.inspectorValue}>{recommendation.faabRange?.label ?? "Watch only"}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>What breaks the case</p><p className={styles.inspectorValue}>{recommendation.primaryRisk}</p></div></Inspector>;
+}
+
+type OpportunityFilter = "all" | "breakout" | "role-breakout" | "buy-low" | "regression-risk";
+
+export function ProductionOpportunitySheet({ dataset }: { dataset: InSeasonCommandCenterDataset }) {
+  const [filter, setFilter] = useState<OpportunityFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(dataset.productionOpportunity[0]?.playerId ?? null);
+  const teamNames = new Map(dataset.leagueTeams.map((team) => [team.teamId, team.name] as const));
+  const rows = dataset.productionOpportunity.filter((snapshot) => {
+    if (filter === "all") return true;
+    if (filter === "regression-risk") return snapshot.classification === "sell-high" || snapshot.classification === "touchdown-trap";
+    return snapshot.classification === filter;
+  });
+  const selected = dataset.productionOpportunity.find((snapshot) => snapshot.playerId === selectedId) ?? null;
+  const selectedPlayer = selected ? dataset.players.find((player) => player.player.id === selected.playerId) ?? null : null;
+  const sourceReady = dataset.productionOpportunity.some((snapshot) => snapshot.source === "ffopportunity");
+  const ownerFor = (player: InSeasonPlayerSnapshot) => player.availability === "my-roster"
+    ? "My Team"
+    : player.availability === "free-agent"
+      ? "Free Agent"
+      : teamNames.get(player.rosterTeamId ?? "") ?? "League roster";
+  const gapClass = (gap: number | null) => gap === null
+    ? ""
+    : gap >= 2.5 ? styles.positiveCell : gap <= -3 ? styles.negativeCell : "";
+  const signalClass = (classification: InSeasonCommandCenterDataset["productionOpportunity"][number]["classification"]) =>
+    classification === "breakout" || classification === "role-breakout" || classification === "buy-low"
+      ? styles.positiveCell
+      : classification === "sell-high" || classification === "touchdown-trap"
+        ? styles.negativeCell
+        : styles.warningCell;
+
+  return <div className={styles.sheetStack}>
+    <div className={styles.opportunityToolbar}>
+      <div><strong>Production vs. Opportunity</strong><span>{sourceReady ? "Play-level PPR xFP plus independent role movement" : "Role-only mode · play-level xFP feed pending"}</span></div>
+      <div className={styles.opportunityFilters}>{([
+        ["all", "All"], ["breakout", "Breakouts"], ["role-breakout", "Role gains"], ["buy-low", "Buy low"], ["regression-risk", "Regression risk"],
+      ] as Array<[OpportunityFilter, string]>).map(([value, label]) => <button key={value} className={filter === value ? styles.opportunityFilterActive : ""} onClick={() => setFilter(value)}>{label}</button>)}</div>
+    </div>
+    <div className={`${styles.workspace} ${selected ? styles.workspaceWithInspector : ""}`}>
+      <div className={styles.gridRegion}>
+        <table className={`${styles.table} ${styles.opportunityTable}`} aria-label="Production versus expected opportunity">
+          <thead><tr><th className={styles.rowNumber}></th>{["A · Player", "B · Pos", "C · Owner", "D · Actual/G", "E · xFP/G", "F · xFP−Actual", "G · xFP Trend", "H · Snap Δ", "I · Route Δ", "J · xTD / TD", "K · Signal", "L · Confidence"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
+          <tbody>{rows.map((snapshot, index) => {
+            const player = dataset.players.find((entry) => entry.player.id === snapshot.playerId);
+            if (!player) return null;
+            const active = snapshot.playerId === selectedId;
+            return <tr key={snapshot.playerId} className={`${styles.dataRow} ${active ? styles.selectedRow : ""}`} onClick={() => setSelectedId(snapshot.playerId)}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{player.player.fullName}</td><td>{position(player)}</td><td>{ownerFor(player)}</td><td className={styles.numberCell}>{snapshot.actualPointsPerGame?.toFixed(1) ?? "—"}</td><td className={styles.numberCell}>{snapshot.expectedPointsPerGame?.toFixed(1) ?? "—"}</td><td className={`${styles.numberCell} ${gapClass(snapshot.opportunityGapPerGame)}`}>{snapshot.opportunityGapPerGame === null ? "—" : signed(snapshot.opportunityGapPerGame)}</td><td className={styles.numberCell}>{snapshot.expectedPointsTrend === null ? "—" : signed(snapshot.expectedPointsTrend)}</td><td className={styles.numberCell}>{signed(snapshot.snapShareDelta * 100)} pts</td><td className={styles.numberCell}>{signed(snapshot.routeParticipationDelta * 100)} pts</td><td className={styles.numberCell}>{snapshot.expectedTouchdowns === null ? "—" : `${snapshot.expectedTouchdowns.toFixed(1)} / ${snapshot.actualTouchdowns?.toFixed(0) ?? "—"}`}</td><td className={`${signalClass(snapshot.classification)} ${active ? styles.selectedCell : ""}`}>{snapshot.classification.replaceAll("-", " ")}</td><td>{snapshot.confidence} · {snapshot.sampleWeeks} wk</td></tr>;
+          })}</tbody>
+        </table>
+        {rows.length === 0 ? <div className={styles.emptySheet}><div><strong>No players clear this filter.</strong><p>That is a valid result; do not manufacture a breakout from thin evidence.</p></div></div> : null}
+      </div>
+      {selected && selectedPlayer ? <Inspector eyebrow={`${selected.classification.replaceAll("-", " ")} · ${selected.confidence} confidence`} title={selectedPlayer.player.fullName} meta={`${position(selectedPlayer)} · ${selectedPlayer.player.team} · ${ownerFor(selectedPlayer)}`} onClose={() => setSelectedId(null)}><p className={styles.inspectorText}>{selected.summary}</p><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Production gap</p><p className={styles.inspectorValue}>{selected.expectedPointsPerGame === null ? "Play-level xFP pending" : `${selected.actualPointsPerGame?.toFixed(1)} actual PPR/G vs. ${selected.expectedPointsPerGame.toFixed(1)} xFP/G · ${signed(selected.opportunityGapPerGame ?? 0)} expected-minus-actual`}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Role movement</p><p className={styles.inspectorValue}>{signed(selected.snapShareDelta * 100)} snap-share points · {signed(selected.routeParticipationDelta * 100)} route-share points · role score {signed(selected.roleScore)}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Model evidence</p>{selected.drivers.map((driver) => <p key={driver} className={styles.inspectorValue}>{driver}</p>)}</div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Interpretation</p><p className={styles.inspectorValue}>Positive xFP−actual means the opportunity has been better than the box score. Negative means production is running hot. Role breakout is deliberately separate because future usage can change before past xFP catches up.</p></div></Inspector> : null}
+    </div>
+  </div>;
 }
 
 export function TradesSheet({ dataset }: { dataset: InSeasonCommandCenterDataset }) {
@@ -270,12 +332,15 @@ export function DataSyncSheet({ dataset, onDatasetChange }: { dataset: InSeasonC
     catch (error) { setStatus(error instanceof Error ? error.message : "The roster PDF could not be applied."); }
   }
 
+  const xfpSource = dataset.evidenceStatus.sources.find((source) => /ffopportunity/i.test(source.label));
+  const xfpPlayers = dataset.productionOpportunity.filter((snapshot) => snapshot.source === "ffopportunity").length;
   const rows = [
     { source: "Weekly evidence", captured: dataset.evidenceStatus.capturedAt, coverage: `${dataset.evidenceStatus.matchedPlayers} players`, state: "Loaded", action: "Refresh", run: refreshEvidence },
+    { source: "Play-level expected points", captured: dataset.evidenceStatus.capturedAt, coverage: xfpPlayers ? `${xfpPlayers} qualified players` : "Role-only fallback", state: xfpSource?.status === "unavailable" || !xfpPlayers ? "Fallback" : "Loaded", action: "Refresh", run: refreshEvidence },
     { source: "Yahoo roster snapshot", captured: dataset.rosterSnapshot.capturedAt, coverage: dataset.rosterSnapshot.source, state: "Loaded", action: "Bridge", run: refreshYahoo },
     { source: "League configuration", captured: leagueSourceOfTruth.updatedAt, coverage: leagueSourceOfTruth.version, state: "Validated", action: "Locked", run: null },
   ];
-  return <div className={styles.sheetStack}><section className={styles.syncToolbar}><button disabled={busy} onClick={() => void refreshEvidence()}>Refresh evidence</button><button disabled={busy} onClick={() => void refreshYahoo()}>Read Yahoo bridge</button><label className={styles.fileButton}><input type="file" accept="application/pdf,.pdf" onChange={(event) => void previewPdf(event.target.files?.[0])} disabled={busy} />Choose Yahoo PDF</label>{preview?.ready ? <button onClick={applyPdf}>Apply validated PDF</button> : null}<span>{busy ? "Working…" : status}</span></section><div className={styles.workspace}><div className={styles.gridRegion}><table className={styles.table} aria-label="Data source status"><thead><tr><th className={styles.rowNumber}></th>{["A · Source", "B · Captured", "C · Coverage", "D · State", "E · Action", "F · Integrity note"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.source} className={styles.dataRow}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{row.source}</td><td>{new Date(row.captured).toLocaleString()}</td><td>{row.coverage}</td><td className={styles.positiveCell}>{row.state}</td><td className={row.run ? styles.actionCell : ""} onClick={() => row.run?.()}>{row.action}</td><td>{index === 2 ? `${leagueSourceOfTruth.teams} teams · canonical source` : "Previous snapshot retained on failure"}</td></tr>)}{preview ? <tr><th className={styles.rowNumber}>4</th><td className={styles.primaryCell}>PDF preview</td><td>Current session</td><td>{preview.detectedTeams}/{leagueSourceOfTruth.teams} teams · {preview.matchedPlayers} players</td><td className={preview.ready ? styles.positiveCell : styles.negativeCell}>{preview.ready ? "Ready" : "Blocked"}</td><td>{preview.ownershipChanges.length} changes</td><td>{preview.blockers[0] ?? preview.warnings[0] ?? "Every roster row matched"}</td></tr> : null}</tbody></table></div></div></div>;
+  return <div className={styles.sheetStack}><section className={styles.syncToolbar}><button disabled={busy} onClick={() => void refreshEvidence()}>Refresh evidence</button><button disabled={busy} onClick={() => void refreshYahoo()}>Read Yahoo bridge</button><label className={styles.fileButton}><input type="file" accept="application/pdf,.pdf" onChange={(event) => void previewPdf(event.target.files?.[0])} disabled={busy} />Choose Yahoo PDF</label>{preview?.ready ? <button onClick={applyPdf}>Apply validated PDF</button> : null}<span>{busy ? "Working…" : status}</span></section><div className={styles.workspace}><div className={styles.gridRegion}><table className={styles.table} aria-label="Data source status"><thead><tr><th className={styles.rowNumber}></th>{["A · Source", "B · Captured", "C · Coverage", "D · State", "E · Action", "F · Integrity note"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={row.source} className={styles.dataRow}><th className={styles.rowNumber}>{index + 1}</th><td className={styles.primaryCell}>{row.source}</td><td>{new Date(row.captured).toLocaleString()}</td><td>{row.coverage}</td><td className={row.state === "Fallback" ? styles.warningCell : styles.positiveCell}>{row.state}</td><td className={row.run ? styles.actionCell : ""} onClick={() => row.run?.()}>{row.action}</td><td>{row.source === "League configuration" ? `${leagueSourceOfTruth.teams} teams · canonical source` : row.source === "Play-level expected points" ? xfpSource?.detail ?? "Previous snapshot retained on failure" : "Previous snapshot retained on failure"}</td></tr>)}{preview ? <tr><th className={styles.rowNumber}>{rows.length + 1}</th><td className={styles.primaryCell}>PDF preview</td><td>Current session</td><td>{preview.detectedTeams}/{leagueSourceOfTruth.teams} teams · {preview.matchedPlayers} players</td><td className={preview.ready ? styles.positiveCell : styles.negativeCell}>{preview.ready ? "Ready" : "Blocked"}</td><td>{preview.ownershipChanges.length} changes</td><td>{preview.blockers[0] ?? preview.warnings[0] ?? "Every roster row matched"}</td></tr> : null}</tbody></table></div></div></div>;
 }
 
 export function DraftArchiveSheet() {

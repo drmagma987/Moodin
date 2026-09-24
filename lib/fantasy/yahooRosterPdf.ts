@@ -95,9 +95,12 @@ function normalize(value: string) {
   return value
     .toLowerCase()
     // Chrome's printed Yahoo PDF can split an ff ligature into three text
-    // items (for example, "McCa ff rey" or "Sta ff ord"). Repair only that
-    // observed glyph boundary before normal name normalization.
+    // items (for example, "McCa ff rey" or "Sta ff ord"), leave a terminal
+    // ligature split ("Go ff"), or split fi ("May fi eld"). Repair only those
+    // observed glyph boundaries before normal name normalization.
     .replace(/([a-z])\s+ff\s+([a-z])/g, "$1ff$2")
+    .replace(/([a-z])\s+ff\b/g, "$1ff")
+    .replace(/([a-z])\s+fi\s+([a-z])/g, "$1fi$2")
     .replace(/\b(jr|sr|ii|iii|iv)\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();

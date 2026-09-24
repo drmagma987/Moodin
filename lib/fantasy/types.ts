@@ -902,6 +902,32 @@ export type OpportunityTrendSnapshot = {
   signals: string[];
 };
 
+export type ProductionOpportunitySnapshot = {
+  playerId: string;
+  classification:
+    | "breakout"
+    | "role-breakout"
+    | "buy-low"
+    | "sell-high"
+    | "touchdown-trap"
+    | "watch";
+  source: "ffopportunity" | "role-only";
+  confidence: "low" | "medium" | "high";
+  sampleWeeks: number;
+  actualPointsPerGame: number | null;
+  expectedPointsPerGame: number | null;
+  opportunityGapPerGame: number | null;
+  expectedPointsTrend: number | null;
+  actualTouchdowns: number | null;
+  expectedTouchdowns: number | null;
+  snapShareDelta: number;
+  routeParticipationDelta: number;
+  roleScore: number;
+  signalScore: number;
+  summary: string;
+  drivers: string[];
+};
+
 export type InSeasonTeamSnapshot = {
   teamId: string;
   name: string;
@@ -1009,7 +1035,12 @@ export type InSeasonEvidenceStatusSnapshot = {
   latestGame: string;
   evidenceWeight: number;
   matchedPlayers: number;
-  sources: Array<{ label: string; url: string }>;
+  sources: Array<{
+    label: string;
+    url: string;
+    status?: "loaded" | "unavailable";
+    detail?: string;
+  }>;
 };
 
 export type InSeasonCommandCenterDataset = {
@@ -1017,6 +1048,7 @@ export type InSeasonCommandCenterDataset = {
   myTeam: InSeasonTeamSnapshot;
   leagueTeams: InSeasonTeamSnapshot[];
   opportunityTrends: OpportunityTrendSnapshot[];
+  productionOpportunity: ProductionOpportunitySnapshot[];
   tradeIdeas: TradeIdeaSnapshot[];
   waiverRecommendations: WaiverRecommendationSnapshot[];
   actionQueue: TransactionQueueEntry[];

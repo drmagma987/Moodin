@@ -28,6 +28,7 @@ import { assessDecisionReadiness, buildPlayerCoverageReport, coverageForDecision
 import { applyCurrentSeasonProjectionUpdates } from "@/lib/fantasy/currentSeasonProjections";
 import { activeWeeklySlate } from "@/lib/fantasy/activeWeeklySlate";
 import { buildLeaguePositionGrades, type TeamOpportunityProfile } from "@/lib/fantasy/leagueOpportunity";
+import { buildProductionOpportunitySnapshots } from "@/lib/fantasy/productionOpportunity";
 
 const protectedFoundationNames = new Set<string>(
   leagueSourceOfTruth.keepers.myDeclaredPlayers,
@@ -1328,6 +1329,7 @@ export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset 
     myTeam: rosterSnapshot.myTeam,
     leagueTeams: rosterSnapshot.teams,
     opportunityTrends,
+    productionOpportunity: buildProductionOpportunitySnapshots(players),
     tradeIdeas,
     waiverRecommendations,
     actionQueue: buildTransactionQueue(waiverRecommendations, tradeIdeas),

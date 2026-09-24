@@ -198,6 +198,14 @@
 .table[aria-label="Modeled trade ideas"] td { height: auto; min-height: 2.9rem; }
 .wrapCell { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; line-height: 1.35; }
 .marketTable { min-width: 88rem; }
+.opportunityTable { min-width: 104rem; }
+.opportunityToolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #bfc5cb; background: #f8faf9; padding: 0.65rem 0.8rem; }
+.opportunityToolbar > div:first-child { display: flex; flex-direction: column; gap: 0.15rem; }
+.opportunityToolbar strong { color: var(--excel-green-dark); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.opportunityToolbar span { color: var(--muted); font-size: 0.75rem; }
+.opportunityFilters { display: flex; gap: 0.25rem; overflow-x: auto; }
+.opportunityFilters button { min-height: 2.2rem; border: 1px solid #aeb5bc; background: white; padding: 0 0.65rem; color: #4d5862; font-size: 0.75rem; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.opportunityFilters .opportunityFilterActive { border-color: var(--excel-green); background: var(--excel-green); color: white; }
 .marketNote { display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid #bfc5cb; background: #f8faf9; padding: 0.75rem 0.85rem; color: #4d5862; font-size: 0.78rem; line-height: 1.4; }
 .marketNote strong { flex: 0 0 auto; color: var(--excel-green-dark); text-transform: uppercase; letter-spacing: 0.05em; }
 .sourceLinks { display: flex; flex: 0 0 auto; gap: 0.7rem; margin-left: auto; }
@@ -229,6 +237,7 @@
   .statusBar span:last-child { display: none; }
   .matrixPanel { grid-template-columns: 1fr; }
   .marketNote { align-items: flex-start; flex-direction: column; gap: 0.45rem; }
+  .opportunityToolbar { align-items: flex-start; flex-direction: column; }
   .sourceLinks { margin-left: 0; }
   .matrixFields { grid-template-columns: 1fr; }
   .syncToolbar { align-items: flex-start; flex-wrap: wrap; }

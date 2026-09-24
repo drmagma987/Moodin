@@ -13,6 +13,7 @@ export type WeeklyEvidenceBundle = {
   ngsRushingCsv?: string;
   ngsPassingCsv?: string;
   ngsReceivingCsv?: string;
+  ffOpportunityCsv?: string;
   metadata?: Record<string, { full_name?: string; first_name?: string; last_name?: string; team?: string; position?: string; depth_chart_order?: number | null; injury_status?: string | null }>;
   sources: Array<{ label: string; url: string; status: "loaded" | "unavailable"; detail: string }>;
 };
@@ -228,6 +229,7 @@ export async function fetchWeeklyEvidenceBundle(): Promise<WeeklyEvidenceBundle>
     { label: "NFL Next Gen Stats rushing via nflverse", url: "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_rushing.csv.gz", field: "ngsRushingCsv" },
     { label: "NFL Next Gen Stats passing via nflverse", url: "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_passing.csv.gz", field: "ngsPassingCsv" },
     { label: "NFL Next Gen Stats receiving via nflverse", url: "https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_receiving.csv.gz", field: "ngsReceivingCsv" },
+    { label: "ffopportunity play-level expected points", url: `https://github.com/ffverse/ffopportunity/releases/download/latest-data/ep_weekly_${season}.csv`, field: "ffOpportunityCsv" },
   ] as const;
   const bundle: WeeklyEvidenceBundle = { season, week: activeWeeklySlate.week, capturedAt: new Date().toISOString(), sources: [] };
   await Promise.all(sources.map(async (source) => {

@@ -8,9 +8,9 @@ import type {
 } from "@/lib/fantasy/types";
 
 export const inSeasonRosterSnapshotMeta = {
-  source: "Yahoo Starting Rosters PDF + manual roster correction",
-  capturedAt: "2026-09-15T10:24:00-04:00",
-  week: 1,
+  source: "Yahoo Starting Rosters PDF",
+  capturedAt: "2026-09-23T10:22:09-04:00",
+  week: 3,
 } as const;
 
 export const inSeasonRosterSnapshotTeams = [
@@ -25,22 +25,22 @@ export const inSeasonRosterSnapshotTeams = [
     aliases: ["Dakked Raw"],
     satisfiedPositions: ["QB"] as PlayerPosition[],
     preferredStarterNames: ["Caleb Williams"],
-    players: ["Caleb Williams", "Kenneth Walker III", "Chase Brown", "Garrett Wilson", "Luther Burden III", "Carnell Tate", "Colston Loveland", "Bucky Irving", "Tony Pollard", "Ka'imi Fairbairn", "De'Zhaun Stribling", "Kyle Monangai", "Makai Lemon", "Tank Bigsby", "Pat Bryant", "Keenan Allen"],
+    players: ["Bryce Young", "Kenneth Walker III", "Chase Brown", "Garrett Wilson", "Luther Burden III", "Carnell Tate", "Dalton Schultz", "Bucky Irving", "Tony Pollard", "Ka'imi Fairbairn", "Colston Loveland", "Caleb Williams", "Kyle Monangai", "Makai Lemon", "Emmett Johnson", "Adonai Mitchell"],
   },
   {
     teamId: "like-a-good-nabers",
     name: "Like a good Nabers...",
-    players: ["Josh Allen", "Derrick Henry", "Jeremiyah Love", "Christian Watson", "Michael Wilson", "DK Metcalf", "Tucker Kraft", "D'Andre Swift", "Stefon Diggs", "Evan McPherson", "Dalton Kincaid", "Josh Jacobs", "Jakobi Meyers", "Jake Ferguson", "Jared Goff", "Calvin Ridley"],
+    players: ["Josh Allen", "Derrick Henry", "D'Andre Swift", "Christian Watson", "DK Metcalf", "Stefon Diggs", "Dalton Kincaid", "Michael Wilson", "Jeremiyah Love", "Evan McPherson", "Tucker Kraft", "Josh Jacobs", "Jakobi Meyers", "Jake Ferguson", "Tyreek Hill", "Tre Tucker"],
   },
   {
     teamId: "husky-fever",
     name: "Husky Fever",
-    players: ["Jayden Daniels", "Christian McCaffrey", "Kyren Williams", "CeeDee Lamb", "A.J. Brown", "Davante Adams", "Tyler Warren", "Jaylen Warren", "Alec Pierce", "Harrison Mevis", "TreVeyon Henderson", "Bo Nix", "Rachaad White", "Mark Andrews", "Khalil Shakir", "Kayshon Boutte"],
+    players: ["Jared Goff", "Christian McCaffrey", "Kyren Williams", "CeeDee Lamb", "Davante Adams", "Khalil Shakir", "Tyler Warren", "Jaylen Warren", "TreVeyon Henderson", "Harrison Mevis", "Mark Andrews", "Jayden Daniels", "Bo Nix", "Rachaad White", "Kayshon Boutte", "Malachi Fields", "A.J. Brown"],
   },
   {
     teamId: "gabagool",
     name: "Gabagool",
-    players: ["Jalen Hurts", "Breece Hall", "Cam Skattebo", "Drake London", "Tee Higgins", "Emeka Egbuka", "Trey McBride", "Rhamondre Stevenson", "Chris Godwin Jr.", "Jason Myers", "Jacory Croskey-Merritt", "Wan'Dale Robinson", "Jalen Coker", "Woody Marks", "Matthew Stafford", "Rashid Shaheed"],
+    players: ["Jalen Hurts", "Breece Hall", "Cam Skattebo", "Drake London", "Emeka Egbuka", "Tee Higgins", "Trey McBride", "Jalen Coker", "Chris Godwin Jr.", "Jason Myers", "Rhamondre Stevenson", "Jacory Croskey-Merritt", "Woody Marks", "Matthew Stafford", "Tyler Shough", "Darren Waller"],
   },
   {
     teamId: "your-moms-fav-friend",
@@ -50,27 +50,34 @@ export const inSeasonRosterSnapshotTeams = [
   {
     teamId: "juggalo-all-stars",
     name: "Juggalo All-Stars",
-    players: ["Justin Herbert", "Bijan Robinson", "Omarion Hampton", "Puka Nacua", "Ladd McConkey", "DJ Moore", "Sam LaPorta", "Bhayshul Tuten", "Rico Dowdle", "Brandon Aubrey", "Chuba Hubbard", "Michael Pittman Jr.", "Chris Rodriguez Jr.", "Jonah Coleman", "Ja'Kobi Lane", "Malik Davis", "Jordyn Tyson"],
+    players: ["Justin Herbert", "Bijan Robinson", "Omarion Hampton", "Puka Nacua", "Ladd McConkey", "DJ Moore", "Sam LaPorta", "Bhayshul Tuten", "Chuba Hubbard", "Brandon Aubrey", "Rico Dowdle", "Chris Rodriguez Jr.", "Kaelon Black", "Dontayvion Wicks", "Marvin Harrison Jr.", "Jordyn Tyson", "Michael Pittman Jr."],
   },
   {
     teamId: "njigba-please",
     name: "Njigba Please",
-    players: ["Drake Maye", "Travis Etienne Jr.", "Quinshon Judkins", "Jaxon Smith-Njigba", "Malik Nabers", "Tetairoa McMillan", "Brock Bowers", "Marvin Harrison Jr.", "Jonathon Brooks", "Tyler Loop", "Blake Corum", "KC Concepcion", "Isaiah Likely", "Xavier Worthy", "Patrick Mahomes", "Tyler Allgeier"],
+    players: ["Patrick Mahomes", "Travis Etienne Jr.", "Quinshon Judkins", "Jaxon Smith-Njigba", "Malik Nabers", "Tetairoa McMillan", "Isaiah Likely", "Devaughn Vele", "Brock Bowers", "Tyler Loop", "Blake Corum", "Rashod Bateman", "Drake Maye", "Tyler Allgeier", "Tank Bigsby", "Jonah Coleman"],
   },
   {
     teamId: "fc-netanyah00",
     name: "FC Netanyah00",
-    players: ["Dak Prescott", "Jahmyr Gibbs", "Jadarian Price", "Amon-Ra St. Brown", "Chris Olave", "DeVonta Smith", "Harold Fannin Jr.", "Rome Odunze", "Josh Downs", "Cameron Dicker", "J.K. Dobbins", "Kenny Gainwell", "Romeo Doubs", "Tre Tucker", "Tyjae Spears", "Brock Purdy", "Isiah Pacheco"],
+    players: ["Dak Prescott", "Jahmyr Gibbs", "Jadarian Price", "Amon-Ra St. Brown", "DeVonta Smith", "Chris Olave", "Harold Fannin Jr.", "Romeo Doubs", "Josh Downs", "Eddy Pineiro", "Rome Odunze", "J.K. Dobbins", "Brock Purdy", "Caleb Douglas", "Denzel Boston", "Emanuel Wilson", "Isiah Pacheco"],
   },
   {
     teamId: "peyton-and-brady-place",
     name: "Peyton and Brady place",
-    players: ["Joe Burrow", "Saquon Barkley", "Javonte Williams", "Justin Jefferson", "Ja'Marr Chase", "Terry McLaurin", "Kyle Pitts Sr.", "MarShawn Lloyd", "Courtland Sutton", "Jordan Mason", "RJ Harvey", "Kyler Murray", "Deebo Samuel Sr.", "Kaleb Johnson", "Greg Dulcich", "Zach Charbonnet"],
+    players: ["Joe Burrow", "Saquon Barkley", "Javonte Williams", "Justin Jefferson", "Ja'Marr Chase", "Terry McLaurin", "Kyle Pitts Sr.", "MarShawn Lloyd", "Deebo Samuel Sr.", "Harrison Butker", "Courtland Sutton", "Jordan Mason", "RJ Harvey", "Greg Dulcich", "Baker Mayfield", "Alvin Kamara", "Zach Charbonnet"],
   },
 ] as const;
 
 export const inSeasonSnapshotMyTeamId = "fc-netanyah00";
-const injuredReserveNames = new Set(["jordyn tyson", "isiah pacheco", "zach charbonnet"]);
+const injuredReserveNames = new Set([
+  "a j brown",
+  "isiah pacheco",
+  "jordyn tyson",
+  "jordan mason",
+  "michael pittman",
+  "zach charbonnet",
+]);
 
 function normalizeName(value: string) {
   return value

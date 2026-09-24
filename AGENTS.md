@@ -1159,3 +1159,17 @@ If checks cannot be run, say so clearly.
   - raw Yahoo player IDs now fail closed as `Unknown player` across the workbook, classic in-season view, and league opportunity dashboard
   - Trade Lab player/package columns wrap and receive more width so complete offers are visible without opening the inspector
   - verified with canonical league integrity, 164 fantasy model tests, TypeScript, lint (existing unrelated font warning only), and the production build
+
+### 2026-09-23
+
+- Refreshed the Fantasy Football Supertool's complete ten-team Yahoo ownership snapshot from the Week 3 Starting Rosters PDF captured at 10:22 AM.
+- Updated FC Netanyah00 and every opponent roster, including current IR designations, so waiver and trade recommendations use the latest league availability.
+- Hardened Yahoo PDF name parsing for Chrome's split terminal `ff` and embedded `fi` ligatures (for example, Jared Goff and Baker Mayfield).
+- Verified the real export at 10/10 teams, 164 matched players, zero unmatched/ambiguous rows, and zero ownership differences from the refreshed baseline; `npm run fantasy:test` (164 passing), `npm run lint` (existing bachelor-party font warning only), and `npx tsc --noEmit` passed.
+
+### 2026-09-24
+
+- Added an in-season `xFP Monitor` worksheet that separates production regression from forward-looking role breakouts.
+- Connected the live evidence refresh to ffverse's play-level `ffopportunity` feed and now displays actual PPR/G, expected PPR/G, expected-minus-actual scoring, xFP trend, expected versus actual touchdowns, snap/route movement, confidence, ownership, and actionable classifications.
+- Kept a fail-transparent role-only mode when play-level xFP is unavailable, so the tool never fabricates expected production from coarse usage.
+- Verified Gadsden's intended classification with a synthetic two-week case, all 165 fantasy model tests, TypeScript, lint (existing bachelor-party font warning only), and the production build.
