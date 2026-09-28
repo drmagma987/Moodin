@@ -48,6 +48,7 @@ function roleMultiplier(player: InSeasonPlayerSnapshot) {
 
 function healthMultiplier(player: InSeasonPlayerSnapshot) {
   const status = (player.injuryStatus ?? "").trim().toLowerCase();
+  if (/out for (?:the )?season|season[- ]ending/.test(status)) return 0;
   if (/^(ir|pup|nfi)$/.test(status)) return 0.05;
   if (/^(out|o)$/.test(status)) return 0.08;
   if (/^(doubtful|d)$/.test(status)) return 0.45;
@@ -57,6 +58,7 @@ function healthMultiplier(player: InSeasonPlayerSnapshot) {
 
 function rosHealthMultiplier(player: InSeasonPlayerSnapshot, capturedAt: string, remainingGames: number) {
   const status = (player.injuryStatus ?? "").trim().toLowerCase();
+  if (/out for (?:the )?season|season[- ]ending/.test(status)) return 0;
   if (!/^(ir|pup|nfi|out|o|doubtful|d)$/.test(status)) return healthMultiplier(player) === 0.92 ? 0.98 : 1;
   if (!player.projectedReturnDate) return /^(ir|pup|nfi)$/.test(status) ? 0.55 : 0.85;
   const captured = Date.parse(capturedAt);
@@ -97,7 +99,7 @@ export function applyCurrentSeasonProjectionUpdates(
       && Number.isFinite(Date.parse(player.evidence.capturedAt));
     const verifiedForwardChange = Boolean(
       player.injuryOpportunity?.confirmed && player.injuryOpportunity.successorVerified,
-    ) || player.opportunityContext?.stability === "durable" || /^(IR|PUP|NFI|Out|O|Doubtful|D|Questionable|Q)$/i.test(player.injuryStatus ?? "");
+    ) || player.opportunityContext?.stability === "durable" || /^(IR|PUP|NFI|Out|O|Doubtful|D|Questionable|Q|Out for (?:the )?season|Season[- ]ending)$/i.test(player.injuryStatus ?? "");
     if (!evidenceCurrent && !verifiedForwardChange) return player;
 
     const usage = evidenceCurrent && player.evidence?.participation === "played" ? weightedUsageMultiplier(player) : 1;
@@ -105,10 +107,10 @@ export function applyCurrentSeasonProjectionUpdates(
     const health = healthMultiplier(player);
     const team = teamContextMultiplier(player);
     const nonHealthWeekly = clamp(usage * role * team, 0.85, 1.15);
-    const weeklyMultiplier = clamp(nonHealthWeekly * health, 0.02, 1.15);
+    const weeklyMultiplier = health === 0 ? 0 : clamp(nonHealthWeekly * health, 0.02, 1.15);
     const rosRoleMultiplier = 1 + (nonHealthWeekly - 1) * 0.6;
     const rosHealth = rosHealthMultiplier(player, options.capturedAt, remainingGames);
-    const rosMultiplier = clamp(rosRoleMultiplier * rosHealth, 0.25, 1.1);
+    const rosMultiplier = rosHealth === 0 ? 0 : clamp(rosRoleMultiplier * rosHealth, 0.25, 1.1);
     const sources = [...new Set([
       ...(evidenceCurrent ? [player.evidence!.source] : []),
       ...(player.advancedUsage?.sources ?? []),

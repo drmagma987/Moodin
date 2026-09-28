@@ -8,21 +8,21 @@ import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
  */
 export const activeWeeklySlate = {
   season: leagueSourceOfTruth.season,
-  week: 2,
-  completedGames: 16,
+  week: 3,
+  completedGames: 15,
   scheduledGames: 16,
-  capturedAt: "2026-09-22T11:00:00-04:00",
-  latestGame: "Week 2 complete · all 16 games final",
-  evidenceWeight: 0.22,
-  pendingTeams: [],
+  capturedAt: "2026-09-28T10:31:38-04:00",
+  latestGame: "Week 3 through Sunday night · MNF pending",
+  evidenceWeight: 0.26,
+  pendingTeams: ["PHI", "CHI"],
   sources: [
     {
       label: "nflverse 2026 weekly player stats",
       url: "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_2026.csv",
     },
     {
-      label: "NFL Week 2 schedule",
-      url: "https://www.nfl.com/schedules/2026/by-week/week-2",
+      label: "NFL Week 3 schedule",
+      url: "https://www.nfl.com/schedules/2026/by-week/week-3",
     },
   ],
 } as const;

@@ -5586,6 +5586,24 @@ test("current-season projections are provenance-backed, conservative, and stable
   assert.ok(healthyObserved.rosProjection.p50 < healthyObserved.projectionUpdate!.baselineRos.p50, "ROS removes the completed week");
 });
 
+test("season-ending RB news zeros the injured player and conservatively splits successor value", () => {
+  const snapshot = buildPdfRosterInSeasonSnapshot();
+  const options = { week: 3, capturedAt: "2026-09-28T10:31:38-04:00", observationWeight: 0.26 };
+  const updated = applyCurrentSeasonProjectionUpdates(snapshot.players, options);
+  const byName = new Map(updated.map((player) => [player.player.fullName, player] as const));
+  const achane = byName.get("De'Von Achane");
+  const gordon = byName.get("Ollie Gordon II");
+  const wright = byName.get("Jaylen Wright");
+
+  assert.equal(achane?.weeklyProjection.p50, 0);
+  assert.equal(achane?.rosProjection.p50, 0);
+  assert.ok((gordon?.weeklyProjection.p50 ?? 0) > (wright?.weeklyProjection.p50 ?? 0));
+  assert.equal(gordon?.injuryOpportunity?.successorVerified, true);
+  assert.equal(wright?.injuryOpportunity?.successorVerified, true);
+  assert.equal(gordon?.opportunityContext?.stability, "contingent");
+  assert.equal(wright?.opportunityContext?.stability, "uncertain");
+});
+
 test("weekly expert context excludes stale ranks instead of silently reusing them", () => {
   assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-22T13:00:00-04:00")).current, true);
   assert.equal(getWeeklyWaiverExpertSignal("Jonah Coleman", Date.parse("2026-09-22T13:00:00-04:00"))?.sourceCount, 2);

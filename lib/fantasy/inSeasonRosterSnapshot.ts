@@ -9,7 +9,7 @@ import type {
 
 export const inSeasonRosterSnapshotMeta = {
   source: "Yahoo Starting Rosters PDF",
-  capturedAt: "2026-09-23T10:22:09-04:00",
+  capturedAt: "2026-09-28T10:31:38-04:00",
   week: 3,
 } as const;
 
@@ -17,7 +17,7 @@ export const inSeasonRosterSnapshotTeams = [
   {
     teamId: "dirty-sanchez",
     name: "Dirty Sanchez",
-    players: ["Jaxson Dart", "Jonathan Taylor", "De'Von Achane", "Zay Flowers", "Rashee Rice", "Jameson Williams", "Juwan Johnson", "Ashton Jeanty", "Mike Evans", "Cam Little", "George Kittle", "Trevor Lawrence", "Quentin Johnston", "Matthew Golden", "Keaton Mitchell", "Malik Willis"],
+    players: ["Trevor Lawrence", "Jonathan Taylor", "Ashton Jeanty", "Rashee Rice", "Matthew Golden", "Jameson Williams", "George Kittle", "De'Von Achane", "Mike Evans", "Cam Little", "Zay Flowers", "Juwan Johnson", "Quentin Johnston", "Keaton Mitchell", "Malik Willis", "Xavier Worthy"],
   },
   {
     teamId: "dakked-raw",
@@ -50,22 +50,22 @@ export const inSeasonRosterSnapshotTeams = [
   {
     teamId: "juggalo-all-stars",
     name: "Juggalo All-Stars",
-    players: ["Justin Herbert", "Bijan Robinson", "Omarion Hampton", "Puka Nacua", "Ladd McConkey", "DJ Moore", "Sam LaPorta", "Bhayshul Tuten", "Chuba Hubbard", "Brandon Aubrey", "Rico Dowdle", "Chris Rodriguez Jr.", "Kaelon Black", "Dontayvion Wicks", "Marvin Harrison Jr.", "Jordyn Tyson", "Michael Pittman Jr."],
+    players: ["Justin Herbert", "Bijan Robinson", "Omarion Hampton", "Ladd McConkey", "DJ Moore", "Dontayvion Wicks", "Sam LaPorta", "Bhayshul Tuten", "Chuba Hubbard", "Brandon Aubrey", "Michael Pittman Jr.", "Puka Nacua", "Rico Dowdle", "Kaelon Black", "Marvin Harrison Jr.", "Kyler Murray", "Jordyn Tyson"],
   },
   {
     teamId: "njigba-please",
     name: "Njigba Please",
-    players: ["Patrick Mahomes", "Travis Etienne Jr.", "Quinshon Judkins", "Jaxon Smith-Njigba", "Malik Nabers", "Tetairoa McMillan", "Isaiah Likely", "Devaughn Vele", "Brock Bowers", "Tyler Loop", "Blake Corum", "Rashod Bateman", "Drake Maye", "Tyler Allgeier", "Tank Bigsby", "Jonah Coleman"],
+    players: ["Patrick Mahomes", "Travis Etienne Jr.", "Quinshon Judkins", "Jaxon Smith-Njigba", "Malik Nabers", "Tetairoa McMillan", "Isaiah Likely", "Devaughn Vele", "Brock Bowers", "Tyler Loop", "Blake Corum", "Rashod Bateman", "Drake Maye", "Tyler Allgeier", "Tank Bigsby", "Malik Washington"],
   },
   {
     teamId: "fc-netanyah00",
     name: "FC Netanyah00",
-    players: ["Dak Prescott", "Jahmyr Gibbs", "Jadarian Price", "Amon-Ra St. Brown", "DeVonta Smith", "Chris Olave", "Harold Fannin Jr.", "Romeo Doubs", "Josh Downs", "Eddy Pineiro", "Rome Odunze", "J.K. Dobbins", "Brock Purdy", "Caleb Douglas", "Denzel Boston", "Emanuel Wilson", "Isiah Pacheco"],
+    players: ["Brock Purdy", "Jahmyr Gibbs", "Jadarian Price", "Amon-Ra St. Brown", "Chris Olave", "Josh Downs", "Harold Fannin Jr.", "DeVonta Smith", "Romeo Doubs", "Eddy Pineiro", "Dak Prescott", "Rome Odunze", "J.K. Dobbins", "Caleb Douglas", "Denzel Boston", "Kenyon Sadiq", "Isiah Pacheco"],
   },
   {
     teamId: "peyton-and-brady-place",
     name: "Peyton and Brady place",
-    players: ["Joe Burrow", "Saquon Barkley", "Javonte Williams", "Justin Jefferson", "Ja'Marr Chase", "Terry McLaurin", "Kyle Pitts Sr.", "MarShawn Lloyd", "Deebo Samuel Sr.", "Harrison Butker", "Courtland Sutton", "Jordan Mason", "RJ Harvey", "Greg Dulcich", "Baker Mayfield", "Alvin Kamara", "Zach Charbonnet"],
+    players: ["Joe Burrow", "Saquon Barkley", "Javonte Williams", "Justin Jefferson", "Ja'Marr Chase", "Terry McLaurin", "Kyle Pitts Sr.", "MarShawn Lloyd", "Deebo Samuel Sr.", "Harrison Butker", "Courtland Sutton", "Jordan Mason", "RJ Harvey", "Baker Mayfield", "Alvin Kamara", "Oronde Gadsden", "Zach Charbonnet"],
   },
 ] as const;
 
@@ -77,6 +77,47 @@ const injuredReserveNames = new Set([
   "jordan mason",
   "michael pittman",
   "zach charbonnet",
+]);
+
+const currentPlayerContext = new Map<string, Partial<InSeasonPlayerSnapshot>>([
+  ["de von achane", {
+    injuryStatus: "Out for season",
+    projectedReturnDate: null,
+    opportunityContext: {
+      stability: "uncertain",
+      reason: "Manager-provided September 28 update says the knee injury is season-ending; keep ROS value at zero unless the diagnosis changes.",
+    },
+  }],
+  ["ollie gordon", {
+    currentRole: "competition",
+    opportunityContext: {
+      stability: "contingent",
+      reason: "Handled 84% of Miami's Week 3 offensive snaps after Achane exited, but Jaylen Wright was inactive with foot and stinger injuries.",
+    },
+  }],
+  ["jaylen wright", {
+    injuryStatus: "Questionable",
+    currentRole: "competition",
+    opportunityContext: {
+      stability: "uncertain",
+      reason: "Was Miami's listed RB2 before missing Week 3 with foot and stinger injuries; health and the post-Achane split remain unresolved.",
+    },
+  }],
+  ["jadarian price", {
+    currentRole: "competition",
+    opportunityContext: {
+      stability: "uncertain",
+      reason: "Week 3 fell to 28% of Seattle's snaps with five carries, three targets, and a lost fumble while Holani and Wilson each played 36%.",
+    },
+  }],
+  ["zach charbonnet", {
+    injuryStatus: "PUP",
+    projectedReturnDate: "2026-10-18",
+    opportunityContext: {
+      stability: "uncertain",
+      reason: "Eligible to return after Week 4, but Seattle had not opened his practice window as of September 23; public reporting points to mid-October.",
+    },
+  }],
 ]);
 
 function normalizeName(value: string) {
@@ -127,6 +168,7 @@ export function buildPdfRosterInSeasonSnapshot() {
     .map((candidate) => {
       const rosterTeamId = ownerByName.get(normalizeName(candidate.player.fullName)) ?? null;
       const baselineUsage = projectedUsage(candidate);
+      const currentContext = currentPlayerContext.get(normalizeName(candidate.player.fullName));
       return {
         player: candidate.player,
         projectionBasis: "preseason-prior",
@@ -151,8 +193,39 @@ export function buildPdfRosterInSeasonSnapshot() {
         projectedReturnDate: normalizeProjectedReturn(
           candidate.context?.qualitative?.evidence.find((evidence) => evidence.estimatedReturn)?.estimatedReturn,
         ),
+        ...currentContext,
       } satisfies InSeasonPlayerSnapshot;
     });
+
+  // Achane's season-ending absence opens real volume, but Miami has not shown
+  // that one healthy back inherits his full role. Reallocate only 62% of the
+  // prior (the existing RB injury-transfer rate), weighted toward the back who
+  // handled 84% of Week 3 snaps. The rest remains lost to committee friction,
+  // Malik Willis rushes, and a weak offense.
+  const achane = players.find((player) => normalizeName(player.player.fullName) === "de von achane");
+  const successorShares = new Map([["ollie gordon", 0.4], ["jaylen wright", 0.22]]);
+  if (achane) {
+    for (const player of players) {
+      const share = successorShares.get(normalizeName(player.player.fullName));
+      if (!share) continue;
+      player.weeklyProjection = {
+        p10: Number((player.weeklyProjection.p10 + achane.weeklyProjection.p10 * share).toFixed(2)),
+        p50: Number((player.weeklyProjection.p50 + achane.weeklyProjection.p50 * share).toFixed(2)),
+        p90: Number((player.weeklyProjection.p90 + achane.weeklyProjection.p90 * share).toFixed(2)),
+      };
+      player.rosProjection = {
+        p10: Number((player.rosProjection.p10 + achane.rosProjection.p10 * share).toFixed(2)),
+        p50: Number((player.rosProjection.p50 + achane.rosProjection.p50 * share).toFixed(2)),
+        p90: Number((player.rosProjection.p90 + achane.rosProjection.p90 * share).toFixed(2)),
+      };
+      player.injuryOpportunity = {
+        source: "Week 3 nflverse usage plus manager-provided Achane season-ending update",
+        capturedAt: inSeasonRosterSnapshotMeta.capturedAt,
+        confirmed: true,
+        successorVerified: true,
+      };
+    }
+  }
 
   const playerByName = new Map(players.map((player) => [normalizeName(player.player.fullName), player] as const));
   const teams: InSeasonTeamSnapshot[] = inSeasonRosterSnapshotTeams.map((team) => ({

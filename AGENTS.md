@@ -1173,3 +1173,11 @@ If checks cannot be run, say so clearly.
 - Connected the live evidence refresh to ffverse's play-level `ffopportunity` feed and now displays actual PPR/G, expected PPR/G, expected-minus-actual scoring, xFP trend, expected versus actual touchdowns, snap/route movement, confidence, ownership, and actionable classifications.
 - Kept a fail-transparent role-only mode when play-level xFP is unavailable, so the tool never fabricates expected production from coarse usage.
 - Verified Gadsden's intended classification with a synthetic two-week case, all 165 fantasy model tests, TypeScript, lint (existing bachelor-party font warning only), and the production build.
+
+### 2026-09-28
+
+- Refreshed the Fantasy Football Supertool from the 10:31 AM Yahoo starting-rosters PDF:
+  - updated all five roster pages and the six roster swaps since the September 23 snapshot
+  - advanced live evidence to Week 3 with 15 of 16 games final and Eagles-Bears explicitly pending
+  - added current Achane, Gordon, Wright, Price, and Charbonnet role/injury context without treating MNF absences as zeroes
+  - season-ending statuses now correctly zero weekly and rest-of-season projections instead of retaining the generic IR floor
