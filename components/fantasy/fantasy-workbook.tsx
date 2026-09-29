@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { InSeasonCommandCenterDataset, TransactionQueueEntry } from "@/lib/fantasy/types";
+import { weeklyWaiverContext } from "@/lib/fantasy/weeklyWaiverContext";
 import { applyWorkbookEvidenceResponse, DataSyncSheet, DraftArchiveSheet, NextGenStatsSheet, ProductionOpportunitySheet, TradesSheet, WaiverMarketSheet, WaiversSheet } from "./fantasy-workbook-sheets";
 import styles from "./fantasy-workbook.module.css";
 
@@ -202,7 +203,7 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
           <button className={`${styles.sheetButton} ${styles.sheetAdd}`} aria-label="Add worksheet">＋</button>
           {mode === "work" ? WORK_SHEETS.map((sheet) => <button key={sheet} className={`${styles.sheetButton} ${workSheet === sheet ? styles.sheetButtonActive : ""}`} onClick={() => setWorkSheet(sheet)}>{sheet}</button>) : FANTASY_SHEETS.map((sheet) => <button key={sheet.id} className={`${styles.sheetButton} ${fantasySheet === sheet.id ? styles.sheetButtonActive : ""}`} onClick={() => setFantasySheet(sheet.id)}>{sheet.label}</button>)}
         </nav>
-        <footer className={styles.statusBar}><span>{mode === "work" ? "Ready · AutoSave on · Esc loads Work view" : `Week ${dataset.evidenceStatus.week} · ${dataset.rosterSnapshot.source} · advisory only`}</span><span>{mode === "work" ? "Average: 87.1   Count: 12   Sum: 1,045" : `${dataset.leagueTeams.length} teams · ${dataset.players.filter((player) => player.availability !== "free-agent").length} rostered · ${dataset.players.filter((player) => player.availability === "free-agent").length} available · `}<Link className={styles.classicLink} href="/fantasy-football?ui=classic">Classic view</Link></span></footer>
+        <footer className={styles.statusBar}><span>{mode === "work" ? "Ready · AutoSave on · Esc loads Work view" : `Week ${dataset.evidenceStatus.week} final data → Week ${weeklyWaiverContext.week} decisions · ${dataset.rosterSnapshot.source}`}</span><span>{mode === "work" ? "Average: 87.1   Count: 12   Sum: 1,045" : `${dataset.leagueTeams.length} teams · ${dataset.players.filter((player) => player.availability !== "free-agent").length} rostered · ${dataset.players.filter((player) => player.availability === "free-agent").length} available · `}<Link className={styles.classicLink} href="/fantasy-football?ui=classic">Classic view</Link></span></footer>
       </div>
     </main>
   );
