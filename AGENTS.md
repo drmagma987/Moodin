@@ -1181,3 +1181,13 @@ If checks cannot be run, say so clearly.
   - advanced live evidence to Week 3 with 15 of 16 games final and Eagles-Bears explicitly pending
   - added current Achane, Gordon, Wright, Price, and Charbonnet role/injury context without treating MNF absences as zeroes
   - season-ending statuses now correctly zero weekly and rest-of-season projections instead of retaining the generic IR floor
+
+### 2026-09-29
+
+- Closed the Week 3 evidence cycle and refreshed every in-season fantasy worksheet for Week 4:
+  - marked all 16 Week 3 games final and incorporated the Eagles-Bears MNF box-score and snap data
+  - replaced Week 3 waiver-market guidance with current Week 4 RotoBaller, FantasyPros, and NFL Fantasy rankings and bid context
+  - added explicit usage-change and recommended-action columns plus usage-to-signal-to-recommendation explanations in Waivers, xFP Monitor, and Trade Lab
+  - fixed stale prior-week advanced-usage fields from contaminating newly refreshed weekly evidence
+  - verified the live model prioritizes Ollie Gordon II and Braelon Allen for FC Netanyah00, with Yahoo ownership filtering preserved
+  - verified with canonical league integrity, 166 fantasy model tests, TypeScript, lint (existing bachelor-party font warning only), and the production build
