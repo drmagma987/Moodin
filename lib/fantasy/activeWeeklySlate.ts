@@ -9,12 +9,12 @@ import { leagueSourceOfTruth } from "@/lib/fantasy/leagueSourceOfTruth";
 export const activeWeeklySlate = {
   season: leagueSourceOfTruth.season,
   week: 3,
-  completedGames: 15,
+  completedGames: 16,
   scheduledGames: 16,
-  capturedAt: "2026-09-28T10:31:38-04:00",
-  latestGame: "Week 3 through Sunday night · MNF pending",
+  capturedAt: "2026-09-29T09:30:00-04:00",
+  latestGame: "Week 3 complete · 16 of 16 games final",
   evidenceWeight: 0.26,
-  pendingTeams: ["PHI", "CHI"],
+  pendingTeams: [],
   sources: [
     {
       label: "nflverse 2026 weekly player stats",

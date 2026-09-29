@@ -140,6 +140,13 @@ export function applyWeeklyEvidenceBundle(players: InSeasonPlayerSnapshot[], bun
       context: matchStatus(bundle.metadata !== undefined, context, true) });
     if (validBox || validSnaps) {
       observedPlayers += 1;
+      // Advanced rates are exact-week denominators. Never carry routes, RYOE,
+      // or Next Gen metrics from an older week beside a newly matched box
+      // score; that creates internally impossible ratios and can suppress an
+      // otherwise valid waiver or trade decision.
+      if (player.advancedUsage && player.advancedUsage.week !== bundle.week) {
+        delete player.advancedUsage;
+      }
       const previousAge = player.evidence ? Date.parse(bundle.capturedAt) - Date.parse(player.evidence.capturedAt) : NaN;
       const previous = player.evidence?.week === bundle.week && player.evidence.source.trim() && previousAge >= -86_400_000 && previousAge <= 14 * 86_400_000 ? player.evidence : undefined;
       player.evidence = { week: bundle.week, capturedAt: bundle.capturedAt, source: "nflverse weekly stats / PFR snaps",

@@ -1216,6 +1216,7 @@ export function buildWaiverRecommendationSnapshots(
           ...claim.warnings,
           ...(expertSignal?.rotoballer ? [`RotoBaller Week ${weeklyWaiverContext.week}: #${expertSignal.rotoballer.rank}, ${expertSignal.rotoballer.move}.`] : []),
           ...(expertSignal?.fantasyPros ? [`FantasyPros Week ${weeklyWaiverContext.week} PPR highlighted rank: #${expertSignal.fantasyPros.rank}; $${expertSignal.fantasyPros.trueValue} true value on a $100 budget.`] : []),
+          ...(expertSignal?.nflRank ? [`NFL Fantasy Week ${weeklyWaiverContext.week} overall target rank: #${expertSignal.nflRank}.`] : []),
           ...(verifiedRoleBreakout ? [`Verified role breakout: ${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of offensive snaps.`] : []),
           `Trend-adjusted starter delta: ${starterDelta >= 0 ? "+" : ""}${starterDelta.toFixed(1)}.`,
           `Weekly median delta versus ${dropPlayer?.player.fullName ?? "best drop"}: ${weeklyDelta >= 0 ? "+" : ""}${weeklyDelta.toFixed(1)}.`,

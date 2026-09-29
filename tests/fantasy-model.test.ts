@@ -4213,7 +4213,11 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   const playersById = new Map(dataset.players.map((player) => [player.player.id, player] as const));
 
   assert.equal(dataset.evidenceStatus.week, activeWeeklySlate.week);
-  assert.equal(dataset.actionQueue.length, 0, "the server snapshot fails closed until current-week evidence refreshes in the client");
+  assert.ok(dataset.actionQueue.length > 0, "verified Week 3 injury-opportunity evidence can now power the server snapshot");
+  assert.ok(dataset.actionQueue.every((entry) => entry.proposedTransaction.kind !== "add-drop"
+    || entry.proposedTransaction.add.every((player) => player.playerId
+      ? playersById.get(player.playerId)?.availability === "free-agent"
+      : false)));
   assert.ok(dataset.waiverRecommendations.length > 0, "research candidates remain visible");
   assert.ok(dataset.waiverRecommendations.filter((idea) => idea.verdict === "bid" || idea.verdict === "priority").every((idea) => idea.coverage?.actionable));
   assert.ok(dataset.waiverRecommendations.filter((idea) => !idea.coverage?.actionable).every((idea) => idea.faabRange === null && idea.dropPlayerId === null));
@@ -5605,10 +5609,10 @@ test("season-ending RB news zeros the injured player and conservatively splits s
 });
 
 test("weekly expert context excludes stale ranks instead of silently reusing them", () => {
-  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-22T13:00:00-04:00")).current, true);
-  assert.equal(getWeeklyWaiverExpertSignal("Jonah Coleman", Date.parse("2026-09-22T13:00:00-04:00"))?.sourceCount, 2);
-  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-10-01T12:00:00-04:00")).current, false);
-  assert.equal(getWeeklyWaiverExpertSignal("Jonah Coleman", Date.parse("2026-10-01T12:00:00-04:00")), undefined);
+  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-29T13:00:00-04:00")).current, true);
+  assert.equal(getWeeklyWaiverExpertSignal("Ollie Gordon II", Date.parse("2026-09-29T13:00:00-04:00"))?.sourceCount, 3);
+  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-10-07T12:00:00-04:00")).current, false);
+  assert.equal(getWeeklyWaiverExpertSignal("Ollie Gordon II", Date.parse("2026-10-07T12:00:00-04:00")), undefined);
 });
 
 test("optional efficiency gaps, inactive players and kickers do not block baseline evaluation", () => {

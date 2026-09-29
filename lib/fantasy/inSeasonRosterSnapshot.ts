@@ -80,6 +80,26 @@ const injuredReserveNames = new Set([
 ]);
 
 const currentPlayerContext = new Map<string, Partial<InSeasonPlayerSnapshot>>([
+  ["breece hall", {
+    injuryStatus: "Questionable",
+    opportunityContext: {
+      stability: "uncertain",
+      reason: "Week to week after a Week 3 quad injury and MRI; the Jets have not established a return date.",
+    },
+  }],
+  ["braelon allen", {
+    currentRole: "competition",
+    injuryOpportunity: {
+      source: "NFL and FantasyPros Week 4 reports on Breece Hall's week-to-week quad injury",
+      capturedAt: "2026-09-29T09:30:00-04:00",
+      confirmed: true,
+      successorVerified: true,
+    },
+    opportunityContext: {
+      stability: "contingent",
+      reason: "Hall's week-to-week quad injury creates the opening; Allen played 52% of Week 3 snaps but had only seven opportunities, so the projected lead role remains contingent.",
+    },
+  }],
   ["de von achane", {
     injuryStatus: "Out for season",
     projectedReturnDate: null,
