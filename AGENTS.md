@@ -516,6 +516,11 @@ Use this section for intermittent progress notes between chat windows. Prefer da
     squad setup currently use mouse, trackpad, or keyboard
   - kept the recommended layout visible and editable even before a controller
     is detected
+- Made controller setup impossible to confuse with operating-system settings:
+  - added a prominent `Using a controller? Start here` callout directly below
+    the VIFA main-menu modes
+  - renamed the footer action to `Controller setup & help` and explicitly says
+    both on the menu and inside the guide that setup happens on the VIFA webpage
 
 Future Codex sessions should update this file when they make meaningful feature, architecture, deployment, or gameplay-balance changes.
 

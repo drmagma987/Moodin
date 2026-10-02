@@ -615,6 +615,25 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                 onClick={() => startMode('practice')}
               />
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={openSettings}
+                    className="mt-3 flex w-full items-center gap-3 border border-[#63841e] bg-[#263238] px-4 py-3 text-left shadow-[0_4px_10px_rgba(36,50,55,0.25)] transition-colors hover:bg-[#344249] sm:mt-4"
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#9ed43d] text-[#202b30]">
+                      <Gamepad2 size={22} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <b className="block font-heading text-xs uppercase tracking-[0.15em] text-white sm:text-sm">
+                        Using a controller? Start here
+                      </b>
+                      <span className="mt-0.5 block font-body text-[11px] leading-snug text-[#d9e1e1] sm:text-xs">
+                        Click this box inside VIFA—not your computer settings—to test buttons and choose controls.
+                      </span>
+                    </span>
+                    <span className="font-display text-xl text-[#a9dc49]" aria-hidden="true">▶</span>
+                  </button>
                 </div>
               </div>
 
@@ -632,9 +651,9 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                 <button
                   type="button"
                   onClick={openSettings}
-                  className="flex items-center gap-2 font-heading text-[10px] uppercase tracking-wider text-[#4b5b62] hover:text-[#668c20] sm:text-xs"
+                  className="flex items-center gap-2 rounded border border-[#819496] bg-[#edf2ef] px-2 py-1 font-heading text-[9px] uppercase tracking-wider text-[#344248] hover:border-[#668c20] hover:text-[#668c20] sm:px-3 sm:text-xs"
                 >
-                  <Settings size={16} /> Controls & help
+                  <Settings size={16} /> Controller setup &amp; help
                 </button>
               </div>
             </div>
@@ -1161,7 +1180,9 @@ function SettingsModal({
 
         <div className="overflow-y-auto px-6 py-4">
           <div className="mb-5 rounded-xl border border-volt-500/25 bg-volt-500/5 px-4 py-3 font-body text-sm leading-relaxed text-night-200">
-            <b className="text-white">This screen changes on-pitch controls only.</b>{' '}
+            <b className="text-white">You opened the correct VIFA screen.</b>{' '}
+            This is part of the game webpage—it is not a computer-settings
+            window. This screen changes on-pitch controls only.{' '}
             Use your mouse, trackpad, or keyboard to choose teams and build the
             squad. During the match, you can use a controller, keyboard, or both.
             Scroll through this page to see every action before you play.
