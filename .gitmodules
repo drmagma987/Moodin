@@ -1,0 +1,3 @@
+[submodule "vendor/open-soccer"]
+	path = vendor/open-soccer
+	url = https://github.com/modelence/open-soccer.git

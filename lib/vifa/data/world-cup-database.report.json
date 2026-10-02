@@ -1,0 +1,488 @@
+{
+  "schemaVersion": 3,
+  "scope": "Men's World Cup teams and squads from 1982 onward, plus the current VIFA 2026 teams",
+  "matchSummary": {
+    "1982": {
+      "teams": 24,
+      "players": 526,
+      "identityMatches": 0,
+      "identityMatchRate": 0,
+      "completeCards": 0,
+      "completeCardRate": 0,
+      "playableTeams": 0,
+      "playableTeamCodes": [],
+      "estimatedCards": 0,
+      "ratingSourceCounts": {
+        "unavailable": 526
+      }
+    },
+    "1986": {
+      "teams": 24,
+      "players": 528,
+      "identityMatches": 0,
+      "identityMatchRate": 0,
+      "completeCards": 0,
+      "completeCardRate": 0,
+      "playableTeams": 0,
+      "playableTeamCodes": [],
+      "estimatedCards": 0,
+      "ratingSourceCounts": {
+        "unavailable": 528
+      }
+    },
+    "1990": {
+      "teams": 24,
+      "players": 528,
+      "identityMatches": 0,
+      "identityMatchRate": 0,
+      "completeCards": 0,
+      "completeCardRate": 0,
+      "playableTeams": 0,
+      "playableTeamCodes": [],
+      "estimatedCards": 0,
+      "ratingSourceCounts": {
+        "unavailable": 528
+      }
+    },
+    "1994": {
+      "teams": 24,
+      "players": 528,
+      "identityMatches": 0,
+      "identityMatchRate": 0,
+      "completeCards": 0,
+      "completeCardRate": 0,
+      "playableTeams": 0,
+      "playableTeamCodes": [],
+      "estimatedCards": 0,
+      "ratingSourceCounts": {
+        "unavailable": 528
+      }
+    },
+    "1998": {
+      "teams": 32,
+      "players": 705,
+      "identityMatches": 0,
+      "identityMatchRate": 0,
+      "completeCards": 0,
+      "completeCardRate": 0,
+      "playableTeams": 0,
+      "playableTeamCodes": [],
+      "estimatedCards": 0,
+      "ratingSourceCounts": {
+        "unavailable": 705
+      }
+    },
+    "2002": {
+      "teams": 32,
+      "players": 736,
+      "identityMatches": 0,
+      "identityMatchRate": 0,
+      "completeCards": 0,
+      "completeCardRate": 0,
+      "playableTeams": 0,
+      "playableTeamCodes": [],
+      "estimatedCards": 0,
+      "ratingSourceCounts": {
+        "unavailable": 736
+      }
+    },
+    "2006": {
+      "teams": 32,
+      "players": 736,
+      "identityMatches": 633,
+      "identityMatchRate": 0.8601,
+      "completeCards": 548,
+      "completeCardRate": 0.7446,
+      "playableTeams": 0,
+      "playableTeamCodes": [],
+      "estimatedCards": 0,
+      "ratingSourceCounts": {
+        "unavailable": 188,
+        "fifa-model-nearest-derived": 87,
+        "fifa-model-interpolated": 461
+      }
+    },
+    "2010": {
+      "teams": 32,
+      "players": 736,
+      "identityMatches": 683,
+      "identityMatchRate": 0.928,
+      "completeCards": 686,
+      "completeCardRate": 0.9321,
+      "playableTeams": 32,
+      "playableTeamCodes": [
+        "DZA",
+        "ARG",
+        "AUS",
+        "BRA",
+        "CMR",
+        "CHL",
+        "DNK",
+        "ENG",
+        "FRA",
+        "DEU",
+        "GHA",
+        "GRC",
+        "HND",
+        "ITA",
+        "CIV",
+        "JPN",
+        "MEX",
+        "NLD",
+        "NZL",
+        "NGA",
+        "PRK",
+        "PRY",
+        "PRT",
+        "SRB",
+        "SVK",
+        "SVN",
+        "ZAF",
+        "KOR",
+        "ESP",
+        "CHE",
+        "USA",
+        "URY"
+      ],
+      "estimatedCards": 9,
+      "ratingSourceCounts": {
+        "unavailable": 50,
+        "fifa-model-derived": 540,
+        "fifa-model-nearest-derived": 71,
+        "fifa-model-interpolated": 66,
+        "vifa-tournament-estimate": 9
+      }
+    },
+    "2014": {
+      "teams": 32,
+      "players": 736,
+      "identityMatches": 685,
+      "identityMatchRate": 0.9307,
+      "completeCards": 688,
+      "completeCardRate": 0.9348,
+      "playableTeams": 32,
+      "playableTeamCodes": [
+        "DZA",
+        "ARG",
+        "AUS",
+        "BEL",
+        "BIH",
+        "BRA",
+        "CMR",
+        "CHL",
+        "COL",
+        "CRI",
+        "HRV",
+        "ECU",
+        "ENG",
+        "FRA",
+        "DEU",
+        "GHA",
+        "GRC",
+        "HND",
+        "IRN",
+        "ITA",
+        "CIV",
+        "JPN",
+        "MEX",
+        "NLD",
+        "NGA",
+        "PRT",
+        "RUS",
+        "KOR",
+        "ESP",
+        "CHE",
+        "USA",
+        "URY"
+      ],
+      "estimatedCards": 3,
+      "ratingSourceCounts": {
+        "unavailable": 48,
+        "fifa-model-derived": 647,
+        "fifa-model-nearest-derived": 38,
+        "vifa-tournament-estimate": 3
+      }
+    },
+    "2018": {
+      "teams": 32,
+      "players": 736,
+      "identityMatches": 655,
+      "identityMatchRate": 0.8899,
+      "completeCards": 664,
+      "completeCardRate": 0.9022,
+      "playableTeams": 32,
+      "playableTeamCodes": [
+        "ARG",
+        "AUS",
+        "BEL",
+        "BRA",
+        "COL",
+        "CRI",
+        "HRV",
+        "DNK",
+        "EGY",
+        "ENG",
+        "FRA",
+        "DEU",
+        "ISL",
+        "IRN",
+        "JPN",
+        "MEX",
+        "MAR",
+        "NGA",
+        "PAN",
+        "PER",
+        "POL",
+        "PRT",
+        "RUS",
+        "SAU",
+        "SEN",
+        "SRB",
+        "KOR",
+        "ESP",
+        "SWE",
+        "CHE",
+        "TUN",
+        "URY"
+      ],
+      "estimatedCards": 11,
+      "ratingSourceCounts": {
+        "fifa-18-published-gk-adapter": 75,
+        "fifa-18-published": 578,
+        "unavailable": 72,
+        "vifa-tournament-estimate": 11
+      }
+    },
+    "2022": {
+      "teams": 32,
+      "players": 831,
+      "identityMatches": 704,
+      "identityMatchRate": 0.8472,
+      "completeCards": 721,
+      "completeCardRate": 0.8676,
+      "playableTeams": 32,
+      "playableTeamCodes": [
+        "ARG",
+        "AUS",
+        "BEL",
+        "BRA",
+        "CMR",
+        "CAN",
+        "CRI",
+        "HRV",
+        "DNK",
+        "ECU",
+        "ENG",
+        "FRA",
+        "DEU",
+        "GHA",
+        "IRN",
+        "JPN",
+        "MEX",
+        "MAR",
+        "NLD",
+        "POL",
+        "PRT",
+        "QAT",
+        "SAU",
+        "SEN",
+        "SRB",
+        "KOR",
+        "ESP",
+        "CHE",
+        "TUN",
+        "USA",
+        "URY",
+        "WAL"
+      ],
+      "estimatedCards": 19,
+      "ratingSourceCounts": {
+        "fifa-22-published-gk-adapter": 81,
+        "fifa-22-published": 621,
+        "unavailable": 110,
+        "vifa-tournament-estimate": 19
+      }
+    },
+    "2026": {
+      "teams": 48,
+      "players": 528,
+      "identityMatches": 357,
+      "identityMatchRate": 0.6761,
+      "completeCards": 528,
+      "completeCardRate": 1,
+      "playableTeams": 48,
+      "playableTeamCodes": [
+        "ALG",
+        "ARG",
+        "AUS",
+        "AUT",
+        "BEL",
+        "BIH",
+        "BRA",
+        "CAN",
+        "CPV",
+        "COL",
+        "CRO",
+        "CUW",
+        "CZE",
+        "COD",
+        "ECU",
+        "EGY",
+        "ENG",
+        "FRA",
+        "GER",
+        "GHA",
+        "HAI",
+        "IRN",
+        "IRQ",
+        "CIV",
+        "JPN",
+        "JOR",
+        "MEX",
+        "MAR",
+        "NED",
+        "NZL",
+        "NOR",
+        "PAN",
+        "PAR",
+        "POR",
+        "QAT",
+        "KSA",
+        "SCO",
+        "SEN",
+        "RSA",
+        "KOR",
+        "ESP",
+        "SWE",
+        "SUI",
+        "TUN",
+        "TUR",
+        "USA",
+        "URU",
+        "UZB"
+      ],
+      "estimatedCards": 0,
+      "ratingSourceCounts": {
+        "vifa-manual": 171,
+        "fc-26-published": 328,
+        "fc-26-published-gk-adapter": 29
+      }
+    }
+  },
+  "publishedFormulaValidation": {
+    "fifa18": {
+      "pac": {
+        "compared": 15935,
+        "exactRate": 1,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0
+      },
+      "sho": {
+        "compared": 15935,
+        "exactRate": 0.9974,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0026
+      },
+      "pas": {
+        "compared": 15935,
+        "exactRate": 0.9934,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0066
+      },
+      "dri": {
+        "compared": 15935,
+        "exactRate": 0.5706,
+        "withinOneRate": 0.9685,
+        "meanAbsoluteError": 0.4618
+      },
+      "def": {
+        "compared": 15935,
+        "exactRate": 0.9045,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0955
+      },
+      "phy": {
+        "compared": 15935,
+        "exactRate": 1,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0
+      }
+    },
+    "fifa22": {
+      "pac": {
+        "compared": 17107,
+        "exactRate": 1,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0
+      },
+      "sho": {
+        "compared": 17107,
+        "exactRate": 0.9967,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0033
+      },
+      "pas": {
+        "compared": 17107,
+        "exactRate": 0.9922,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0078
+      },
+      "dri": {
+        "compared": 17107,
+        "exactRate": 0.9978,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0022
+      },
+      "def": {
+        "compared": 17107,
+        "exactRate": 0.9047,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0953
+      },
+      "phy": {
+        "compared": 17107,
+        "exactRate": 1,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0
+      }
+    },
+    "fc26": {
+      "pac": {
+        "compared": 16343,
+        "exactRate": 1,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0
+      },
+      "sho": {
+        "compared": 16343,
+        "exactRate": 0.9968,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0032
+      },
+      "pas": {
+        "compared": 16343,
+        "exactRate": 0.9916,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0084
+      },
+      "dri": {
+        "compared": 16343,
+        "exactRate": 0.9976,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0024
+      },
+      "def": {
+        "compared": 16343,
+        "exactRate": 0.9026,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0.0974
+      },
+      "phy": {
+        "compared": 16343,
+        "exactRate": 1,
+        "withinOneRate": 1,
+        "meanAbsoluteError": 0
+      }
+    }
+  }
+}

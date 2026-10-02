@@ -18,6 +18,44 @@
   --font-mono: var(--font-mono);
 }
 
+@theme {
+  --font-display: "Arial Narrow", "SF Pro Display", sans-serif;
+  --font-heading: "Arial Narrow", "SF Pro Display", sans-serif;
+  --font-body: "SF Pro Text", "Segoe UI", sans-serif;
+
+  --color-night-950: #070b10;
+  --color-night-900: #0c1219;
+  --color-night-800: #131c27;
+  --color-night-700: #1e2b3a;
+  --color-night-600: #2c3e52;
+  --color-night-500: #5d738c;
+  --color-night-400: #8295ab;
+  --color-night-300: #a6b6c8;
+  --color-night-200: #c6d2de;
+  --color-volt-500: #c6ff2e;
+  --color-volt-400: #d6ff5e;
+  --color-volt-300: #e6ff8f;
+
+  --animate-fade-in: vifa-fade-in 0.5s ease-out both;
+  --animate-slide-up: vifa-slide-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pop: vifa-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes vifa-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes vifa-slide-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes vifa-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

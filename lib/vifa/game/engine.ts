@@ -1,0 +1,4023 @@
+// PitchKick — arcade football engine (11v11 vs CPU).
+// Pure canvas renderer around a fixed-step authoritative simulation. The
+// browser uses requestAnimationFrame only to schedule 30 Hz simulation ticks
+// and paint frames; gameplay outcomes do not depend on display refresh rate.
+// Simulation is flat 2D; the renderer (./render.ts) projects it with a
+// pseudo-3D TV broadcast camera (./projection.ts). World scale, geometry,
+// physics and gameplay tunables live in ./constants.ts, stateless helpers in
+// ./math.ts, and shared engine types in ./types.ts.
+
+import type { TeamData, Kit } from './teams/types';
+import {
+  DEFAULT_BINDINGS,
+  ACTION_ORDER,
+  type KeyBindings,
+} from './keybindings';
+import {
+  FIELD_W,
+  FIELD_H,
+  M,
+  goalTop,
+  goalBottom,
+  PLAYER_R,
+  BALL_R,
+  GRAVITY,
+  BOUNCE,
+  CONTROL_HEIGHT,
+  WALK_SPEED,
+  SPRINT_SPEED,
+  TEAMMATE_SPEED,
+  AWAY_CHASE_SPEED,
+  AWAY_CARRY_SPEED,
+  AWAY_FORMATION_SPEED,
+  RUN_SPEED,
+  PRESS_SPEED,
+  JOCKEY_SPEED,
+  TACKLE_LUNGE_SPEED,
+  SLIDE_LUNGE_SPEED,
+  CONTROL_DIST,
+  BALL_DECAY,
+  CHARGE_FULL,
+  KICK_BUFFER,
+  MATCH_DISPLAY_SECS,
+  MATCH_REAL_SECS,
+  ACCEL,
+  DRIBBLE_ACCEL,
+  TURN_RATE,
+  HAIR_COLORS,
+  SKIN_TONES,
+} from './constants';
+import { len, dist, clamp, distToSegment } from './math';
+import { precomputePlayerPhysicsScalars } from './ratings';
+import { CAM_MIN, CAM_MAX, CAM_Y_MIN, CAM_Y_MAX } from './projection';
+import type { Vec, Team, PlayerEntity, StateListener } from './types';
+import { renderScene } from './render';
+import {
+  FIXED_DT,
+  FIXED_TICK_RATE,
+  SeededRandom,
+  bitsToCodes,
+  codesToBits,
+  type EntityRef,
+  type InputFrame,
+  type MatchSnapshot,
+  type ReplayLog,
+} from './determinism';
+
+// Re-exports so consumers (e.g. HomePage) can import these from the engine entry.
+export type { TeamData } from './teams/types';
+export type { HudState } from './types';
+export { CANVAS_W, CANVAS_H } from './constants';
+
+const KICK_KEYS = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD']);
+const ACTION_KEYS = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ']);
+const MOVE_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'KeyE',
+  'KeyC',
+]);
+
+// Team line-ups are no longer hardcoded here — they come from the two
+// `TeamData` (home + away) passed into the engine. Each squad lists 11 players
+// (index 0 = GK) with formation positions as fractions of the field attacking
+// RIGHT; the away side is mirrored horizontally when built. See
+// `./teams/` for the per-country data.
+
+export class PitchKickGame {
+  private ctx: CanvasRenderingContext2D;
+  private raf = 0;
+  private last = 0;
+  private running = false;
+  private accumulator = 0;
+  private tick = 0;
+  private readonly seed: number;
+  private rng: SeededRandom;
+  private replayFrames: InputFrame[] = [];
+
+  private keys = new Set<string>();
+  private justPressed: string[] = [];
+  private justReleased: string[] = [];
+  /** Paused (e.g. settings popup open): the loop keeps rendering the frozen
+   *  frame but skips simulation + input. */
+  private paused = false;
+  /** Maps a user's physical KeyboardEvent.code to the engine's canonical code
+   *  (the default code for whichever action that key is bound to). Empty = use
+   *  the physical code as-is (default bindings). */
+  private keyRemap = new Map<string, string>();
+  private awayKeyRemap = new Map<string, string>();
+  private awayKeys = new Set<string>();
+  private awayJustPressed: string[] = [];
+  private awayJustReleased: string[] = [];
+  /** Kick key currently charging (FIFA: press charges, release kicks). */
+  private chargeKey: string | null = null;
+  private chargeTime = 0;
+  /** Q held when the charge began → loft the pass (Q+W = aerial through ball). */
+  private chargeLofted = false;
+  /** Buffered first-time kick: charge started before the ball arrived.
+   *  `bufferTimer` counts down the window; `kickPending` = key already
+   *  released, so fire the moment possession is gained. */
+  private bufferTimer = 0;
+  private kickPending = false;
+  private awayChargeKey: string | null = null;
+  private awayChargeTime = 0;
+  private awayChargeLofted = false;
+
+  private ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: BALL_R };
+  private homePlayers: PlayerEntity[] = [];
+  private awayPlayers: PlayerEntity[] = [];
+  /** Stable combined roster for hot loops; avoids per-tick spread arrays. */
+  private allPlayers: PlayerEntity[] = [];
+  private controlled!: PlayerEntity;
+  private awayControlled!: PlayerEntity;
+  /** The player Q would switch to (rendered as a hollow marker). */
+  private switchHint: PlayerEntity | null = null;
+  /** CPU's "active" player (carrier, else nearest to ball) — gets the away
+   *  selected-player indicator, mirroring FIFA showing both sides' names. */
+  private awayActive: PlayerEntity | null = null;
+
+  private owner: PlayerEntity | null = null;
+  private lastKicker: PlayerEntity | null = null;
+  private kickerLock = 0;
+  /** The teammate our last pass is travelling toward (becomes the controlled
+   *  player). While the pass is in flight this player gets "ball gravity":
+   *  their run is biased to meet the ball so a mistimed arrow press doesn't
+   *  make them run away from it. Cleared once possession resolves. */
+  private passReceiver: PlayerEntity | null = null;
+  /** The intended receiver of a LOFTED pass currently in flight. While the ball
+   *  is still airborne, only this player may gather it — a chipped/long pass
+   *  can't be plucked out of the air by a defender standing in the lane (it
+   *  flew over them). Cleared the moment the ball lands (updateBall) or on any
+   *  fresh non-lofted kick (afterKick). */
+  private aerialReceiver: PlayerEntity | null = null;
+  private cpuDecision = 0;
+  /** Protection window after winning the ball — can't be tackled. */
+  private stealProtect = 0;
+  /** The player who just lost a tackle can't immediately win the ball back. */
+  private dispossessed: PlayerEntity | null = null;
+  private dispossessedTimer = 0;
+  /** Standing tackle (D off the ball): active lunge window + commit cooldown. */
+  private tackleTimer = 0;
+  private tackleCooldown = 0;
+  private tackleDir: Vec = { x: 1, y: 0 };
+  /** Sliding tackle (Space off the ball): commit cooldown after a slide. */
+  private slideCooldown = 0;
+  private awayTackleTimer = 0;
+  private awayTackleCooldown = 0;
+  private awayTackleDir: Vec = { x: -1, y: 0 };
+  private awaySlideCooldown = 0;
+  /** Shared cooldown so CPU defenders don't spam poke-tackles every frame. */
+  private cpuTackleCd = 0;
+  /** Accumulated body-contact time on the carrier (auto jostle steal). */
+  private jostle = 0;
+  /** Grace window right after a kick: the ball is "in flight" and NOBODY can
+   *  claim it, so a just-struck shot/pass clears the cluster instead of being
+   *  instantly received by an opponent standing point-blank at the kicker. */
+  private ballFree = 0;
+  /** Manual keeper-rush window (home GK), set by pressing W without the ball —
+   *  the keeper charges off his line to claim/smother the ball (FIFA's "rush
+   *  keeper out"). Decays each frame; cleared the instant he gathers it. */
+  private gkRush = 0;
+  /** Which team last touched the ball (persists after the ball goes loose,
+   *  unlike `lastKicker` which is cleared on possession). Drives out-of-play
+   *  restart decisions: throw-in / goal kick / corner go to the right side. */
+  private lastTouchTeam: Team | null = null;
+
+  /** The player taking a throw-in (holds the ball overhead in both hands and
+   *  releases it as a hand THROW, not a foot kick). Null when not a throw-in. */
+  private throwInTaker: PlayerEntity | null = null;
+
+  private homeScore = 0;
+  private awayScore = 0;
+  /** Real seconds of play elapsed; drives the accelerated match clock. */
+  private elapsed = 0;
+  private message = '';
+  private messageTimer = 0;
+  private freeze = 0;
+  /** Out-of-play pause: when the ball crosses a line, it sits dead at the exit
+   *  point for a beat (so you SEE it go out) before the restart is set up. */
+  private outOfPlay = 0;
+  /** The restart to award when the out-of-play pause ends. */
+  private pendingRestart:
+    | {
+        team: Team;
+        spotX: number;
+        spotY: number;
+        label: string;
+        takerIsGK: boolean;
+        isThrowIn: boolean;
+      }
+    | null = null;
+  /** Goal celebration: holds play while the ball sits in the net and the
+   *  scoring side celebrates, before the restart. */
+  private celebration = 0;
+  private celebrateTeam: Team | null = null;
+  /** Which side kicks off once the celebration ends. */
+  private pendingKickoff: Team | null = null;
+  /** The player who scored (last kicker of the scoring team), runs off ahead. */
+  private scorer: PlayerEntity | null = null;
+  /** Per-side net ripple intensity (0..1), decays after a ball hits the net. */
+  private netRipple = { left: 0, right: 0 };
+  /** Attackers who were in an offside position at the instant of the last
+   *  pass. If one of them is the next teammate to touch the ball, the flag is
+   *  raised (FIFA: offside is only penalised when the player gets involved). */
+  private offsideFlags = new Set<PlayerEntity>();
+  /** TV camera x (field coordinates), follows the ball with smoothing. */
+  private camX = FIELD_W / 2;
+  /** TV camera depth (field coordinates), follows the ball vertically. */
+  private camY = FIELD_H / 2;
+
+  private listener: StateListener;
+
+  /** Selected nations driving the match (lineups, names, numbers, kits). */
+  readonly homeTeam: TeamData;
+  readonly awayTeam: TeamData;
+
+  /** Free-form practice: a handful of home players + a lone away keeper, with
+   *  no match structure (no clock, offside, throw-ins/corners or kickoffs) — a
+   *  low-pressure pitch to rehearse passing and shooting against a live GK. */
+  readonly practice: boolean;
+  readonly localMultiplayer: boolean;
+  readonly matchRealSeconds: number;
+
+  constructor(
+    canvas: HTMLCanvasElement,
+    listener: StateListener,
+    homeTeam: TeamData,
+    awayTeam: TeamData,
+    opts: {
+      practice?: boolean;
+      bindings?: KeyBindings;
+      localMultiplayer?: boolean;
+      awayBindings?: KeyBindings;
+      matchRealSeconds?: number;
+      seed?: number;
+    } = {},
+  ) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context unavailable');
+    this.ctx = ctx;
+    this.seed = (opts.seed ?? 0x56494641) >>> 0;
+    this.rng = new SeededRandom(this.seed);
+    this.listener = listener;
+    this.homeTeam = homeTeam;
+    this.awayTeam = awayTeam;
+    this.practice = opts.practice ?? false;
+    this.localMultiplayer = opts.localMultiplayer ?? false;
+    this.matchRealSeconds = opts.matchRealSeconds ?? MATCH_REAL_SECS;
+    if (opts.bindings) this.setBindings(opts.bindings);
+    if (opts.awayBindings) this.setAwayBindings(opts.awayBindings);
+
+    this.homePlayers = homeTeam.players.map((p, i) =>
+      this.makePlayer('home', p.pos, i),
+    );
+    this.awayPlayers = awayTeam.players.map((p, i) =>
+      this.makePlayer('away', { x: 1 - p.pos.x, y: p.pos.y }, i),
+    );
+    this.allPlayers = [...this.homePlayers, ...this.awayPlayers];
+    this.controlled = this.homePlayers[homeTeam.kickoffFwd];
+    this.awayControlled = this.awayPlayers[awayTeam.kickoffFwd];
+
+    this.resetKickoff('home');
+  }
+
+  private makePlayer(team: Team, frac: Vec, i: number): PlayerEntity {
+    const squad = (team === 'home' ? this.homeTeam : this.awayTeam).players[i];
+    const individualStats = squad.individualStats;
+    return {
+      x: frac.x * FIELD_W,
+      y: frac.y * FIELD_H,
+      vx: 0,
+      vy: 0,
+      r: PLAYER_R,
+      team,
+      anchor: { x: frac.x * FIELD_W, y: frac.y * FIELD_H },
+      facing: { x: team === 'home' ? 1 : -1, y: 0 },
+      animPhase: this.rng.next() * Math.PI * 2,
+      kickTimer: 0,
+      hair: HAIR_COLORS[(i + (team === 'away' ? 2 : 0)) % HAIR_COLORS.length],
+      skin: SKIN_TONES[(i + (team === 'away' ? 1 : 0)) % SKIN_TONES.length],
+      isGK: i === 0,
+      role: i === 0 ? 'GK' : i <= 4 ? 'DF' : i <= 8 ? 'MF' : 'ST',
+      num: squad.num,
+      name: squad.name,
+      individualStats,
+      overallRating: squad.overallRating,
+      ...precomputePlayerPhysicsScalars({ individualStats }),
+    };
+  }
+
+  private kitFor(p: PlayerEntity): Kit {
+    const t = p.team === 'home' ? this.homeTeam : this.awayTeam;
+    if (p.isGK) return t.gkKit;
+    // The visiting (away) side wears its change kit so the two outfield kits
+    // never clash with the home colours.
+    return p.team === 'away' ? t.awayKit : t.kit;
+  }
+
+  // ---- lifecycle ----------------------------------------------------------
+
+  start() {
+    if (this.running) return;
+    this.running = true;
+    window.addEventListener('keydown', this.onKeyDown);
+    window.addEventListener('keyup', this.onKeyUp);
+    this.last = performance.now();
+    this.accumulator = 0;
+    this.raf = requestAnimationFrame(this.loop);
+    this.emit();
+  }
+
+  stop() {
+    this.running = false;
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener('keydown', this.onKeyDown);
+    window.removeEventListener('keyup', this.onKeyUp);
+  }
+
+  /** Pause/resume the simulation (e.g. while the settings popup is open). The
+   *  render loop keeps drawing the frozen frame; input is ignored and any held
+   *  keys are released so nothing sticks when play resumes. */
+  setPaused(paused: boolean) {
+    this.paused = paused;
+    if (paused) {
+      this.keys.clear();
+      this.awayKeys.clear();
+      this.justPressed.length = 0;
+      this.justReleased.length = 0;
+      this.awayJustPressed.length = 0;
+      this.awayJustReleased.length = 0;
+      this.chargeKey = null;
+      this.chargeTime = 0;
+      this.awayChargeKey = null;
+      this.awayChargeTime = 0;
+    }
+  }
+
+  /** Apply user key bindings. Builds a physical→canonical remap so the rest of
+   *  the engine keeps reasoning in terms of the default codes. */
+  setBindings(bindings: KeyBindings) {
+    this.keyRemap.clear();
+    for (const action of ACTION_ORDER) {
+      const physical = bindings[action];
+      const canonical = DEFAULT_BINDINGS[action];
+      if (physical && physical !== canonical) {
+        this.keyRemap.set(physical, canonical);
+      }
+    }
+  }
+
+  private setAwayBindings(bindings: KeyBindings) {
+    this.awayKeyRemap.clear();
+    for (const action of ACTION_ORDER) {
+      const physical = bindings[action];
+      const canonical = DEFAULT_BINDINGS[action];
+      if (physical) this.awayKeyRemap.set(physical, canonical);
+    }
+  }
+
+  // ---- input --------------------------------------------------------------
+
+  private onKeyDown = (e: KeyboardEvent) => {
+    if (this.paused) return;
+    const awayCode = this.localMultiplayer
+      ? this.awayKeyRemap.get(e.code)
+      : undefined;
+    if (awayCode) {
+      e.preventDefault();
+      if (!e.repeat && ACTION_KEYS.has(awayCode)) {
+        this.awayJustPressed.push(awayCode);
+      }
+      this.awayKeys.add(awayCode);
+      return;
+    }
+    const code = this.keyRemap.get(e.code) ?? e.code;
+    if (MOVE_KEYS.has(code) || ACTION_KEYS.has(code)) e.preventDefault();
+    if (!e.repeat && ACTION_KEYS.has(code)) this.justPressed.push(code);
+    this.keys.add(code);
+  };
+
+  private onKeyUp = (e: KeyboardEvent) => {
+    if (this.paused) return;
+    const awayCode = this.localMultiplayer
+      ? this.awayKeyRemap.get(e.code)
+      : undefined;
+    if (awayCode) {
+      if (KICK_KEYS.has(awayCode)) this.awayJustReleased.push(awayCode);
+      this.awayKeys.delete(awayCode);
+      return;
+    }
+    const code = this.keyRemap.get(e.code) ?? e.code;
+    if (KICK_KEYS.has(code)) this.justReleased.push(code);
+    this.keys.delete(code);
+  };
+
+  private captureInputFrame(): InputFrame {
+    return {
+      tick: this.tick + 1,
+      home: {
+        held: codesToBits(this.keys),
+        pressed: codesToBits(this.justPressed),
+        released: codesToBits(this.justReleased),
+      },
+      away: {
+        held: codesToBits(this.awayKeys),
+        pressed: codesToBits(this.awayJustPressed),
+        released: codesToBits(this.awayJustReleased),
+      },
+    };
+  }
+
+  private applyInputFrame(frame: InputFrame) {
+    const expectedTick = this.tick + 1;
+    if (frame.tick !== expectedTick) {
+      throw new Error(
+        `VIFA input tick mismatch: expected ${expectedTick}, received ${frame.tick}`,
+      );
+    }
+    this.keys = new Set(bitsToCodes(frame.home.held));
+    this.justPressed = bitsToCodes(frame.home.pressed);
+    this.justReleased = bitsToCodes(frame.home.released);
+    this.awayKeys = new Set(bitsToCodes(frame.away.held));
+    this.awayJustPressed = bitsToCodes(frame.away.pressed);
+    this.awayJustReleased = bitsToCodes(frame.away.released);
+  }
+
+  private entityRef(player: PlayerEntity | null): EntityRef | null {
+    if (!player) return null;
+    const players = player.team === 'home' ? this.homePlayers : this.awayPlayers;
+    const index = players.indexOf(player);
+    return index >= 0 ? { team: player.team, index } : null;
+  }
+
+  exportReplay(): ReplayLog {
+    return {
+      version: 1,
+      seed: this.seed,
+      tickRate: FIXED_TICK_RATE,
+      frames: this.replayFrames.map((frame) => ({
+        tick: frame.tick,
+        home: { ...frame.home },
+        away: { ...frame.away },
+      })),
+    };
+  }
+
+  exportSnapshot(): MatchSnapshot {
+    const clonePlayer = (player: PlayerEntity): Record<string, unknown> =>
+      JSON.parse(JSON.stringify(player)) as Record<string, unknown>;
+    return {
+      version: 1,
+      tick: this.tick,
+      seed: this.seed,
+      rngState: this.rng.getState(),
+      score: { home: this.homeScore, away: this.awayScore },
+      elapsed: this.elapsed,
+      ball: { ...this.ball },
+      players: {
+        home: this.homePlayers.map(clonePlayer),
+        away: this.awayPlayers.map(clonePlayer),
+      },
+      possession: this.entityRef(this.owner),
+      controlled: this.entityRef(this.controlled) ?? { team: 'home', index: 0 },
+      awayControlled: this.entityRef(this.awayControlled) ?? {
+        team: 'away',
+        index: 0,
+      },
+      phase: {
+        freeze: this.freeze,
+        outOfPlay: this.outOfPlay,
+        celebration: this.celebration,
+        message: this.message,
+      },
+    };
+  }
+
+  // ---- helpers ------------------------------------------------------------
+
+  private resetKickoff(kickingTeam: Team) {
+    this.ball.x = FIELD_W / 2;
+    this.ball.y = FIELD_H / 2;
+    this.ball.z = 0;
+    this.ball.vx = 0;
+    this.ball.vy = 0;
+    this.ball.vz = 0;
+
+    for (const p of this.allPlayers) {
+      p.x = p.anchor.x;
+      p.y = p.anchor.y;
+      p.vx = p.vy = 0;
+      p.kickTimer = 0;
+      p.celebrating = false;
+      p.diveTimer = 0;
+      p.diveCooldown = 0;
+      p.throwing = false;
+      p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
+    }
+    this.throwInTaker = null;
+    this.outOfPlay = 0;
+    this.pendingRestart = null;
+
+    // Put the kicking team's forward on the ball.
+    const fwd =
+      kickingTeam === 'home'
+        ? this.homePlayers[this.homeTeam.kickoffFwd]
+        : this.awayPlayers[this.awayTeam.kickoffFwd];
+    fwd.x = FIELD_W / 2 + (kickingTeam === 'home' ? -34 : 34);
+    fwd.y = FIELD_H / 2;
+
+    if (kickingTeam === 'home')
+      this.controlled = this.homePlayers[this.homeTeam.kickoffFwd];
+    else if (this.localMultiplayer)
+      this.awayControlled = this.awayPlayers[this.awayTeam.kickoffFwd];
+
+    this.camX = FIELD_W / 2;
+    this.camY = FIELD_H / 2;
+
+    this.owner = null;
+    this.lastKicker = null;
+    this.lastTouchTeam = kickingTeam;
+    this.kickerLock = 0;
+    this.passReceiver = null;
+    this.aerialReceiver = null;
+    this.gkRush = 0;
+    this.stealProtect = 0;
+    this.dispossessed = null;
+    this.dispossessedTimer = 0;
+    this.markAssign.clear();
+    this.markTimer = 0;
+    this.chargeKey = null;
+    this.chargeTime = 0;
+    this.awayChargeKey = null;
+    this.awayChargeTime = 0;
+    this.bufferTimer = 0;
+    this.kickPending = false;
+    this.ballFree = 0;
+    this.offsideFlags.clear();
+    this.tackleTimer = 0;
+    this.tackleCooldown = 0;
+    this.slideCooldown = 0;
+    this.awayTackleTimer = 0;
+    this.awayTackleCooldown = 0;
+    this.awaySlideCooldown = 0;
+    for (const pl of this.allPlayers) {
+      pl.slideTimer = 0;
+    }
+    this.jostle = 0;
+    this.freeze = 0.9;
+    this.celebration = 0;
+    this.celebrateTeam = null;
+    this.pendingKickoff = null;
+    this.scorer = null;
+
+    if (this.practice) this.placePracticePlayers();
+  }
+
+  /** Free-form practice setup: home keeper on his line, a handful of outfielders
+   *  staged across the middle/attacking third, the lone away keeper guarding the
+   *  right-hand goal, and the ball on a central player's feet. No kickoff shape
+   *  — just space to knock it about and shoot at a live GK. */
+  private placePracticePlayers() {
+    const out = this.homePlayers.filter((p) => !p.isGK);
+    const xs = [FIELD_W * 0.45, FIELD_W * 0.6, FIELD_W * 0.5, FIELD_W * 0.62];
+    const ys = [FIELD_H * 0.22, FIELD_H * 0.4, FIELD_H * 0.6, FIELD_H * 0.78];
+    out.forEach((p, i) => {
+      p.x = xs[i % xs.length];
+      p.y = ys[i % ys.length];
+      p.anchor.x = p.x;
+      p.anchor.y = p.y;
+      p.vx = p.vy = 0;
+      p.facing = { x: 1, y: 0 };
+    });
+
+    const hgk = this.homePlayers[0];
+    hgk.x = hgk.anchor.x = M(4);
+    hgk.y = hgk.anchor.y = FIELD_H / 2;
+
+    const agk = this.awayPlayers[0];
+    agk.x = agk.anchor.x = FIELD_W - M(4);
+    agk.y = agk.anchor.y = FIELD_H / 2;
+
+    const starter =
+      out.length ? out[Math.floor(out.length / 2)] : this.homePlayers[0];
+    this.controlled = starter;
+    this.ball.x = starter.x + 14;
+    this.ball.y = starter.y;
+    this.ball.z = 0;
+    this.ball.vx = this.ball.vy = this.ball.vz = 0;
+    this.owner = starter;
+    this.lastTouchTeam = 'home';
+    this.camX = clamp(starter.x, CAM_MIN, CAM_MAX);
+    this.camY = clamp(starter.y, CAM_Y_MIN, CAM_Y_MAX);
+  }
+
+  /** Re-stage the practice pitch after a goal or the ball going out: put every
+   *  player back on their support marks and the ball on a central player, so
+   *  play resumes cleanly instead of leaving the pitch empty/stuck. */
+  private practiceResetBall() {
+    this.lastKicker = null;
+    this.kickerLock = 0;
+    this.passReceiver = null;
+    this.aerialReceiver = null;
+    this.ballFree = 0;
+    this.gkHoldTimer = 0;
+    this.placePracticePlayers();
+  }
+
+  private setMessage(msg: string, secs: number) {
+    this.message = msg;
+    this.messageTimer = secs;
+  }
+
+  private emit() {
+    this.listener({
+      homeScore: this.homeScore,
+      awayScore: this.awayScore,
+      clock: Math.min(
+        MATCH_DISPLAY_SECS,
+        Math.floor((this.elapsed / this.matchRealSeconds) * MATCH_DISPLAY_SECS),
+      ),
+      message: this.message,
+      possession: this.owner ? this.owner.team : 'none',
+      homePlayer: this.controlled
+        ? { num: this.controlled.num, name: this.controlled.name }
+        : null,
+      awayPlayer: this.awayActive
+        ? { num: this.awayActive.num, name: this.awayActive.name }
+        : null,
+      charge: this.chargeLevel(),
+      awayCharge: this.awayChargeKey
+        ? clamp(this.awayChargeTime / CHARGE_FULL, 0, 1)
+        : null,
+    });
+  }
+
+  private nearestTo(
+    players: PlayerEntity[],
+    pt: { x: number; y: number },
+    exclude?: PlayerEntity,
+  ): PlayerEntity | null {
+    let best: PlayerEntity | null = null;
+    let bestD = Infinity;
+    for (const p of players) {
+      if (p === exclude) continue;
+      const d = dist(p, pt);
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  private nearestOpponentDist(p: PlayerEntity): number {
+    const opps = p.team === 'home' ? this.awayPlayers : this.homePlayers;
+    let best = Infinity;
+    for (const o of opps) best = Math.min(best, dist(p, o));
+    return best;
+  }
+
+  // ---- movement helpers ---------------------------------------------------
+
+  /** Smoothly steer a player toward a desired velocity (inertia + turning).
+   *  `accel` defaults to ACCEL; pass DRIBBLE_ACCEL for the heavier ball-carrier. */
+  private steer(
+    p: PlayerEntity,
+    targetVx: number,
+    targetVy: number,
+    dt: number,
+    accel: number = ACCEL,
+  ) {
+    // PACE drives top speed: a quicker player reaches a higher target velocity
+    // for the same intent. Applying it here means every movement path (human
+    // input, chasing, formation runs) inherits the player's pace uniformly.
+    targetVx *= p.cachedPaceMultiplier;
+    targetVy *= p.cachedPaceMultiplier;
+    // ...and lends a little extra acceleration/agility off the mark.
+    const k = 1 - Math.exp(-accel * p.cachedAccelerationMultiplier * dt);
+    p.vx += (targetVx - p.vx) * k;
+    p.vy += (targetVy - p.vy) * k;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    const sp = Math.hypot(p.vx, p.vy);
+    if (sp > 25) this.faceToward(p, p.vx / sp, p.vy / sp, dt);
+    p.animPhase += sp * dt * 0.055;
+
+    this.clampToField(p);
+  }
+
+  /** Rotate facing toward a unit direction at a capped turn rate. */
+  private faceToward(p: PlayerEntity, dx: number, dy: number, dt: number) {
+    const cur = Math.atan2(p.facing.y, p.facing.x);
+    const tgt = Math.atan2(dy, dx);
+    let diff = tgt - cur;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const ang = cur + clamp(diff, -TURN_RATE * dt, TURN_RATE * dt);
+    p.facing = { x: Math.cos(ang), y: Math.sin(ang) };
+  }
+
+  private moveToward(p: PlayerEntity, t: Vec, speed: number, dt: number) {
+    const dx = t.x - p.x;
+    const dy = t.y - p.y;
+    const d = len(dx, dy);
+    // Slow into the target so AI players don't orbit/jitter.
+    const sp = d < 36 ? speed * (d / 36) : speed;
+    this.steer(p, (dx / d) * sp, (dy / d) * sp, dt);
+  }
+
+  /**
+   * Like moveToward but with NO slow-in — the player drives at full speed all
+   * the way to the target. Used to CHASE a ball-carrier: the defender must
+   * barge into body contact (and win the jostle), not decelerate and hover a
+   * few px behind forever (which let a dribbler run untouched).
+   */
+  private driveToward(p: PlayerEntity, t: Vec, speed: number, dt: number) {
+    const dx = t.x - p.x;
+    const dy = t.y - p.y;
+    const d = len(dx, dy) || 1;
+    this.steer(p, (dx / d) * speed, (dy / d) * speed, dt);
+  }
+
+  // ---- update -------------------------------------------------------------
+
+  private loop = (now: number) => {
+    if (!this.running) return;
+    let frameTime = (now - this.last) / 1000;
+    this.last = now;
+    if (frameTime > 0.25) frameTime = 0.25;
+
+    if (!this.paused) {
+      this.accumulator += frameTime;
+      let steps = 0;
+      while (this.accumulator >= FIXED_DT && steps < 8) {
+        this.advanceTick();
+        this.accumulator -= FIXED_DT;
+        steps += 1;
+      }
+      if (steps === 8) this.accumulator = 0;
+      this.render();
+      this.emit();
+    }
+    this.raf = requestAnimationFrame(this.loop);
+  };
+
+  /** Advance exactly one authoritative simulation tick. Passing a frame is the
+   * replay/server path; omitting it captures the live keyboard command state. */
+  advanceTick(frame?: InputFrame) {
+    const command = frame ?? this.captureInputFrame();
+    if (frame) this.applyInputFrame(frame);
+    this.update(FIXED_DT);
+    this.tick += 1;
+    this.replayFrames.push({
+      tick: this.tick,
+      home: { ...command.home },
+      away: { ...command.away },
+    });
+  }
+
+  private update(dt: number) {
+    if (this.messageTimer > 0) {
+      this.messageTimer -= dt;
+      if (this.messageTimer <= 0) this.message = '';
+    }
+    if (this.kickerLock > 0) this.kickerLock -= dt;
+    else this.lastKicker = null;
+    if (this.ballFree > 0) this.ballFree -= dt;
+    if (this.gkRush > 0) this.gkRush -= dt;
+    if (this.cpuDecision > 0) this.cpuDecision -= dt;
+    if (this.stealProtect > 0) this.stealProtect -= dt;
+    if (this.tackleCooldown > 0) this.tackleCooldown -= dt;
+    if (this.slideCooldown > 0) this.slideCooldown -= dt;
+    if (this.awayTackleCooldown > 0) this.awayTackleCooldown -= dt;
+    if (this.awaySlideCooldown > 0) this.awaySlideCooldown -= dt;
+    if (this.cpuTackleCd > 0) this.cpuTackleCd -= dt;
+    if (this.dispossessedTimer > 0) {
+      this.dispossessedTimer -= dt;
+      if (this.dispossessedTimer <= 0) this.dispossessed = null;
+    }
+    for (const p of this.allPlayers) {
+      if (p.kickTimer > 0) p.kickTimer -= dt;
+      if (p.diveTimer && p.diveTimer > 0) p.diveTimer -= dt;
+      if (p.diveCooldown && p.diveCooldown > 0) p.diveCooldown -= dt;
+      if (p.slideTimer && p.slideTimer > 0) p.slideTimer -= dt;
+    }
+    if (this.netRipple.left > 0) this.netRipple.left = Math.max(0, this.netRipple.left - dt * 0.6);
+    if (this.netRipple.right > 0) this.netRipple.right = Math.max(0, this.netRipple.right - dt * 0.6);
+
+    // Goal celebration: hold play, let the ball sit in the net and the scorers
+    // celebrate, then restart with the conceding side kicking off.
+    if (this.celebration > 0) {
+      this.celebration -= dt;
+      this.updateCelebration(dt);
+      this.updateCamera(dt);
+      this.justPressed = [];
+      this.justReleased = [];
+      this.awayJustPressed = [];
+      this.awayJustReleased = [];
+      if (this.celebration <= 0 && this.pendingKickoff) {
+        this.resetKickoff(this.pendingKickoff);
+      }
+      return;
+    }
+
+    // Ball out of play: it keeps coasting past the line for a beat so you can
+    // SEE it go out (FIFA-style), THEN the restart (throw-in / goal kick /
+    // corner) is set up. Camera keeps tracking the ball during the pause.
+    if (this.outOfPlay > 0) {
+      this.outOfPlay -= dt;
+      // Coast the ball out of bounds with heavy drag so it slows quickly (as if
+      // into the netting / crowd) and clamp it to a small margin past the line
+      // so it never sails off-screen.
+      this.integrateBall(dt, 3.2);
+      this.ball.x = clamp(this.ball.x, -M(7), FIELD_W + M(7));
+      this.ball.y = clamp(this.ball.y, -M(7), FIELD_H + M(7));
+      this.updateCamera(dt);
+      this.justPressed = [];
+      this.justReleased = [];
+      this.awayJustPressed = [];
+      this.awayJustReleased = [];
+      if (this.outOfPlay <= 0 && this.pendingRestart) {
+        const r = this.pendingRestart;
+        this.pendingRestart = null;
+        this.awardRestart(r.team, r.spotX, r.spotY, r.label, r.takerIsGK, r.isThrowIn);
+      }
+      return;
+    }
+
+    if (this.freeze > 0) {
+      this.freeze -= dt;
+      this.justPressed = [];
+      this.justReleased = [];
+      this.awayJustPressed = [];
+      this.awayJustReleased = [];
+      return;
+    }
+
+    if (!this.practice && this.elapsed < this.matchRealSeconds) {
+      this.elapsed += dt;
+      if (this.elapsed >= this.matchRealSeconds) {
+        this.elapsed = this.matchRealSeconds;
+        const verdict =
+          this.homeScore > this.awayScore
+            ? `FULL TIME — ${this.homeTeam.name.toUpperCase()} WIN!`
+            : this.homeScore < this.awayScore
+              ? `FULL TIME — ${this.awayTeam.name.toUpperCase()} WIN!`
+              : 'FULL TIME — DRAW';
+        this.setMessage(verdict, 9999);
+        this.freeze = 9999;
+      }
+    }
+
+    this.markTimer -= dt;
+    if (this.markTimer <= 0) {
+      this.markTimer = 0.35;
+      this.computeMarking();
+      this.computeAttackSupport();
+    }
+
+    this.updateSwitchHint();
+    this.handleSwitchKey();
+    this.updateControlled(dt);
+    this.updateHomeTeammates(dt);
+    this.updateAwayTeam(dt);
+    this.separatePlayers();
+    this.constrainKeeperWithBall();
+    this.updateJostle(dt);
+    this.resolvePossession();
+    this.updateKeeperReactions(dt);
+    this.updateBall(dt);
+    this.handleGoals();
+    this.updateCamera(dt);
+    this.updateAwayActive();
+
+    this.justPressed = [];
+    this.justReleased = [];
+    this.awayJustPressed = [];
+    this.awayJustReleased = [];
+  }
+
+  /** The CPU player that should wear the away indicator: the carrier if the
+   *  away team has the ball, otherwise the outfield CPU nearest the ball.
+   *  Sticky to the carrier so the plate doesn't flicker between defenders. */
+  private updateAwayActive() {
+    if (this.localMultiplayer) {
+      this.awayActive = this.awayControlled;
+      return;
+    }
+    if (this.owner && this.owner.team === 'away') {
+      this.awayActive = this.owner;
+      return;
+    }
+    const outfield = this.awayPlayers.filter((p) => !p.isGK);
+    this.awayActive = this.nearestTo(outfield, this.ball) ?? this.awayActive;
+  }
+
+  /** Pan the TV camera toward the ball (with a little velocity lookahead). */
+  private updateCamera(dt: number) {
+    const target = clamp(this.ball.x + this.ball.vx * 0.25, CAM_MIN, CAM_MAX);
+    const k = 1 - Math.exp(-2.6 * dt);
+    this.camX += (target - this.camX) * k;
+
+    // Vertical follow is gentler and clamped — a TV cam drifts in depth only
+    // a little, keeping the action framed without swinging up and down.
+    const targetY = clamp(this.ball.y + this.ball.vy * 0.18, CAM_Y_MIN, CAM_Y_MAX);
+    const ky = 1 - Math.exp(-1.8 * dt);
+    this.camY += (targetY - this.camY) * ky;
+  }
+
+  /**
+   * FIFA-style switch scoring (lower = better candidate).
+   *
+   * When the CPU has the ball, the best player to switch to is NOT the one
+   * radially closest to the ball — it's the one best placed to intercept
+   * the carrier's path toward OUR goal: we project an intercept point in
+   * front of the carrier (toward the home goal) and strongly prefer
+   * goal-side defenders over players level with or behind the play.
+   */
+  private switchScore(p: PlayerEntity): number {
+    const carrier = this.owner && this.owner.team === 'away' ? this.owner : null;
+
+    if (carrier) {
+      // Direction of the attack: blend "toward our goal" with the
+      // carrier's actual movement.
+      const goal = { x: 0, y: FIELD_H / 2 };
+      const gl = len(goal.x - carrier.x, goal.y - carrier.y);
+      let dirX = (goal.x - carrier.x) / gl;
+      let dirY = (goal.y - carrier.y) / gl;
+      const sp = len(carrier.vx, carrier.vy);
+      if (sp > 40) {
+        dirX = dirX * 0.5 + (carrier.vx / sp) * 0.5;
+        dirY = dirY * 0.5 + (carrier.vy / sp) * 0.5;
+        const dl = len(dirX, dirY);
+        dirX /= dl;
+        dirY /= dl;
+      }
+      const intercept = {
+        x: carrier.x + dirX * 70,
+        y: carrier.y + dirY * 70,
+      };
+
+      let score = dist(p, intercept);
+      // Goal-side (between carrier and our goal) is what defending is
+      // about — reward it; punish being behind the play.
+      if (p.x < carrier.x - 5) score -= 55;
+      else if (p.x > carrier.x + 15) score += 60;
+      return score;
+    }
+
+    // Loose ball (or our own possession): closest to where the ball is
+    // heading wins.
+    const ahead = {
+      x: clamp(this.ball.x + this.ball.vx * 0.35, 0, FIELD_W),
+      y: clamp(this.ball.y + this.ball.vy * 0.35, 0, FIELD_H),
+    };
+    return dist(p, ahead);
+  }
+
+  private bestSwitchCandidate(exclude: PlayerEntity): PlayerEntity | null {
+    let best: PlayerEntity | null = null;
+    let bestScore = Infinity;
+    for (const p of this.homePlayers) {
+      if (p === exclude) continue;
+      // The keeper is never auto-suggested (FIFA-style) unless he has the
+      // ball or it's right next to him.
+      if (p.isGK && this.owner !== p && dist(p, this.ball) > 160) continue;
+      const s = this.switchScore(p);
+      if (s < bestScore) {
+        bestScore = s;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Compute who Q would switch to. No automatic switching happens here —
+   * the hint is only a marker until the user presses Q (passing is the one
+   * exception: control follows the pass you played).
+   */
+  private updateSwitchHint() {
+    if (this.owner && this.owner.team === 'home' && this.owner !== this.controlled) {
+      this.switchHint = this.owner;
+      return;
+    }
+    const candidate = this.bestSwitchCandidate(this.controlled);
+    // Only suggest a switch when the candidate is meaningfully better
+    // positioned than the player you already control.
+    if (
+      candidate &&
+      this.switchScore(candidate) + 25 < this.switchScore(this.controlled)
+    ) {
+      this.switchHint = candidate;
+    } else {
+      this.switchHint = null;
+    }
+  }
+
+  private handleSwitchKey() {
+    if (!this.justPressed.includes('KeyQ')) return;
+    // Q doubles as the LOB MODIFIER (Q+W = aerial through ball). When we have
+    // the ball — or a pass key is held/charging — Q is being used to modify a
+    // kick, so it must NOT switch players away from the carrier.
+    const usingAsModifier =
+      this.owner === this.controlled ||
+      !!this.chargeKey ||
+      [...KICK_KEYS].some((k) => this.keys.has(k));
+    if (usingAsModifier) return;
+    const target =
+      this.switchHint ?? this.bestSwitchCandidate(this.controlled);
+    if (target) {
+      this.controlled = target;
+      this.switchHint = null;
+    }
+  }
+
+  private updateControlled(dt: number) {
+    // Practice: you never take over the keeper. A pass back to your own GK
+    // switches control to him in the normal flow (control follows your pass),
+    // but the keeper is auto-managed (he holds then clears upfield like a CPU
+    // GK). Hand control to the nearest outfielder so he isn't a stuck,
+    // user-controlled dead end and the team keeps offering support.
+    if (this.practice && this.controlled.isGK) {
+      const out = this.homePlayers.filter((q) => !q.isGK);
+      const alt = this.nearestTo(out, this.ball);
+      if (alt) this.controlled = alt;
+    }
+
+    const p = this.controlled;
+    const owns = this.owner === p;
+    const carrier =
+      this.owner && this.owner.team === 'away' ? this.owner : null;
+    // The ball is loose and travelling from our own kick (a pass/shot in
+    // flight) — i.e. it's "incoming" to our team. In this state a kick key
+    // is buffered as a first-time shot/pass, NOT a tackle.
+    const incoming =
+      !owns && this.owner === null && this.lastKicker?.team === 'home';
+
+    // True while we're already committed to a slide — locks out other inputs
+    // (you can't change your mind mid-slide; that's the FIFA risk).
+    const sliding = (p.slideTimer ?? 0) > 0;
+
+    // A without the ball = sliding tackle (FIFA: A/circle is the long pass on
+    // the ball, the slide tackle off it). A fully committed, long-range lunge
+    // along your current heading. Wins the ball over more ground than a standing
+    // tackle, but leaves you grounded and out of the play through the recovery if
+    // you mistime it. Suppressed while our own pass is incoming (where A is a
+    // buffered first-time long ball) and while already sliding.
+    if (
+      !owns &&
+      !incoming &&
+      !sliding &&
+      this.slideCooldown <= 0 &&
+      this.justPressed.includes('KeyA')
+    ) {
+      // Slide along where we're already running; if we're near-stationary,
+      // slide straight at the ball's anticipated position instead.
+      let sx = p.vx;
+      let sy = p.vy;
+      if (len(sx, sy) < 40) {
+        sx = this.ball.x + this.ball.vx * 0.12 - p.x;
+        sy = this.ball.y + this.ball.vy * 0.12 - p.y;
+      }
+      const sl = len(sx, sy) || 1;
+      p.slideDir = { x: sx / sl, y: sy / sl };
+      p.slideTimer = 0.7;
+      this.slideCooldown = 1.5;
+      p.facing = { ...p.slideDir };
+    }
+
+    // W without the ball = "rush keeper out" (FIFA): send your goalkeeper
+    // charging off his line to claim/smother the ball. Only meaningful when
+    // we're defending (not while our own pass is incoming, where W is a
+    // buffered first-time through-ball).
+    if (!owns && !incoming && !sliding) {
+      // A tap commits the keeper to a charge; HOLDING W keeps him out (FIFA's
+      // hold-to-rush) so he doesn't back-pedal to his line mid-charge.
+      if (this.justPressed.includes('KeyW')) this.gkRush = 1.5;
+      else if (this.keys.has('KeyW')) this.gkRush = Math.max(this.gkRush, 0.25);
+    }
+
+    // D without the ball = standing tackle (FIFA: a committed lunge at
+    // the ball — winning it cleanly if it's in reach, leaving you beaten
+    // for a moment if you whiff). Suppressed while our own pass is incoming.
+    if (
+      !owns &&
+      !incoming &&
+      !sliding &&
+      this.tackleCooldown <= 0 &&
+      this.justPressed.includes('KeyD')
+    ) {
+      const bx = this.ball.x + this.ball.vx * 0.1 - p.x;
+      const by = this.ball.y + this.ball.vy * 0.1 - p.y;
+      const l = len(bx, by);
+      this.tackleDir = { x: bx / l, y: by / l };
+      this.tackleTimer = 0.22;
+      this.tackleCooldown = 0.8;
+      p.kickTimer = Math.max(p.kickTimer, 0.22);
+    }
+
+    const containing = this.keys.has('KeyC') && !owns;
+
+    if (sliding) {
+      // Sliding tackle. The first ~0.3s is the committed lunge: the body
+      // skims along slideDir at a decaying fraction of SLIDE_LUNGE_SPEED and
+      // pokes the ball loose over a longer reach than a standing tackle. The
+      // remaining ~0.4s is the grounded recovery: no steering, no input, no
+      // tackle — you're a sitting duck if you missed (FIFA's slide risk).
+      const dir = p.slideDir ?? { x: p.facing.x, y: p.facing.y };
+      const t = p.slideTimer ?? 0;
+      if (t > 0.4) {
+        // Lunge phase: ease the burst off as the slide plays out so it reads
+        // as a body skidding to a halt rather than a constant-speed dash.
+        const frac = 0.45 + 0.55 * ((t - 0.4) / 0.3);
+        this.steer(
+          p,
+          dir.x * SLIDE_LUNGE_SPEED * frac,
+          dir.y * SLIDE_LUNGE_SPEED * frac,
+          dt,
+          ACCEL * 1.6,
+        );
+        this.pokeTackle(p, p.cachedSlideTackleRadius, false);
+      } else {
+        // Recovery phase: friction the body to a stop, no control.
+        this.steer(p, 0, 0, dt);
+      }
+    } else if (this.tackleTimer > 0) {
+      // Mid-lunge: burst toward the ball and poke it loose on contact.
+      this.tackleTimer -= dt;
+      this.steer(
+        p,
+        this.tackleDir.x * TACKLE_LUNGE_SPEED,
+        this.tackleDir.y * TACKLE_LUNGE_SPEED,
+        dt,
+      );
+      this.pokeTackle(p, p.cachedStandingTackleRadius);
+    } else if (containing && carrier) {
+      // FIFA contain (hold C): auto-jockey goal-side of the carrier and
+      // automatically poke the ball when it comes into reach.
+      const gx = -carrier.x;
+      const gy = FIELD_H / 2 - carrier.y;
+      const gl = len(gx, gy);
+      const spot = {
+        x: carrier.x + (gx / gl) * 30,
+        y: carrier.y + (gy / gl) * 30,
+      };
+      const speed = this.keys.has('KeyE')
+        ? SPRINT_SPEED * 0.94
+        : JOCKEY_SPEED;
+      this.moveToward(p, spot, speed, dt);
+      if (
+        this.tackleCooldown <= 0 &&
+        this.pokeTackle(p, p.cachedContainTackleRadius)
+      ) {
+        this.tackleCooldown = 0.5;
+      }
+    } else if (containing) {
+      // Contain with a loose ball — just hunt it down.
+      const speed = this.keys.has('KeyE')
+        ? SPRINT_SPEED * 0.94
+        : JOCKEY_SPEED;
+      this.moveToward(p, { x: this.ball.x, y: this.ball.y }, speed, dt);
+    } else {
+      let dx = 0;
+      let dy = 0;
+      if (this.keys.has('ArrowUp')) dy -= 1;
+      if (this.keys.has('ArrowDown')) dy += 1;
+      if (this.keys.has('ArrowLeft')) dx -= 1;
+      if (this.keys.has('ArrowRight')) dx += 1;
+      const hasInput = dx !== 0 || dy !== 0;
+
+      // Build the user's intended heading (unit vector, or zero).
+      let ix = 0;
+      let iy = 0;
+      if (hasInput) {
+        const l = len(dx, dy);
+        ix = dx / l;
+        iy = dy / l;
+      }
+
+      const sprint = this.keys.has('KeyE');
+      let speed = sprint ? SPRINT_SPEED : WALK_SPEED;
+      // Carrying the ball slows you down (real dribble penalty) — you can't
+      // knock it and outrun the whole pitch. A free defender can run you down.
+      // DRIBBLING reduces the penalty: a great dribbler keeps more of his pace.
+      if (owns) speed *= p.cachedDribbleSpeedMultiplier;
+      let hx = ix;
+      let hy = iy;
+
+      // FIFA-style "ball gravity": while OUR pass is in flight to this exact
+      // receiver, predict whether continuing the user's CURRENT run will
+      // actually intercept the ball. If it will (they're already on a path to
+      // meet it), leave their run alone. If it WON'T — e.g. they're holding a
+      // direction that runs them away/ahead and the ball can't catch them —
+      // override toward the meeting point so they don't miss it. With no arrow
+      // held, the receiver fully takes over and collects the ball.
+      if (incoming && p === this.passReceiver) {
+        // FIFA auto-receive: instead of asking "will the user's current run
+        // happen to intercept the ball?" (which oscillates — the moment we
+        // nudge toward the ball the run looks fine again, so the receiver
+        // parks short and never collects it), we solve for the EARLIEST point
+        // on the ball's path the receiver can actually run onto, then commit
+        // to it. The user's input only biases the APPROACH ANGLE — it can
+        // never steer the receiver away from a ball they'd otherwise miss.
+        const airborne = this.ball.z > 0.01 || this.ball.vz > 0.01;
+        const k = airborne ? BALL_DECAY * 0.12 : BALL_DECAY;
+        let bx = this.ball.x;
+        let by = this.ball.y;
+        let bvx = this.ball.vx;
+        let bvy = this.ball.vy;
+        const stepT = 0.05;
+        const decayStep = Math.exp(-k * stepT);
+        // Displacement over one step for the current velocity (∫v dt).
+        const dispK = k > 1e-3 ? (1 - decayStep) / k : stepT;
+        // Pace we will actually run to meet it at.
+        const runSpeed = sprint ? SPRINT_SPEED : RUN_SPEED;
+        // March the ball forward; the first point the receiver can reach in
+        // time (running straight at it) is the interception. If they can never
+        // catch it within the window, chase where it ends up (last sim point) —
+        // covers a pass that stops SHORT, so the receiver always goes to get it.
+        let meetX = bx;
+        let meetY = by;
+        for (let t = 0; t <= 2.5; t += stepT) {
+          meetX = bx;
+          meetY = by;
+          const gap = len(bx - p.x, by - p.y);
+          const tReach =
+            Math.max(0, gap - p.cachedBallControlRadius) / runSpeed;
+          if (tReach <= t) break; // we can be here as the ball arrives
+          bx += bvx * dispK;
+          by += bvy * dispK;
+          bvx *= decayStep;
+          bvy *= decayStep;
+        }
+
+        const ax = meetX - p.x;
+        const ay = meetY - p.y;
+        const al = len(ax, ay);
+        // Once the ball is essentially at our feet, hand full control back to
+        // the user; until then, drive to the meeting point.
+        if (al > p.cachedBallControlRadius) {
+          const ux = ax / al;
+          const uy = ay / al;
+          // A little user steer (to choose which side to take it on) but the
+          // run to the ball dominates so the receiver never drifts off it.
+          const inputW = hasInput ? 0.3 : 0;
+          hx = ux * (1 - inputW) + ix * inputW;
+          hy = uy * (1 - inputW) + iy * inputW;
+          if (!sprint) speed = RUN_SPEED;
+        }
+      }
+
+      let tvx = 0;
+      let tvy = 0;
+      const hl = len(hx, hy);
+      if (hl > 0.001) {
+        tvx = (hx / hl) * speed;
+        tvy = (hy / hl) * speed;
+      }
+      // The ball-carrier is heavier on the turn (DRIBBLE_ACCEL) — can't jink as
+      // sharply as a free runner. DRIBBLING sharpens the turn back up for the
+      // skilful, so a great dribbler keeps close control while jinking.
+      this.steer(
+        p,
+        tvx,
+        tvy,
+        dt,
+        owns ? DRIBBLE_ACCEL * p.cachedDribbleAccelerationMultiplier : ACCEL,
+      );
+    }
+
+    // FIFA-style kick charging + input buffering. Pressing a kick key starts
+    // the power gauge; releasing executes the kick. Crucially you may press it
+    // WHILE the ball is still travelling to you (`incoming`) — the input is
+    // buffered and fires the instant you receive the ball (a first-time
+    // shot/pass), instead of being dropped.
+    if (!this.chargeKey && (owns || incoming)) {
+      for (const code of this.justPressed) {
+        if (KICK_KEYS.has(code)) {
+          this.chargeKey = code;
+          this.chargeTime = 0;
+          this.chargeLofted = this.keys.has('KeyQ');
+          this.kickPending = false;
+          this.bufferTimer = owns ? 0 : KICK_BUFFER;
+          break;
+        }
+      }
+    }
+
+    if (this.chargeKey) {
+      const released = this.justReleased.includes(this.chargeKey);
+      if (owns) {
+        // We have the ball: fire on release, or immediately if a buffered
+        // first-time kick was already released during the transition.
+        if (this.kickPending || released) {
+          const t = clamp(this.chargeTime / CHARGE_FULL, 0, 1);
+          const code = this.chargeKey;
+          const lofted = this.chargeLofted || this.keys.has('KeyQ');
+          this.chargeKey = null;
+          this.kickPending = false;
+          this.doHomeKick(code, t, lofted);
+        } else {
+          const chargeRate =
+            this.chargeKey === 'KeyD'
+              ? p.cachedShotChargeRate
+              : p.cachedPassChargeRate;
+          this.chargeTime = Math.min(
+            this.chargeTime + dt * chargeRate,
+            CHARGE_FULL,
+          );
+        }
+      } else if (this.owner && this.owner.team === 'away') {
+        // An opponent intercepted before we received it — drop the buffer.
+        this.chargeKey = null;
+        this.kickPending = false;
+      } else {
+        // Ball still in transit: keep buffering within the window. Charge
+        // while held; once released, mark pending so it fires on first touch.
+        this.bufferTimer -= dt;
+        if (this.bufferTimer <= 0) {
+          this.chargeKey = null;
+          this.kickPending = false;
+        } else if (released) {
+          this.kickPending = true;
+        } else if (!this.kickPending) {
+          const chargeRate =
+            this.chargeKey === 'KeyD'
+              ? p.cachedShotChargeRate
+              : p.cachedPassChargeRate;
+          this.chargeTime = Math.min(
+            this.chargeTime + dt * chargeRate,
+            CHARGE_FULL,
+          );
+        }
+      }
+    }
+  }
+
+  /** 0..1 charge of the in-progress kick, or null (for the HUD gauge). */
+  private chargeLevel(): number | null {
+    if (!this.chargeKey) return null;
+    return clamp(this.chargeTime / CHARGE_FULL, 0, 1);
+  }
+
+  // ---- kicking / passing --------------------------------------------------
+
+  /** @param charge 0..1 power gauge from how long the key was held. */
+  private doHomeKick(code: string, charge: number, lofted = false) {
+    const kicker = this.controlled;
+
+    // A throw-in is taken with the HANDS — any kick key releases a hand throw
+    // (not a foot kick / shot), aimed at the held direction's teammate.
+    if (kicker === this.throwInTaker) {
+      this.executeThrowIn(kicker, true);
+      return;
+    }
+
+    if (code === 'KeyD') {
+      this.shootAssisted(kicker, charge);
+      return;
+    }
+
+    const isShort = code === 'KeyS';
+    const isLong = code === 'KeyA';
+    const isThrough = code === 'KeyW';
+    if (!isShort && !isLong && !isThrough) return;
+    this.passAssisted(kicker, { isShort, isLong, isThrough, lofted, charge });
+  }
+
+  private doAwayKick(code: string, charge: number, lofted = false) {
+    const kicker = this.awayControlled;
+
+    if (kicker === this.throwInTaker) {
+      this.executeThrowIn(kicker, false);
+      return;
+    }
+
+    if (code === 'KeyD') {
+      this.shootAssisted(kicker, charge, this.awayKeys);
+      return;
+    }
+
+    const isShort = code === 'KeyS';
+    const isLong = code === 'KeyA';
+    const isThrough = code === 'KeyW';
+    if (!isShort && !isLong && !isThrough) return;
+    this.passAssisted(
+      kicker,
+      { isShort, isLong, isThrough, lofted, charge },
+      this.awayKeys,
+    );
+  }
+
+  /**
+   * FIFA-style assisted shot. The ball always goes toward the goal you
+   * attack; the vertical arrow input picks the *zone* of the frame
+   * (up = top half, down = bottom half, neutral = anywhere), and within
+   * that zone the engine picks the placement with the clearest shooting
+   * lane — i.e. the spot furthest from any blocking player, like FIFA's
+   * assisted finishing steering shots away from the keeper/defenders.
+   */
+  private shootAssisted(
+    kicker: PlayerEntity,
+    charge: number,
+    inputKeys: ReadonlySet<string> = this.keys,
+  ) {
+    let vert = 0;
+    if (inputKeys.has('ArrowUp')) vert -= 1;
+    if (inputKeys.has('ArrowDown')) vert += 1;
+    // No arrow held at all → fall back to the facing direction's vertical
+    // lean, so curling runs still place shots naturally.
+    const horizontalHeld =
+      inputKeys.has('ArrowLeft') || inputKeys.has('ArrowRight');
+    if (vert === 0 && !horizontalHeld) {
+      if (kicker.facing.y < -0.45) vert = -1;
+      else if (kicker.facing.y > 0.45) vert = 1;
+    }
+
+    const inset = 16; // keep aim inside the posts
+    const mid = (goalTop + goalBottom) / 2;
+    // Zone of the frame the input allows, and the spot the input "wants".
+    let zoneLo = goalTop + inset;
+    let zoneHi = goalBottom - inset;
+    let desiredY = mid;
+    if (vert < 0) {
+      zoneHi = mid - 8;
+      desiredY = goalTop + inset; // top corner
+    } else if (vert > 0) {
+      zoneLo = mid + 8;
+      desiredY = goalBottom - inset; // bottom corner
+    }
+
+    // Sample candidate placements across the allowed zone and score each
+    // by how clear the shooting lane is (distance of the nearest blocker
+    // to the ball→target line), with a tie-break preference for the spot
+    // the player's input asked for.
+    const blockers = [...this.awayPlayers, ...this.homePlayers].filter(
+      (p) => p !== kicker,
+    );
+    const goalX = kicker.team === 'home' ? FIELD_W - 2 : 2;
+    const zoneSpan = Math.max(zoneHi - zoneLo, 1);
+    const SAMPLES = 9;
+    let bestY = desiredY;
+    let bestScore = -Infinity;
+    for (let i = 0; i < SAMPLES; i++) {
+      const ty = zoneLo + (zoneSpan * i) / (SAMPLES - 1);
+      const target = { x: goalX, y: ty };
+      let clearance = Infinity;
+      for (const b of blockers) {
+        clearance = Math.min(
+          clearance,
+          distToSegment(b, this.ball, target) - b.r,
+        );
+      }
+      // Clearance dominates (capped so wide-open lanes stop competing),
+      // input preference breaks ties between similarly open lanes.
+      const score =
+        Math.min(clearance, 50) +
+        (1 - Math.abs(ty - desiredY) / zoneSpan) * 16;
+      if (score > bestScore) {
+        bestScore = score;
+        bestY = ty;
+      }
+    }
+
+    // Charge controls shot power across a REAL-LIFE-ANCHORED range (px/s via
+    // PX_PER_M=20.95, ×0.172 = km/h. POWER spans a WIDE, clearly-felt range so
+    // a tap and a full blast feel completely different: a placed shot (charge 0)
+    // leaves the boot at ~400 px/s ≈ 69 km/h (a gentle roll), a full-power strike
+    // (charge 1) at ~960 px/s ≈ 165 km/h (a screamer; a touch arcade for feel),
+    // an elite finisher a bit more. Ratio ~2.4× tap→full, vs the old narrow 1.8×
+    // that made every shot feel the same. The cached scalar tilts it per striker.
+    const power = (400 + 560 * charge) * kicker.cachedShotPowerMultiplier;
+    // `loft` is the UPWARD launch velocity (px/s), solved from a target APEX
+    // HEIGHT: loft = sqrt(2·GRAVITY·apex). Loft is TIED TO POWER so weak and
+    // strong shots look different — a WEAK shot stays PURELY on the ground
+    // (apex 0, the ball just rolls) and only once you charge past ~0.25 does it
+    // start to climb, a full-power strike flying high toward the top corners.
+    // With the realistic GRAVITY the apex is reached ~20m out, so from a normal
+    // shooting position a hard shot is still RISING as it crosses the line.
+    // Capped just under the M(2.44) bar so the peak can't sail over.
+    const liftCharge = clamp((charge - 0.25) / 0.75, 0, 1);
+    const shotApex = Math.min(liftCharge * liftCharge * M(2.7), M(2.35));
+    const loft = shotApex > 0 ? Math.sqrt(2 * GRAVITY * shotApex) : 0;
+    // Shots scatter — and the harder you hit it, the LESS precise it is (FIFA:
+    // a power blast can fly wide of the post, while a placed side-foot is far
+    // tighter). The charge term dominates so full-power efforts genuinely miss
+    // the target a fair share of the time.
+    // SHOOTING: better strikers hit it harder and straighter — more power and
+    // a tighter spread, so a weak forward sprays the same chance wide.
+    const shotSpread =
+      (0.06 + charge * 0.2) * kicker.cachedShotSpreadMultiplier;
+    this.kickBallToward(
+      { x: goalX, y: bestY },
+      power,
+      kicker,
+      loft,
+      shotSpread,
+    );
+  }
+
+  private passAssisted(
+    kicker: PlayerEntity,
+    opts: {
+      isShort: boolean;
+      isLong: boolean;
+      isThrough: boolean;
+      lofted?: boolean;
+      charge: number;
+    },
+    inputKeys: ReadonlySet<string> = this.keys,
+  ) {
+    const { isShort, isLong, isThrough, charge } = opts;
+    const lofted = !!opts.lofted;
+
+    const target = this.pickPassTarget(kicker, {
+      short: isShort,
+      long: isLong,
+      through: isThrough,
+    }, inputKeys);
+    if (!target) {
+      // No teammate available — knock it in the aimed direction.
+      const f = this.heldDir(kicker, inputKeys);
+      this.ball.vx = f.x * 380;
+      this.ball.vy = f.y * 380;
+      this.afterKick(kicker);
+      return;
+    }
+
+    // Control follows your pass (FIFA-style), and the receiver gets "ball
+    // gravity" until they actually take possession (see updateControlled).
+    this.passReceiver = target;
+
+    let aim: Vec;
+    if (isThrough) {
+      // Lead the receiver along their actual RUN (FIFA through ball):
+      // play the ball into the space they're heading to, defaulting to
+      // straight at the opponent goal when they're standing still.
+      const atkX = kicker.team === 'home' ? 1 : -1;
+      const sp = Math.hypot(target.vx, target.vy);
+      // Direction to play the ball into: always lead toward goal, blended
+      // with the receiver's actual run so a sprinter gets played in behind
+      // along their line and a standing player gets pushed forward.
+      let rx = atkX;
+      let ry = 0;
+      if (sp > 50) {
+        rx = target.vx / sp + atkX * 0.6;
+        ry = target.vy / sp;
+        // Never lead a through ball backwards.
+        if (rx * atkX < 0.1) rx = atkX * 0.55;
+        const rl = len(rx, ry);
+        rx /= rl;
+        ry /= rl;
+      }
+      // Always carve out a clear gap in front of the receiver (FIFA through
+      // ball): a fixed forward lead plus extra for how fast they're running,
+      // so even a standing player has real space to chase onto.
+      const lead = clamp(M(3) + sp * 0.4, M(3), M(7.5));
+      aim = {
+        x: clamp(target.x + rx * lead, 30, FIELD_W - 30),
+        y: clamp(target.y + ry * lead, 20, FIELD_H - 20),
+      };
+    } else {
+      // Aim slightly ahead of where they're moving.
+      aim = {
+        x: clamp(target.x + target.vx * 0.2, 15, FIELD_W - 15),
+        y: clamp(target.y + target.vy * 0.2, 15, FIELD_H - 15),
+      };
+    }
+
+    const d = dist(this.ball, aim);
+
+    if (isThrough && lofted) {
+      // Q + W = a LOFTED through ball (FIFA): same lead-into-space aim as the
+      // grounded through ball, but chipped through the air so it clears a
+      // defender stepping into the lane and drops into the runner's path.
+      // Lower, faster arc than a raking long ball so it still threads behind.
+      const T = clamp(0.5 + d / M(95) + charge * 0.2, 0.5, 1.15);
+      const vz = 0.5 * GRAVITY * T;
+      const hspeed = Math.min((d / T) * 1.08, 1500);
+      this.kickBallToward(
+        aim,
+        hspeed,
+        kicker,
+        vz,
+        0.05 * kicker.cachedPassSpreadMultiplier,
+      );
+      this.aerialReceiver = target;
+      if (kicker.team === 'home') this.controlled = target;
+      else this.awayControlled = target;
+      return;
+    }
+
+    if (isLong) {
+      // Long ball = a LOFTED, ballistic pass (FIFA): it flies over the
+      // defenders and drops onto the receiver. Solve a projectile so the
+      // hang time matches the horizontal travel (air friction is light, so
+      // horizontal speed stays roughly constant in flight). A fuller charge
+      // floats it higher and longer.
+      const T = clamp(0.62 + d / M(70) + charge * 0.25, 0.6, 1.5);
+      const vz = 0.5 * GRAVITY * T;
+      const hspeed = Math.min((d / T) * 1.12, 1500);
+      // A raking long ball is harder to land on a sixpence than a short pass.
+      this.kickBallToward(
+        aim,
+        hspeed,
+        kicker,
+        vz,
+        0.045 * kicker.cachedPassSpreadMultiplier,
+      );
+      this.aerialReceiver = target;
+      if (kicker.team === 'home') this.controlled = target;
+      else this.awayControlled = target;
+      return;
+    }
+
+    // Friction-aware power: arrive at the aim point still rolling at the
+    // given speed (exponential friction covers (v0 - vEnd)/BALL_DECAY px),
+    // instead of dying en route like the old distance multipliers did.
+    const base = isThrough
+      ? this.passPower(d, 240, 920)
+      : this.passPower(d, 260, 780);
+    // FIFA assist: targeting is automatic, but the gauge still matters —
+    // undercharged passes arrive soft/short, overcharged ones run past
+    // the receiver. charge ~0.4 ≈ the "right" weight. Band tightened from
+    // 0.78–1.33 to 0.84–1.22 so neither extreme is wild: a tap pass isn't
+    // limp and a full-charge drive doesn't rocket 27m past a 12m target —
+    // the launch ceiling (780 px/s ≈ 134 km/h ground pass) is realistic too.
+    const scale = 0.84 + 0.38 * charge;
+    // PASSING: accurate passers weight it better and misplace it less often.
+    const power = Math.min(
+      base * scale * kicker.cachedPassPowerMultiplier,
+      1600,
+    );
+
+    this.kickBallToward(
+      aim,
+      power,
+      kicker,
+      0,
+      0.03 * kicker.cachedPassSpreadMultiplier,
+    );
+
+    // Control follows your pass (FIFA-style). All other switching is Q-only.
+    if (kicker.team === 'home') this.controlled = target;
+    else this.awayControlled = target;
+  }
+
+  /** Release a throw-in by HAND: a gentle two-handed lofted toss to a teammate
+   *  (limited range, no foot kick / shot). Clears the throw-in armed state. */
+  private executeThrowIn(thrower: PlayerEntity, isHome: boolean) {
+    const inputKeys = isHome ? this.keys : this.awayKeys;
+    const target = this.pickPassTarget(thrower, {
+      short: true,
+      long: false,
+      through: false,
+    }, inputKeys);
+
+    let aim: Vec;
+    if (target) {
+      aim = {
+        x: clamp(target.x + target.vx * 0.2, 15, FIELD_W - 15),
+        y: clamp(target.y + target.vy * 0.2, 15, FIELD_H - 15),
+      };
+      this.passReceiver = target;
+      if (isHome) this.controlled = target;
+      else if (this.localMultiplayer) this.awayControlled = target;
+    } else {
+      // Nobody to aim at — toss it a few metres infield in the held direction.
+      const f =
+        isHome || this.localMultiplayer
+          ? this.heldDir(thrower, inputKeys)
+          : { x: thrower.team === 'home' ? 1 : -1, y: 0 };
+      aim = {
+        x: clamp(thrower.x + f.x * M(8), 15, FIELD_W - 15),
+        y: clamp(thrower.y + f.y * M(8), 15, FIELD_H - 15),
+      };
+    }
+
+    // Disarm BEFORE the throw so dribble/possession stop treating the ball as
+    // held overhead and kickBallToward launches it as a normal airborne ball.
+    this.throwInTaker = null;
+    thrower.throwing = false;
+
+    const d = dist(this.ball, aim);
+    // A two-handed throw: a modest lofted arc, much shorter range than a kick.
+    const T = clamp(0.45 + d / M(60), 0.4, 1.0);
+    const vz = 0.5 * GRAVITY * T;
+    const hspeed = Math.min(d / T, 900);
+    this.kickBallToward(aim, hspeed, thrower, vz, 0.04);
+    // A thrown ball is also aerial — only the intended teammate gathers it in
+    // flight, it can't be picked off mid-air.
+    if (target) this.aerialReceiver = target;
+
+    // No offside can be given from a throw-in (real rule).
+    this.offsideFlags.clear();
+    this.cpuDecision = 0.5;
+  }
+
+  /** The direction the user is holding on the arrows, falling back to the
+   *  kicker's facing when no arrow is held (FIFA: your held direction at
+   *  the moment of the pass picks the intended receiver). */
+  private heldDir(
+    kicker: PlayerEntity,
+    inputKeys: ReadonlySet<string> = this.keys,
+  ): Vec {
+    let dx = 0;
+    let dy = 0;
+    if (inputKeys.has('ArrowUp')) dy -= 1;
+    if (inputKeys.has('ArrowDown')) dy += 1;
+    if (inputKeys.has('ArrowLeft')) dx -= 1;
+    if (inputKeys.has('ArrowRight')) dx += 1;
+    if (dx === 0 && dy === 0) return kicker.facing;
+    const l = len(dx, dy);
+    return { x: dx / l, y: dy / l };
+  }
+
+  /**
+   * FIFA-style receiver selection: the HELD ARROW direction picks the
+   * target, with alignment dominating — but the PASSING LANE openness is
+   * also scored so a teammate with a defender standing in the straight-line
+   * lane is demoted in favour of an equally-aimed teammate in space (FIFA
+   * assisted passing avoids threading the ball into a defender's feet).
+   * Long passes are LOFTED over the defence, so ground blockers don't count
+   * against them. No preferred-distance bands.
+   */
+  private pickPassTarget(
+    kicker: PlayerEntity,
+    opts: { short: boolean; long: boolean; through: boolean },
+    inputKeys: ReadonlySet<string> = this.keys,
+  ): PlayerEntity | null {
+    const aim = this.heldDir(kicker, inputKeys);
+    const mates = (
+      kicker.team === 'home' ? this.homePlayers : this.awayPlayers
+    ).filter((p) => p !== kicker && !(opts.through && p.isGK));
+    const opps = kicker.team === 'home' ? this.awayPlayers : this.homePlayers;
+
+    let best: PlayerEntity | null = null;
+    let bestScore = -Infinity;
+
+    for (const m of mates) {
+      const dx = m.x - kicker.x;
+      const dy = m.y - kicker.y;
+      const d = len(dx, dy);
+      const align = (dx / d) * aim.x + (dy / d) * aim.y;
+
+      // Alignment with the aimed direction dominates everything else.
+      let score = align * 260;
+      // Teammates behind / far outside the aim cone are a last resort.
+      if (align < 0.1) score -= 400;
+
+      if (opts.long) {
+        score += clamp(d, 0, 900) * 0.12; // find the far outlet
+      } else {
+        // Short & through: first man along the aim, nearest wins ties.
+        score -= d * (opts.short ? 0.3 : 0.22);
+      }
+
+      // Passing-lane openness (ground passes only — a lofted long ball flies
+      // over). Endpoint mirrors the aim used in passAssisted: short = at the
+      // receiver, through = led ahead into their run. An opponent sitting in
+      // the lane heavily demotes this receiver so an open one wins instead.
+      if (!opts.long) {
+        const end = this.passLaneEnd(kicker, m, opts.through);
+        let clearance = Infinity;
+        for (const o of opps) {
+          if (o.isGK) continue;
+          // Ignore a defender right on the kicker's back — he sits at the
+          // start of EVERY lane (so wouldn't change ranking) and is already
+          // handled by the just-kicked grace. Only true lane blockers count.
+          if (dist(o, kicker) < 34) continue;
+          clearance = Math.min(
+            clearance,
+            distToSegment(o, kicker, end) - o.r,
+          );
+        }
+        // A clear channel (>~26px either side) is fine; the tighter the lane,
+        // the bigger the penalty, so a body in the lane (clearance≈0) is a
+        // strong deterrent without being an absolute veto.
+        const LANE_OK = 26;
+        if (clearance < LANE_OK) {
+          score -= (LANE_OK - Math.max(clearance, -10)) * 7;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = m;
+      }
+    }
+
+    return best;
+  }
+
+  /** Estimated endpoint of a ground pass to `m`, matching passAssisted's aim
+   *  (short = a touch ahead of the receiver, through = led into their run) —
+   *  used to evaluate how open the passing lane is. */
+  private passLaneEnd(
+    kicker: PlayerEntity,
+    m: PlayerEntity,
+    through: boolean,
+  ): Vec {
+    if (!through) {
+      return { x: m.x + m.vx * 0.2, y: m.y + m.vy * 0.2 };
+    }
+    const atkX = kicker.team === 'home' ? 1 : -1;
+    const sp = Math.hypot(m.vx, m.vy);
+    let rx = atkX;
+    let ry = 0;
+    if (sp > 50) {
+      rx = m.vx / sp;
+      ry = m.vy / sp;
+      if (rx * atkX < 0.1) {
+        rx = atkX * 0.55;
+        const rl = len(rx, ry);
+        rx /= rl;
+        ry /= rl;
+      }
+    }
+    const lead = clamp(sp * 0.45, 45, 110);
+    return {
+      x: clamp(m.x + rx * lead, 30, FIELD_W - 30),
+      y: clamp(m.y + ry * lead, 20, FIELD_H - 20),
+    };
+  }
+
+  /** Power needed to reach distance d and still roll at `arrival` speed. */
+  private passPower(d: number, arrival: number, max: number) {
+    return Math.min(BALL_DECAY * d + arrival, max);
+  }
+
+  private kickBallToward(
+    aim: Vec,
+    power: number,
+    kicker: PlayerEntity,
+    loft = 0,
+    /** Angular error envelope in radians — how much this kick can stray from
+     *  the perfect aim. Short passes are tight; shots/long balls scatter more
+     *  (FIFA: not every strike is pixel-perfect). */
+    spread = 0.03,
+  ) {
+    const dx = aim.x - this.ball.x;
+    const dy = aim.y - this.ball.y;
+    const l = len(dx, dy);
+    const nx = dx / l;
+    const ny = dy / l;
+    // FIFA-like imperfection: deflect the aim by a small random angle and
+    // nudge the power, so no two kicks come out exactly the same. The noise is
+    // triangular (peaked at 0) — most kicks are near-perfect, the odd one
+    // sprays wide or runs heavy.
+    const ang = spread * this.kickNoise();
+    const ca = Math.cos(ang);
+    const sa = Math.sin(ang);
+    const rx = nx * ca - ny * sa;
+    const ry = nx * sa + ny * ca;
+    const pw = power * (1 + 0.05 * this.kickNoise());
+    this.ball.vx = rx * pw;
+    this.ball.vy = ry * pw;
+    // `loft` is the upward launch velocity (px/s). Pop the ball just off the
+    // turf so it leaves the ground cleanly on a lofted kick.
+    this.ball.vz = loft;
+    if (loft > 0) this.ball.z = Math.max(this.ball.z, 0.5);
+    // A flat (non-lofted) release travels on the ground — drop the ball to the
+    // turf in case it was elevated (e.g. just thrown/rolled out of the keeper's
+    // hands, where it was held at chest height).
+    else this.ball.z = 0;
+    this.afterKick(kicker);
+  }
+
+  /** Triangular random in [-1, 1], peaked at 0: the difference of two uniforms.
+   *  Small deviations are common, large ones rare — natural kick scatter. */
+  private kickNoise(): number {
+    return this.rng.next() - this.rng.next();
+  }
+
+  private afterKick(kicker: PlayerEntity) {
+    this.owner = null;
+    // Default: this kick is NOT a protected aerial pass. Lofted-pass callers
+    // re-arm `aerialReceiver` immediately after kickBallToward returns.
+    this.aerialReceiver = null;
+    this.lastKicker = kicker;
+    this.lastTouchTeam = kicker.team;
+    this.kickerLock = 0.45;
+    kicker.kickTimer = 0.28;
+    // The struck ball is briefly untouchable so it physically leaves the
+    // kicker's body cluster before anyone (esp. an opponent leaning on the
+    // kicker's back) can claim it — otherwise the kick is "canceled" the same
+    // frame it's launched. ~0.12s ≈ 100-150px of travel at pass/shot speed,
+    // enough to clear bodies while a defender genuinely down the lane can
+    // still intercept.
+    this.ballFree = 0.12;
+    this.jostle = 0;
+    this.snapshotOffside(kicker);
+  }
+
+  /**
+   * Record which of the kicker's teammates are in an offside position at the
+   * moment the ball is played. A player is offside if, AT THIS INSTANT, they
+   * are (a) in the opponent's half, (b) ahead of the ball, and (c) ahead of
+   * the second-last defender (the offside line — usually the last outfield
+   * man, since the keeper is the last). The flag is only acted on later, if
+   * that player is the one who receives the ball (see resolvePossession).
+   */
+  private snapshotOffside(kicker: PlayerEntity) {
+    this.offsideFlags.clear();
+    if (this.practice) return; // no offside in free-form practice
+    const team = kicker.team;
+    const mates = team === 'home' ? this.homePlayers : this.awayPlayers;
+    const opps = team === 'home' ? this.awayPlayers : this.homePlayers;
+    // Project positions onto the attacking axis so "more forward" is always a
+    // larger number (home attacks +x, away attacks -x).
+    const atk = team === 'home' ? 1 : -1;
+    const fwd = (x: number) => x * atk;
+
+    // Offside line = the second-deepest defender along the attack axis.
+    const oppFwd = opps.map((o) => fwd(o.x)).sort((a, b) => b - a);
+    const line = oppFwd.length >= 2 ? oppFwd[1] : (oppFwd[0] ?? Infinity);
+    const ballFwd = fwd(this.ball.x);
+    const halfFwd = fwd(FIELD_W / 2);
+    // A player level with the defender / ball is onside — small tolerance.
+    const TOL = 6;
+
+    for (const m of mates) {
+      if (m === kicker || m.isGK) continue;
+      const mf = fwd(m.x);
+      if (mf > line + TOL && mf > ballFwd + TOL && mf > halfFwd) {
+        this.offsideFlags.add(m);
+      }
+    }
+  }
+
+  /** Blow up an offside: stop play, reposition BOTH teams for the restart, and
+   *  award an indirect free kick to the defending team at the offside spot
+   *  (FIFA: the whistle goes, everyone resets, the other team gets the ball). */
+  private callOffside(offsider: PlayerEntity) {
+    const atkTeam = offsider.team;
+    const defTeam: Team = atkTeam === 'home' ? 'away' : 'home';
+    const defs = defTeam === 'home' ? this.homePlayers : this.awayPlayers;
+    const defAtk = defTeam === 'home' ? 1 : -1;
+
+    // Free kick spot: where the offside player was when the ball reached him.
+    const spotX = clamp(offsider.x, 40, FIELD_W - 40);
+    const spotY = clamp(offsider.y, 28, FIELD_H - 28);
+
+    // Stop the ball dead at the spot.
+    this.ball.x = spotX;
+    this.ball.y = spotY;
+    this.ball.z = 0;
+    this.ball.vx = this.ball.vy = this.ball.vz = 0;
+
+    // Reposition for the restart like a real free kick: everyone KEEPS their
+    // current spot (play just stopped where it was) — we only clear momentum
+    // and turn them upfield. The one exception is the OFFENDING attacking
+    // team: any of their players standing ahead of the ball is pulled BACK
+    // onside (to the own-half side of the spot) so they're clearly behind the
+    // restart and out of the kicker's way. The defending team holds its shape.
+    const atkDir = atkTeam === 'home' ? 1 : -1; // attackers' attacking axis
+    for (const p of this.allPlayers) {
+      if (p.team === atkTeam && !p.isGK) {
+        // Distance the player is AHEAD of the ball along the attack axis.
+        const ahead = (p.x - spotX) * atkDir;
+        if (ahead > -20) {
+          // Drop them back behind the ball, keeping their vertical lane.
+          p.x = clamp(spotX - atkDir * (28 + ahead), p.r, FIELD_W - p.r);
+        }
+      }
+      p.vx = p.vy = 0;
+      p.kickTimer = 0;
+      p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
+    }
+
+    // Nearest outfield defender takes the kick; drop him onto the ball facing
+    // upfield so he can play out.
+    const taker =
+      this.nearestTo(
+        defs.filter((p) => !p.isGK),
+        { x: spotX, y: spotY },
+      ) ?? defs[1];
+    taker.x = clamp(spotX - defAtk * 16, taker.r, FIELD_W - taker.r);
+    taker.y = spotY;
+    taker.vx = taker.vy = 0;
+    taker.facing = { x: defAtk, y: 0 };
+
+    // Attackers must retreat the regulation free-kick distance (9.15 m).
+    this.pushOpponentsFromSpot(defTeam, { x: spotX, y: spotY }, M(9.15));
+
+    this.owner = taker;
+    this.controlled =
+      defTeam === 'home' ? taker : this.homePlayers[this.homeTeam.kickoffFwd];
+
+    // Pan the camera to the restart and hold play for a beat.
+    this.camX = clamp(spotX, CAM_MIN, CAM_MAX);
+    this.camY = clamp(spotY, CAM_Y_MIN, CAM_Y_MAX);
+    this.setMessage('OFFSIDE', 1.6);
+    this.freeze = 1.1;
+
+    // Clear all transient ball/possession state so play restarts cleanly.
+    this.offsideFlags.clear();
+    this.lastKicker = null;
+    this.kickerLock = 0;
+    this.stealProtect = 1.2;
+    this.dispossessed = null;
+    this.dispossessedTimer = 0;
+    this.markAssign.clear();
+    this.markTimer = 0;
+    this.ballFree = 0;
+    this.jostle = 0;
+    this.tackleTimer = 0;
+    this.tackleCooldown = 0;
+    this.chargeKey = null;
+    this.chargeTime = 0;
+    this.awayChargeKey = null;
+    this.awayChargeTime = 0;
+    this.bufferTimer = 0;
+    this.kickPending = false;
+  }
+
+  // ---- teammates AI (home, non-controlled) --------------------------------
+
+  /**
+   * Active keeper positioning (FIFA-style sweeper-keeper). Instead of parking
+   * on the line, the keeper plays the ANGLE: he sits on the segment from his
+   * goal centre to the ball, coming further off his line — and shifting
+   * laterally to cover the near post — the closer the ball gets. When the ball
+   * is loose or an opponent is bearing down in/near the box with no defender
+   * challenging (a 1v1), he RUSHES out at speed to smother it. `this.gkRush`
+   * (set by the W key for the home side) forces an aggressive charge too.
+   */
+  private keeperPlan(p: PlayerEntity): { pos: Vec; speed: number } {
+    const mid = FIELD_H / 2;
+    const ownGoalX = p.team === 'home' ? 0 : FIELD_W;
+    const sign = p.team === 'home' ? 1 : -1; // +1 = "out" toward the field
+    const bx = this.ball.x;
+    const by = this.ball.y;
+    // How deep the ball is toward this keeper's goal, along the goal-to-goal
+    // axis (0 = on the goal line, larger = further upfield).
+    const ballDX = Math.abs(bx - ownGoalX);
+
+    // ---- Danger / rush detection ----
+    const carrier =
+      this.owner && this.owner.team !== p.team ? this.owner : null;
+    const mates = (p.team === 'home' ? this.homePlayers : this.awayPlayers)
+      .filter((m) => !m.isGK);
+    // Is a teammate already right on the ball (challenging)? If so, no need to
+    // abandon the goal — only rush when it's genuinely the keeper's to claim.
+    const defenderOnBall = mates.some((m) => dist(m, this.ball) < 64);
+    // Is a defender COVERING — positioned goal-side, between the keeper and the
+    // ball, and roughly in the lane? If so the situation is already handled, so
+    // the keeper should hold his line rather than charging out past his own man
+    // and vacating the goal. (Goal-side = nearer our goal line than the ball;
+    // "in the lane" = laterally close to the keeper→ball line.)
+    const kbx = bx - p.x;
+    const kby = by - p.y;
+    const kbLen = Math.max(1, len(kbx, kby));
+    const defenderCovering = mates.some((m) => {
+      const goalSide = Math.abs(m.x - ownGoalX) < ballDX - 8; // nearer our goal
+      if (!goalSide) return false;
+      // Perpendicular distance from the defender to the keeper→ball segment.
+      const t = clamp(((m.x - p.x) * kbx + (m.y - p.y) * kby) / (kbLen * kbLen), 0, 1);
+      const px = p.x + kbx * t;
+      const py = p.y + kby * t;
+      return len(m.x - px, m.y - py) < 70;
+    });
+    const manualRush = p.team === 'home' && this.gkRush > 0;
+    const ballInBoxX = ballDX < M(18); // ~ edge of the penalty area (depth)
+    // Only commit to a rush when the ball is also CENTRAL — within the penalty
+    // area's width. A ball out on the flank is near the goal LINE but no direct
+    // threat, so the keeper must hold his net and play the near post instead of
+    // charging sideways and leaving the goal gaping.
+    const ballCentral = Math.abs(by - mid) < M(18);
+    const looseClose = !this.owner && ballInBoxX && ballCentral;
+    // An opponent CARRIER only triggers a rush once he's genuinely CLOSE —
+    // inside the box near the penalty spot — and central. Rushing earlier (when
+    // he's still way out) just left the keeper parked at the box edge, and then
+    // back-pedalling toward goal as the attacker finally arrived (the "rushed
+    // early then retreated" bug). Held until ~M13 he plays the angle instead,
+    // then comes straight OUT to smother — keeper and attacker converging, so
+    // he never moves backwards while the attacker advances.
+    const carrierClose =
+      !!carrier &&
+      Math.abs(carrier.x - ownGoalX) < M(13) &&
+      Math.abs(carrier.y - mid) < M(20);
+    // Auto-rush only when it's genuinely the keeper's to claim: no teammate is
+    // already on the ball AND none is covering goal-side in the lane. (A manual
+    // W rush ignores this — the player explicitly commanded the charge.)
+    const autoRush =
+      (looseClose || carrierClose) && !defenderOnBall && !defenderCovering;
+    const boxEdge = ownGoalX + sign * M(16); // don't sweep past the box
+
+    if (manualRush || autoRush) {
+      // Charge the ball to smother / claim it, anticipating its motion a touch.
+      const lead = manualRush ? 0.16 : 0.12;
+      const aimX = bx + this.ball.vx * lead;
+      const aimY = by + this.ball.vy * lead;
+      // A MANUAL W rush is an explicit "rush keeper out" command — let him chase
+      // the real ball well beyond the box, across the full width of the pitch,
+      // so he actually runs AT the ball instead of sliding to the box edge. The
+      // AUTO sweeper rush stays inside the box (no keeper at the halfway line).
+      const outLimit = manualRush ? M(40) : M(16);
+      const reachEdge = ownGoalX + sign * outLimit;
+      const tx =
+        sign > 0
+          ? clamp(aimX, ownGoalX + 12, reachEdge)
+          : clamp(aimX, reachEdge, ownGoalX - 12);
+      const ty = manualRush
+        ? clamp(aimY, 20, FIELD_H - 20)
+        : clamp(aimY, mid - M(14), mid + M(14));
+      return { pos: { x: tx, y: ty }, speed: SPRINT_SPEED };
+    }
+
+    // ---- Angle play (no rush) ----
+    // Come off the line more as the ball nears: ~14px when it's a long way
+    // out, up to ~150px on the edge of the box.
+    const comeOut = clamp(220 - ballDX * 0.26, 14, 150);
+    const gx = bx - ownGoalX;
+    const gy = by - mid;
+    const gl = Math.max(120, len(gx, gy));
+    // Fraction along the goal→ball line; bounded so lateral tracking grows as
+    // the ball gets close (small/central when it's far away).
+    const f = clamp(comeOut / gl, 0, 0.5);
+    const tx =
+      sign > 0
+        ? clamp(ownGoalX + gx * f, ownGoalX + 14, boxEdge)
+        : clamp(ownGoalX + gx * f, boxEdge, ownGoalX - 14);
+    // Don't PERFECTLY mirror the ball's lateral angle — a real keeper holds a
+    // touch more central and can't cover both corners. Tracking only ~72% of
+    // the way means a well-placed shot into the open corner can beat him,
+    // rather than every shot flying straight at a magnetically-positioned GK.
+    const ty = clamp(mid + gy * f * 0.72, goalTop + 14, goalBottom - 14);
+    // Hustle back into position when badly out of it, else glide.
+    const here = { x: tx, y: ty };
+    const speed = dist(p, here) > 90 ? RUN_SPEED : WALK_SPEED;
+    return { pos: here, speed };
+  }
+
+  // ---- off-ball intelligence (FIFA-style, both teams) ----------------------
+
+  private markAssign = new Map<PlayerEntity, PlayerEntity>();
+  private markTimer = 0;
+
+  /**
+   * Attacking off-ball role for each non-carrier teammate of the team in
+   * possession. FIFA gives the carrier VARIED options instead of everyone
+   * sprinting at goal: a couple penetrate in behind (`run`), a couple check
+   * back toward the ball as a safe outlet (`short`), wide players stretch the
+   * defence on the touchline (`width`), and the rest hold shape to recycle
+   * possession and screen the counter (`hold`). Recomputed with the marking.
+   */
+  private attackRole = new Map<
+    PlayerEntity,
+    'run' | 'short' | 'width' | 'hold'
+  >();
+
+  /**
+   * Assign defenders to man-mark dangerous opponents, like FIFA marks
+   * attackers who get near the defensive zone. Greedy: the most dangerous
+   * threat (closest to the defended goal) is claimed first by the nearest
+   * free defender within 320px. Recomputed every 0.35s so marks are stable
+   * and don't jitter between assignments.
+   */
+  private computeMarking() {
+    this.markAssign.clear();
+    const owner = this.owner;
+    if (!owner) return;
+    const attackers =
+      owner.team === 'home' ? this.homePlayers : this.awayPlayers;
+    const defenders =
+      owner.team === 'home' ? this.awayPlayers : this.homePlayers;
+    const defGoalX = owner.team === 'home' ? FIELD_W : 0;
+    const threats = attackers
+      .filter(
+        (a) =>
+          a !== owner && !a.isGK && Math.abs(a.x - defGoalX) < FIELD_W * 0.62,
+      )
+      .sort((a, b) => Math.abs(a.x - defGoalX) - Math.abs(b.x - defGoalX));
+    // Don't man-mark EVERY attacker — a real defence zonally covers and leaves
+    // space, so there's always an outlet to pass to. Mark only the most
+    // dangerous threats, leaving at least two attackers free; the rest hold a
+    // zonal block (offBallPlan). This was the main reason passing felt
+    // impossible — every teammate was glued to a marker.
+    const maxMarks = Math.max(1, threats.length - 2);
+    const taken = new Set<PlayerEntity>();
+    for (const threat of threats) {
+      if (this.markAssign.size >= maxMarks) break;
+      let best: PlayerEntity | null = null;
+      // Only commit to a man-mark when genuinely close (was 320 — too eager).
+      let bestD = 250;
+      for (const def of defenders) {
+        if (def.isGK || def === this.controlled || taken.has(def)) continue;
+        const dd = dist(def, threat);
+        if (dd < bestD) {
+          bestD = dd;
+          best = def;
+        }
+      }
+      if (best) {
+        taken.add(best);
+        this.markAssign.set(best, threat);
+      }
+    }
+  }
+
+  /** Goal-side (slightly ball-side) marking spot ~52px off the attacker. */
+  private markTarget(d: PlayerEntity, threat: PlayerEntity): Vec {
+    const goal = { x: d.team === 'home' ? 0 : FIELD_W, y: FIELD_H / 2 };
+    const lg = len(goal.x - threat.x, goal.y - threat.y);
+    const gx = (goal.x - threat.x) / lg;
+    const gy = (goal.y - threat.y) / lg;
+    const lb = len(this.ball.x - threat.x, this.ball.y - threat.y);
+    const bx = (this.ball.x - threat.x) / lb;
+    const by = (this.ball.y - threat.y) / lb;
+    const mx = gx * 0.75 + bx * 0.25;
+    const my = gy * 0.75 + by * 0.25;
+    const ml = len(mx, my);
+    // Stand off a touch further (was 40) so the marked man can still be a
+    // passing option rather than being smothered — markers shouldn't be glued.
+    return this.clampTarget({
+      x: threat.x + (mx / ml) * 52,
+      y: threat.y + (my / ml) * 52,
+    });
+  }
+
+  private clampTarget(t: Vec): Vec {
+    return {
+      x: clamp(t.x, 20, FIELD_W - 20),
+      y: clamp(t.y, 20, FIELD_H - 20),
+    };
+  }
+
+  /**
+   * FIFA "second man" containment spot. While the first defender (chaser)
+   * presses the ball, a covering defender jockeys into the gap between the
+   * carrier and the defended goal — holding the carrier up and cutting the
+   * forward lane so he can't just drive through the press; he's forced to
+   * pass, turn back, or run into a second challenge. Spot is ~`gap`px
+   * goal-side of the carrier on the carrier→goal line.
+   */
+  private containTarget(d: PlayerEntity, carrier: PlayerEntity, gap = 90): Vec {
+    const goal = { x: d.team === 'home' ? 0 : FIELD_W, y: FIELD_H / 2 };
+    const gx = goal.x - carrier.x;
+    const gy = goal.y - carrier.y;
+    const gl = len(gx, gy) || 1;
+    return this.clampTarget({
+      x: carrier.x + (gx / gl) * gap,
+      y: carrier.y + (gy / gl) * gap,
+    });
+  }
+
+  /**
+   * Pick the SECOND defender (the container) for a team defending against
+   * `carrier`: the nearest outfielder — other than the first presser — that is
+   * goal-side of the carrier (between him and the defended goal), so it steps
+   * out to contain rather than dragging someone up from behind the ball.
+   * Falls back to the nearest remaining outfielder when none is goal-side.
+   */
+  private pickContainer(
+    defenders: PlayerEntity[],
+    carrier: PlayerEntity,
+    presser: PlayerEntity | null,
+  ): PlayerEntity | null {
+    const goalX = defenders[0]?.team === 'home' ? 0 : FIELD_W;
+    /** How far each player is up the pitch from the defended goal. */
+    const depthToGoal = (x: number) => Math.abs(x - goalX);
+    const carrierDepth = depthToGoal(carrier.x);
+    const pool = defenders.filter(
+      (p) => !p.isGK && p !== presser && p !== this.controlled,
+    );
+    const goalSide = pool.filter((p) => depthToGoal(p.x) <= carrierDepth + 30);
+    return this.nearestTo(goalSide.length ? goalSide : pool, carrier);
+  }
+
+  /**
+   * Hand out attacking off-ball roles to the team in possession so the carrier
+   * always has a MIX of options (FIFA "player support"), instead of every
+   * teammate making the same run at goal. Greedy + position-based so it's
+   * stable across the 0.35s recompute. See `attackRole` for the role meanings.
+   */
+  private computeAttackSupport() {
+    this.attackRole.clear();
+    const owner = this.owner;
+    if (!owner) return;
+    const dir = owner.team === 'home' ? 1 : -1;
+    const ownGoalX = owner.team === 'home' ? 0 : FIELD_W;
+    /** Distance up the pitch (attacking direction) from own goal. */
+    const depth = (x: number) => (x - ownGoalX) * dir;
+    const ballD = depth(owner.x);
+    const team = owner.team === 'home' ? this.homePlayers : this.awayPlayers;
+    const mates = team.filter((p) => p !== owner && !p.isGK);
+
+    // RUNNERS: the up-to-2 most advanced non-defenders that are level with or
+    // ahead of the carrier make penetrating runs in behind.
+    const runners = mates
+      .filter((p) => p.role !== 'DF' && depth(p.x) > ballD - 120)
+      .sort((a, b) => depth(b.x) - depth(a.x))
+      .slice(0, 2);
+    for (const p of runners) this.attackRole.set(p, 'run');
+
+    // WIDTH: remaining non-defenders whose formation lane hugs a touchline
+    // stay wide to stretch the defence.
+    for (const p of mates) {
+      if (this.attackRole.has(p) || p.role === 'DF') continue;
+      if (Math.abs(p.anchor.y - FIELD_H / 2) > FIELD_H * 0.2) {
+        this.attackRole.set(p, 'width');
+      }
+    }
+
+    // SHORT: the up-to-2 nearest remaining mates behind/level with the carrier
+    // check back toward the ball as a safe passing outlet.
+    const shortMen = mates
+      .filter((p) => !this.attackRole.has(p) && depth(p.x) <= ballD + 60)
+      .sort((a, b) => dist(a, owner) - dist(b, owner))
+      .slice(0, 2);
+    for (const p of shortMen) this.attackRole.set(p, 'short');
+
+    // Everyone else holds shape (recycle / cover the counter).
+    for (const p of mates) {
+      if (!this.attackRole.has(p)) this.attackRole.set(p, 'hold');
+    }
+  }
+
+  /**
+   * FIFA-style off-ball positioning, used by every player except the
+   * user-controlled one, the carrier, and the active presser/chaser.
+   *
+   * The team shape is BALL-RELATIVE, not anchor-relative: each line
+   * (DF/MF/ST) targets a depth measured from its own goal that tracks the
+   * ball, so the block moves up and down the pitch as a connected unit —
+   * no gap between the players joining the attack and the rest.
+   * Line depths are clamped so the defence never collapses onto its own
+   * goal line (floor ≈ penalty-box edge) and strikers never drop deep.
+   * - ATTACK: lines push up around the ball; players level with/ahead of
+   *   the carrier make runs in behind; everyone drifts off markers.
+   * - DEFEND: compact mid/low block + goal-side man-marking (computeMarking).
+   * - LOOSE: neutral block around the ball.
+   */
+  private offBallPlan(
+    p: PlayerEntity,
+    baseSpeed: number,
+  ): { pos: Vec; speed: number } {
+    if (p.isGK) return this.keeperPlan(p);
+    const dir = p.team === 'home' ? 1 : -1;
+    const ownGoalX = p.team === 'home' ? 0 : FIELD_W;
+    /** Distance from own goal along the attacking direction (0..FIELD_W). */
+    const depth = (x: number) => (x - ownGoalX) * dir;
+    const fromDepth = (d: number) => ownGoalX + d * dir;
+    const ballD = depth(this.ball.x);
+    const W = FIELD_W;
+    const owner = this.owner;
+    const phase: 'attack' | 'defend' | 'loose' = !owner
+      ? 'loose'
+      : owner.team === p.team
+        ? 'attack'
+        : 'defend';
+
+    // Per-line target depth, tracking the ball. [DF, MF, ST] per phase.
+    let lineD: number;
+    if (phase === 'defend') {
+      lineD =
+        p.role === 'DF'
+          ? clamp(ballD - 200, 170, W * 0.52) // never parked on the goal line
+          : p.role === 'MF'
+            ? clamp(ballD - 20, 340, W * 0.68)
+            : clamp(ballD + 230, W * 0.4, W * 0.75); // STs stay up as the outlet
+    } else if (phase === 'attack') {
+      lineD =
+        p.role === 'DF'
+          ? clamp(ballD - 420, 280, W * 0.58)
+          : p.role === 'MF'
+            ? clamp(ballD - 150, 450, W * 0.8)
+            : clamp(ballD + 170, 720, W - 170);
+    } else {
+      lineD =
+        p.role === 'DF'
+          ? clamp(ballD - 300, 220, W * 0.55)
+          : p.role === 'MF'
+            ? clamp(ballD - 80, 400, W * 0.74)
+            : clamp(ballD + 200, 640, W * 0.85);
+    }
+    // Keep the formation's internal stagger (full-backs/wingers slightly
+    // higher than the centre of their line).
+    const roleCenter = p.role === 'DF' ? 0.15 : p.role === 'MF' ? 0.33 : 0.52;
+    lineD += (depth(p.anchor.x) / W - roleCenter) * W * 1.6;
+
+    // Width: hold the lane from the formation, pulled toward the ball side.
+    const ySqueeze = phase === 'defend' ? 0.4 : 0.28;
+    const t = {
+      x: fromDepth(lineD),
+      y: p.anchor.y + (this.ball.y - FIELD_H / 2) * ySqueeze,
+    };
+
+    // DEFEND: man-marking overrides the zonal block.
+    if (phase === 'defend') {
+      const mark = this.markAssign.get(p);
+      if (mark) {
+        return { pos: this.markTarget(p, mark), speed: PRESS_SPEED * 0.95 };
+      }
+      return { pos: this.clampTarget(t), speed: baseSpeed };
+    }
+
+    // ATTACK — role-based support (computeAttackSupport) so the team offers a
+    // MIX of options instead of everyone sprinting at goal. `t` already holds
+    // the zonal line target, which is what `hold` players use.
+    if (phase === 'attack' && owner) {
+      let speed = baseSpeed;
+      const role = this.attackRole.get(p) ?? 'hold';
+      // Which touchline this player's formation lane favours.
+      const laneSide = p.anchor.y < FIELD_H / 2 ? -1 : 1;
+
+      if (role === 'run') {
+        // Penetrate in behind, ahead of the carrier, staggered into this
+        // player's lane so two runners don't converge on the same spot.
+        t.x = clamp(owner.x + dir * 300, 200, FIELD_W - 120);
+        t.y = clamp(
+          FIELD_H / 2 +
+            laneSide * FIELD_H * 0.22 +
+            (this.ball.y - FIELD_H / 2) * 0.2,
+          70,
+          FIELD_H - 70,
+        );
+        speed = RUN_SPEED;
+      } else if (role === 'short') {
+        // Check back toward the ball — slightly behind the carrier and off to
+        // one side — to give a safe, supporting pass option.
+        t.x = clamp(owner.x - dir * 150, 120, FIELD_W - 120);
+        t.y = clamp(owner.y + laneSide * 150, 70, FIELD_H - 70);
+        speed = Math.max(baseSpeed, RUN_SPEED * 0.8);
+      } else if (role === 'width') {
+        // Hold the touchline a touch ahead of the ball to stretch the block.
+        t.x = fromDepth(clamp(ballD + 90, W * 0.25, W - 200));
+        t.y = clamp(FIELD_H / 2 + laneSide * FIELD_H * 0.4, 80, FIELD_H - 80);
+        speed = Math.max(baseSpeed, RUN_SPEED * 0.7);
+      }
+      // `hold`: keep the zonal `t` (defenders + deep mids stay back to recycle
+      // and screen the counter).
+
+      // Get open: drift away from the nearest opponent near the spot so
+      // there's always a clean passing option. A wider bubble (was 95) makes
+      // off-ball players actively peel into space instead of standing on a
+      // marker — passing lanes open up.
+      const pos = this.clampTarget(t);
+      const opps = p.team === 'home' ? this.awayPlayers : this.homePlayers;
+      const near = this.nearestTo(opps, pos);
+      if (near) {
+        const d = dist(near, pos);
+        if (d < 130) {
+          const push = 130 - d;
+          pos.x += ((pos.x - near.x) / (d || 1)) * push;
+          pos.y += ((pos.y - near.y) / (d || 1)) * push;
+        }
+      }
+      return { pos: this.clampTarget(pos), speed };
+    }
+
+    // LOOSE
+    return { pos: this.clampTarget(t), speed: baseSpeed };
+  }
+
+  /** Practice off-ball positioning: teammates stay as SUPPORT around the
+   *  carrier (fanned out into their vertical lane, only a touch ahead/behind)
+   *  so there's always a passing option — they never sprint to the goal line.
+   *  Keeps the ball reachable for rehearsing passes and lay-offs. */
+  private practiceSupportPlan(p: PlayerEntity): { pos: Vec; speed: number } {
+    const ref = this.controlled ?? { x: this.ball.x, y: this.ball.y };
+    // Horizontal bias from the player's staged slot: deeper slots offer a
+    // back option, advanced slots an outlet ahead — but always within a
+    // short pass and well short of the keeper's goal line.
+    const fwd = clamp(p.anchor.x - FIELD_W * 0.5, -M(12), M(12));
+    let t = {
+      x: clamp(ref.x + fwd, M(25), FIELD_W - M(24)),
+      y: clamp(
+        p.anchor.y + (this.ball.y - FIELD_H / 2) * 0.15,
+        M(6),
+        FIELD_H - M(6),
+      ),
+    };
+    // Don't crowd the carrier — hold at least a passing distance away.
+    const dx = t.x - ref.x;
+    const dy = t.y - ref.y;
+    const d = Math.hypot(dx, dy);
+    const MIN = M(9);
+    if (d < MIN && d > 0.1) {
+      t = {
+        x: clamp(ref.x + (dx / d) * MIN, M(25), FIELD_W - M(24)),
+        y: clamp(ref.y + (dy / d) * MIN, M(6), FIELD_H - M(6)),
+      };
+    }
+    return { pos: this.clampTarget(t), speed: TEAMMATE_SPEED };
+  }
+
+  private updateHomeTeammates(dt: number) {
+    const awayCarrier =
+      this.owner && this.owner.team === 'away' ? this.owner : null;
+    // One teammate actively presses the CPU carrier (or races to a loose
+    // ball the CPU last touched) — the user only controls one player, so
+    // without this the team never defends. Everyone else marks/keeps shape.
+    let presser: PlayerEntity | null = null;
+    const candidates = this.homePlayers.filter(
+      (p) => p !== this.controlled && !p.isGK && this.owner !== p,
+    );
+    if (awayCarrier) {
+      presser = this.nearestTo(candidates, awayCarrier);
+    } else if (!this.owner && this.lastKicker?.team === 'away') {
+      presser = this.nearestTo(candidates, this.ball);
+    }
+
+    // Second-man containment: a covering defender steps out to jockey
+    // goal-side of the carrier (FIFA-style) so the user is squeezed into
+    // passing instead of dribbling unopposed past a backpedalling block.
+    const container = awayCarrier
+      ? this.pickContainer(this.homePlayers, awayCarrier, presser)
+      : null;
+
+    for (const p of this.homePlayers) {
+      if (p === this.controlled) continue;
+      if (this.owner === p) {
+        if (p.isGK) {
+          // Your keeper distributes automatically: pass to the most open
+          // teammate (control stays where it is — no auto-switch).
+          this.steer(p, 0, 0, dt);
+          this.homeKeeperDistribute(dt);
+          continue;
+        }
+        // A teammate has the ball but you haven't switched to them:
+        // they shield it and wait for you (press Q to take over).
+        this.steer(p, 0, 0, dt);
+        this.faceToward(p, 1, 0, dt);
+        continue;
+      }
+      if (p === presser) {
+        // Drive straight at the carrier (no slow-in) to barge into a challenge;
+        // chase a loose ball with anticipation instead.
+        if (awayCarrier) {
+          this.driveToward(p, awayCarrier, PRESS_SPEED, dt);
+        } else {
+          const t = this.clampTarget({
+            x: this.ball.x + this.ball.vx * 0.18,
+            y: this.ball.y + this.ball.vy * 0.18,
+          });
+          this.moveToward(p, t, PRESS_SPEED, dt);
+        }
+        continue;
+      }
+      if (p === container && awayCarrier) {
+        // Jockey into a goal-side contain spot (moveToward slow-in lets him
+        // settle and hold the line rather than diving in — that's the presser's
+        // job). Forces the carrier wide or into a pass.
+        this.moveToward(p, this.containTarget(p, awayCarrier), PRESS_SPEED, dt);
+        continue;
+      }
+      const plan = this.practice
+        ? this.practiceSupportPlan(p)
+        : this.offBallPlan(p, TEAMMATE_SPEED);
+      // Jog into position, but RUN when badly out of position.
+      const sp =
+        dist(p, plan.pos) > 240 ? Math.max(plan.speed, RUN_SPEED) : plan.speed;
+      this.moveToward(p, plan.pos, sp, dt);
+    }
+
+    // Your AI teammates also commit tackles on the away carrier (so you aren't
+    // forced to switch + tackle manually for every challenge). Same realism
+    // gate + shared cooldown as the CPU side.
+    if (awayCarrier && this.cpuTackleCd <= 0) {
+      for (const p of this.homePlayers) {
+        if (p.isGK || p === this.controlled) continue;
+        if (this.pokeTackle(p, p.cachedAiTackleRadius)) {
+          this.cpuTackleCd = 0.55;
+          break;
+        }
+      }
+    }
+  }
+
+  private gkHoldTimer = 0;
+
+  /** Whether the keeper currently in possession is HANDLING the ball (holding
+   *  it in his hands). False = he may only play it with his FEET, because the
+   *  laws forbid handling: he's OUTSIDE his own penalty area, or the ball came
+   *  straight from a deliberate kick by a teammate (the back-pass rule). When
+   *  false the keeper dribbles/controls like an outfielder (no scoop into
+   *  hands, no box-clamp, no protected catch). */
+  private gkHandling = false;
+
+  /** Is the keeper inside his OWN penalty area (where handling is legal)? */
+  private keeperInOwnBox(gk: PlayerEntity): boolean {
+    const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
+    const depth = M(16.5); // penalty area depth
+    const halfW = M(20.16); // half its width
+    const mid = FIELD_H / 2;
+    const inX =
+      gk.team === 'home' ? gk.x <= ownGoalX + depth : gk.x >= ownGoalX - depth;
+    return inX && Math.abs(gk.y - mid) <= halfW;
+  }
+
+  /** May this keeper legally take the ball in his HANDS right now? No if he's
+   *  outside his box, or the ball was just deliberately kicked to him by a
+   *  team-mate (back-pass rule). `fromKicker` is whoever last kicked it. */
+  private keeperMayHandle(
+    gk: PlayerEntity,
+    fromKicker: PlayerEntity | null,
+  ): boolean {
+    if (!this.keeperInOwnBox(gk)) return false;
+    const backPass =
+      !!fromKicker && fromKicker.team === gk.team && !fromKicker.isGK;
+    return !backPass;
+  }
+
+  private homeKeeperDistribute(dt: number) {
+    const gk = this.owner;
+    if (!gk) return;
+    this.gkHoldTimer += dt;
+    if (this.gkHoldTimer < 0.7) return; // brief hold before clearing
+    this.gkHoldTimer = 0;
+    this.keeperDistribute(gk);
+  }
+
+  /** A keeper clears the ball UPFIELD (not square to a defender at his feet):
+   *  pick the most-advanced reasonably-open teammate and hoof it to them with a
+   *  real lofted goal-kick arc when the target is far. Shared by both keepers.
+   *  Fixes the keeper rolling it 5 m to a marked centre-back in his own box. */
+  private keeperDistribute(gk: PlayerEntity) {
+    const atk = gk.team === 'home' ? 1 : -1;
+    const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
+    const mates = gk.team === 'home' ? this.homePlayers : this.awayPlayers;
+
+    let best: PlayerEntity | null = null;
+    let bestScore = -Infinity;
+    for (const m of mates) {
+      if (m === gk || m.isGK) continue;
+      const d = dist(gk, m);
+      const forward = (m.x - ownGoalX) * atk; // how far up the pitch (px)
+      const open = this.nearestOpponentDist(m);
+      // Reward distance up the pitch most (kick it long), then open space.
+      // Heavily penalize a teammate right next to the keeper (don't roll it
+      // square in the box) or one who is tightly marked.
+      const score =
+        forward * 0.6 +
+        Math.min(open, 220) +
+        (d < M(20) ? -1500 : 0) +
+        (open < M(6) ? -700 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = m;
+      }
+    }
+    if (!best) return;
+
+    const aim = {
+      x: clamp(best.x + best.vx * 0.2, 20, FIELD_W - 20),
+      y: clamp(best.y + best.vy * 0.2, 20, FIELD_H - 20),
+    };
+    const d = dist(this.ball, aim);
+    if (d > M(22)) {
+      // A proper lofted goal kick / clearance — flies over midfield and drops
+      // on the target, instead of a grounded pass that dies short.
+      const T = clamp(0.6 + d / M(70), 0.6, 1.5);
+      const vz = 0.5 * GRAVITY * T;
+      const hspeed = Math.min((d / T) * 1.12, 1600);
+      this.kickBallToward(aim, hspeed, gk, vz, 0.06);
+      // A lofted clearance flies over midfield — only the target mate gathers
+      // it on the way down, opponents can't pluck it out of the air.
+      this.aerialReceiver = best;
+    } else {
+      this.kickBallToward(aim, this.passPower(d, 300, 1300), gk);
+    }
+  }
+
+  // ---- CPU team AI ---------------------------------------------------------
+
+  private bestAwaySwitchCandidate(): PlayerEntity | null {
+    const ahead = {
+      x: clamp(this.ball.x + this.ball.vx * 0.35, 0, FIELD_W),
+      y: clamp(this.ball.y + this.ball.vy * 0.35, 0, FIELD_H),
+    };
+    const candidates = this.awayPlayers.filter((p) => {
+      if (p === this.awayControlled) return false;
+      return !p.isGK || this.owner === p || dist(p, this.ball) <= 160;
+    });
+    return this.nearestTo(candidates, ahead);
+  }
+
+  private updateAwayControlled(dt: number) {
+    const p = this.awayControlled;
+    const owns = this.owner === p;
+    const carrier =
+      this.owner && this.owner.team === 'home' ? this.owner : null;
+    const sliding = (p.slideTimer ?? 0) > 0;
+
+    if (
+      this.awayJustPressed.includes('KeyQ') &&
+      !owns &&
+      !this.awayChargeKey
+    ) {
+      const target = this.bestAwaySwitchCandidate();
+      if (target) this.awayControlled = target;
+    }
+
+    if (
+      !owns &&
+      !sliding &&
+      this.awaySlideCooldown <= 0 &&
+      this.awayJustPressed.includes('KeyA')
+    ) {
+      let sx = p.vx;
+      let sy = p.vy;
+      if (len(sx, sy) < 40) {
+        sx = this.ball.x + this.ball.vx * 0.12 - p.x;
+        sy = this.ball.y + this.ball.vy * 0.12 - p.y;
+      }
+      const sl = len(sx, sy) || 1;
+      p.slideDir = { x: sx / sl, y: sy / sl };
+      p.slideTimer = 0.7;
+      this.awaySlideCooldown = 1.5;
+      p.facing = { ...p.slideDir };
+    }
+
+    if (
+      !owns &&
+      !sliding &&
+      this.awayTackleCooldown <= 0 &&
+      this.awayJustPressed.includes('KeyD')
+    ) {
+      const bx = this.ball.x + this.ball.vx * 0.1 - p.x;
+      const by = this.ball.y + this.ball.vy * 0.1 - p.y;
+      const l = len(bx, by) || 1;
+      this.awayTackleDir = { x: bx / l, y: by / l };
+      this.awayTackleTimer = 0.22;
+      this.awayTackleCooldown = 0.8;
+      p.kickTimer = Math.max(p.kickTimer, 0.22);
+    }
+
+    const containing = this.awayKeys.has('KeyC') && !owns;
+    if (sliding) {
+      const dir = p.slideDir ?? p.facing;
+      const t = p.slideTimer ?? 0;
+      if (t > 0.4) {
+        const frac = 0.45 + 0.55 * ((t - 0.4) / 0.3);
+        this.steer(
+          p,
+          dir.x * SLIDE_LUNGE_SPEED * frac,
+          dir.y * SLIDE_LUNGE_SPEED * frac,
+          dt,
+          ACCEL * 1.6,
+        );
+        this.pokeTackle(p, p.cachedSlideTackleRadius, false);
+      } else {
+        this.steer(p, 0, 0, dt);
+      }
+    } else if (this.awayTackleTimer > 0) {
+      this.awayTackleTimer -= dt;
+      this.steer(
+        p,
+        this.awayTackleDir.x * TACKLE_LUNGE_SPEED,
+        this.awayTackleDir.y * TACKLE_LUNGE_SPEED,
+        dt,
+      );
+      this.pokeTackle(p, p.cachedStandingTackleRadius);
+    } else if (containing && carrier) {
+      const gx = FIELD_W - carrier.x;
+      const gy = FIELD_H / 2 - carrier.y;
+      const gl = len(gx, gy) || 1;
+      const spot = {
+        x: carrier.x + (gx / gl) * 30,
+        y: carrier.y + (gy / gl) * 30,
+      };
+      const speed = this.awayKeys.has('KeyE')
+        ? SPRINT_SPEED * 0.94
+        : JOCKEY_SPEED;
+      this.moveToward(p, spot, speed, dt);
+      if (
+        this.awayTackleCooldown <= 0 &&
+        this.pokeTackle(p, p.cachedContainTackleRadius)
+      ) {
+        this.awayTackleCooldown = 0.5;
+      }
+    } else if (containing) {
+      const speed = this.awayKeys.has('KeyE')
+        ? SPRINT_SPEED * 0.94
+        : JOCKEY_SPEED;
+      this.moveToward(p, this.ball, speed, dt);
+    } else {
+      let dx = 0;
+      let dy = 0;
+      if (this.awayKeys.has('ArrowUp')) dy -= 1;
+      if (this.awayKeys.has('ArrowDown')) dy += 1;
+      if (this.awayKeys.has('ArrowLeft')) dx -= 1;
+      if (this.awayKeys.has('ArrowRight')) dx += 1;
+      const l = len(dx, dy);
+      const sprint = this.awayKeys.has('KeyE');
+      let speed = sprint ? SPRINT_SPEED : WALK_SPEED;
+      if (owns) speed *= p.cachedDribbleSpeedMultiplier;
+      this.steer(
+        p,
+        l ? (dx / l) * speed : 0,
+        l ? (dy / l) * speed : 0,
+        dt,
+        owns ? DRIBBLE_ACCEL * p.cachedDribbleAccelerationMultiplier : ACCEL,
+      );
+    }
+
+    if (!this.awayChargeKey && owns) {
+      const code = this.awayJustPressed.find((key) => KICK_KEYS.has(key));
+      if (code) {
+        this.awayChargeKey = code;
+        this.awayChargeTime = 0;
+        this.awayChargeLofted = this.awayKeys.has('KeyQ');
+      }
+    }
+
+    if (this.awayChargeKey) {
+      const released = this.awayJustReleased.includes(this.awayChargeKey);
+      if (!owns) {
+        this.awayChargeKey = null;
+        this.awayChargeTime = 0;
+      } else if (released) {
+        const code = this.awayChargeKey;
+        const charge = clamp(this.awayChargeTime / CHARGE_FULL, 0, 1);
+        const lofted = this.awayChargeLofted || this.awayKeys.has('KeyQ');
+        this.awayChargeKey = null;
+        this.awayChargeTime = 0;
+        this.doAwayKick(code, charge, lofted);
+      } else {
+        const chargeRate =
+          this.awayChargeKey === 'KeyD'
+            ? p.cachedShotChargeRate
+            : p.cachedPassChargeRate;
+        this.awayChargeTime = Math.min(
+          this.awayChargeTime + dt * chargeRate,
+          CHARGE_FULL,
+        );
+      }
+    }
+  }
+
+  private updateAwayTeammates(dt: number) {
+    const homeCarrier =
+      this.owner && this.owner.team === 'home' ? this.owner : null;
+    const candidates = this.awayPlayers.filter(
+      (p) => p !== this.awayControlled && !p.isGK && this.owner !== p,
+    );
+    const presser = homeCarrier
+      ? this.nearestTo(candidates, homeCarrier)
+      : !this.owner && this.lastKicker?.team === 'home'
+        ? this.nearestTo(candidates, this.ball)
+        : null;
+
+    for (const p of this.awayPlayers) {
+      if (p === this.awayControlled) continue;
+      if (this.owner === p) {
+        if (p.isGK) {
+          this.steer(p, 0, 0, dt);
+          this.gkHoldTimer += dt;
+          if (this.gkHoldTimer >= 0.9) {
+            this.gkHoldTimer = 0;
+            this.keeperDistribute(p);
+          }
+        } else {
+          this.steer(p, 0, 0, dt);
+          this.faceToward(p, -1, 0, dt);
+        }
+        continue;
+      }
+      if (p === presser) {
+        if (homeCarrier) this.driveToward(p, homeCarrier, PRESS_SPEED, dt);
+        else this.moveToward(p, this.ball, PRESS_SPEED, dt);
+        continue;
+      }
+      const plan = this.offBallPlan(p, AWAY_FORMATION_SPEED);
+      const speed =
+        dist(p, plan.pos) > 240 ? Math.max(plan.speed, RUN_SPEED) : plan.speed;
+      this.moveToward(p, plan.pos, speed, dt);
+    }
+  }
+
+  private updateAwayTeam(dt: number) {
+    if (this.localMultiplayer) {
+      this.updateAwayControlled(dt);
+      this.updateAwayTeammates(dt);
+      return;
+    }
+    if (this.practice) {
+      this.updatePracticeAway(dt);
+      return;
+    }
+    const carrier =
+      this.owner && this.owner.team === 'away' ? this.owner : null;
+    // The keeper isn't a generic chaser — his own keeperPlan decides when to
+    // hold the line vs. rush out (and keeps him inside the box).
+    const outfield = this.awayPlayers.filter((p) => !p.isGK);
+    const chaser =
+      carrier ?? this.nearestTo(outfield, this.ball) ?? this.awayPlayers[1];
+
+    // When the USER has the ball, the nearest CPU defender steps right onto him
+    // and commits a tackle — a defender in front of you should actually try to
+    // win it, not back off and let you stroll past.
+    const userCarrier =
+      this.owner && this.owner.team === 'home' && !this.owner.isGK
+        ? this.owner
+        : null;
+
+    // FIFA second-man defending: while `chaser` presses the ball, a `container`
+    // steps out to jockey goal-side of the carrier — cutting his forward lane
+    // so he can't just run, forcing a pass/turn. Only when the user is on the
+    // ball (when the CPU has it, the chaser IS the carrier).
+    const container = userCarrier
+      ? this.pickContainer(outfield, userCarrier, chaser)
+      : null;
+
+    for (const p of this.awayPlayers) {
+      if (p === carrier) {
+        this.updateAwayCarrier(p, dt);
+      } else if (p === chaser) {
+        // Chase to engage. When hunting the user's carrier, DRIVE straight at
+        // the man at full pace (no slow-in) so the defender barges into body
+        // contact and wins the jostle, instead of hovering a few px behind. A
+        // loose ball is chased with slight anticipation.
+        if (userCarrier) {
+          this.driveToward(p, userCarrier, AWAY_CHASE_SPEED, dt);
+        } else {
+          const t = {
+            x: clamp(this.ball.x + this.ball.vx * 0.18, p.r, FIELD_W - p.r),
+            y: clamp(this.ball.y + this.ball.vy * 0.18, p.r, FIELD_H - p.r),
+          };
+          this.moveToward(p, t, AWAY_CHASE_SPEED, dt);
+        }
+      } else if (p === container && userCarrier) {
+        // Jockey into the containing spot (moveToward eases in so he holds the
+        // line rather than barging through — the chaser is the committed one).
+        this.moveToward(p, this.containTarget(p, userCarrier), PRESS_SPEED, dt);
+      } else {
+        const plan = this.offBallPlan(p, AWAY_FORMATION_SPEED);
+        const sp =
+          dist(p, plan.pos) > 240
+            ? Math.max(plan.speed, RUN_SPEED)
+            : plan.speed;
+        this.moveToward(p, plan.pos, sp, dt);
+      }
+    }
+
+    // CPU tackling: any away outfielder who has got the ball into range pokes
+    // it off the user (on a shared cooldown so it isn't a frame-by-frame
+    // vacuum). pokeTackle already enforces the realism gate (must be ball-side
+    // and facing the ball — can't tackle from behind).
+    if (userCarrier && this.cpuTackleCd <= 0) {
+      for (const p of this.awayPlayers) {
+        if (p.isGK) continue;
+        if (this.pokeTackle(p, p.cachedAiTackleRadius)) {
+          this.cpuTackleCd = 0.55;
+          break;
+        }
+      }
+    }
+  }
+
+  /** Practice: the lone away keeper holds his line and saves shots; if he
+   *  gathers the ball he boots it back out so free play keeps flowing. */
+  private updatePracticeAway(dt: number) {
+    const gk = this.awayPlayers[0];
+    if (!gk) return;
+    if (this.owner === gk) {
+      this.updateAwayCarrier(gk, dt);
+    } else {
+      const plan = this.offBallPlan(gk, AWAY_FORMATION_SPEED);
+      this.moveToward(gk, plan.pos, plan.speed, dt);
+    }
+  }
+
+  /** Practice clearance: the away keeper has no teammates to find, so he simply
+   *  hoofs the gathered ball back upfield toward the home players so the user
+   *  regains it and can keep practising. */
+  private practiceKeeperClear(gk: PlayerEntity) {
+    const out = this.homePlayers.filter((p) => !p.isGK);
+    const target =
+      this.nearestTo(out, { x: FIELD_W * 0.5, y: FIELD_H / 2 }) ??
+      ({ x: FIELD_W * 0.5, y: FIELD_H / 2 } as { x: number; y: number });
+    const aim = { x: target.x, y: target.y };
+    const d = dist(this.ball, aim);
+    const T = clamp(0.6 + d / M(70), 0.6, 1.4);
+    const vz = 0.5 * GRAVITY * T;
+    const hspeed = Math.min((d / T) * 1.1, 1500);
+    this.kickBallToward(aim, hspeed, gk, vz, 0.05);
+  }
+
+  private updateAwayCarrier(p: PlayerEntity, dt: number) {
+    // Taking a throw-in: stand and throw it back into play by hand (after a
+    // short beat so the hold reads on screen), to the most open teammate.
+    if (p === this.throwInTaker) {
+      this.steer(p, 0, 0, dt);
+      if (this.cpuDecision > 0) return;
+      this.executeThrowIn(p, false);
+      return;
+    }
+
+    // The keeper doesn't dribble out — he CATCHES, holds the ball in his hands
+    // for a beat (so the save + gather reads on screen), then clears upfield.
+    if (p.isGK) {
+      this.steer(p, 0, 0, dt);
+      // Hold the caught ball in hands before distributing — without this the
+      // keeper booted it the instant he gathered, so a save looked like an
+      // immediate clearance (never a visible catch).
+      this.gkHoldTimer += dt;
+      if (this.gkHoldTimer < 1.1) return;
+      if (this.cpuDecision > 0) return;
+      this.gkHoldTimer = 0;
+      this.cpuDecision = 0.5;
+      if (this.practice) this.practiceKeeperClear(p);
+      else this.keeperDistribute(p);
+      return;
+    }
+
+    // Dribble toward the player's (left) goal.
+    const t = { x: 36, y: FIELD_H / 2 + (p.y - FIELD_H / 2) * 0.35 };
+    this.moveToward(p, t, AWAY_CARRY_SPEED, dt);
+
+    if (this.cpuDecision > 0) return;
+    this.cpuDecision = 0.5;
+
+    const pressure = this.nearestOpponentDist(p);
+
+    // Shoot when in range.
+    if (p.x < 300) {
+      const gy = clamp(p.y, goalTop + 24, goalBottom - 24);
+      // SHOOTING applies to the CPU too — a weak forward hits it softer and
+      // less accurately, a clinical one rifles it in.
+      this.kickBallToward(
+        { x: 0, y: gy },
+        600 * p.cachedShotPowerMultiplier,
+        p,
+        // Same apex-height model as the human shot: aim for a low ~M(0.7) peak
+        // so the CPU's strike is a driven, mostly-rising effort (loft solved
+        // from the new realistic GRAVITY) rather than a fixed up-and-over lob.
+        Math.sqrt(2 * GRAVITY * M(0.7)),
+        0.05 * p.cachedShotSpreadMultiplier,
+      );
+      return;
+    }
+
+    // Pass when pressured and a teammate is further forward + open.
+    if (pressure < 85) {
+      let best: PlayerEntity | null = null;
+      let bestScore = -Infinity;
+      for (const m of this.awayPlayers) {
+        if (m === p) continue;
+        if (m.x > p.x - 40) continue; // must be more advanced (closer to left goal)
+        const openness = this.nearestOpponentDist(m);
+        if (openness < 90) continue;
+        const score = openness - dist(p, m) * 0.2;
+        if (score > bestScore) {
+          bestScore = score;
+          best = m;
+        }
+      }
+      if (best) {
+        const d = dist(this.ball, best);
+        this.kickBallToward(
+          { x: best.x + best.vx * 0.2, y: best.y + best.vy * 0.2 },
+          this.passPower(d, 260, 780) * p.cachedPassPowerMultiplier,
+          p,
+          0,
+          0.03 * p.cachedPassSpreadMultiplier,
+        );
+      }
+    }
+  }
+
+  // ---- possession / ball ---------------------------------------------------
+
+  /**
+   * Realism gate shared by every steal path. `requireBallSide` distinguishes a
+   * CLEAN poke (true) from a sustained body-contact challenge (false):
+   *  - A clean poke needs the defender on the BALL side of the carrier (not
+   *    shielded out behind him) AND roughly facing the ball — you can't cleanly
+   *    nick a ball the carrier's body is screening.
+   *  - A sustained shoulder-to-shoulder battle (jostle) can win the ball from
+   *    ANY side: you can't shield a defender off forever while running, so a
+   *    defender glued to your back eventually muscles/pokes it away. Only the
+   *    facing check applies (a defender turned the wrong way can't win it).
+   */
+  private canTackle(
+    tackler: PlayerEntity,
+    carrier: PlayerEntity,
+    requireBallSide = true,
+  ): boolean {
+    if (requireBallSide) {
+      // Shielding: is the defender on the same side as the ball, relative to
+      // the carrier's body? If the carrier is between the defender and the
+      // ball, the ball is screened and can't be taken cleanly.
+      const ballSideX = this.ball.x - carrier.x;
+      const ballSideY = this.ball.y - carrier.y;
+      const tackSideX = tackler.x - carrier.x;
+      const tackSideY = tackler.y - carrier.y;
+      const sideDot = ballSideX * tackSideX + ballSideY * tackSideY;
+      if (sideDot < 0) return false; // behind the carrier → shielded out
+    }
+
+    // Engagement: the defender must be facing toward the ball (within ~80°),
+    // not turned the other way.
+    const toBallX = this.ball.x - tackler.x;
+    const toBallY = this.ball.y - tackler.y;
+    const tb = len(toBallX, toBallY);
+    const faceDot =
+      (tackler.facing.x * toBallX + tackler.facing.y * toBallY) / tb;
+    return faceDot > 0.15;
+  }
+
+  /**
+   * Poke the ball off an opposing carrier if it's within reach. The ball is
+   * knocked to the tackler's far side (away from the carrier), and normal
+   * possession resolution then awards it — triggering the tackle-won
+   * protection / dispossession lockout. Returns true if the poke connected.
+   */
+  private pokeTackle(
+    tackler: PlayerEntity,
+    reach: number,
+    requireBallSide = true,
+  ): boolean {
+    const carrier = this.owner;
+    if (!carrier || carrier.team === tackler.team || carrier.isGK)
+      return false;
+    if (this.stealProtect > 0 || this.dispossessed === tackler) return false;
+    // Radius is DEF-scaled once at player initialization. Squared radial math
+    // avoids a square root and profile traversal in this collision path.
+    const ballDx = tackler.x - this.ball.x;
+    const ballDy = tackler.y - this.ball.y;
+    if (ballDx * ballDx + ballDy * ballDy > reach * reach) return false;
+    if (!this.canTackle(tackler, carrier, requireBallSide)) return false;
+
+    const dx = tackler.x - carrier.x;
+    const dy = tackler.y - carrier.y;
+    const l = len(dx, dy);
+    this.ball.x = tackler.x + (dx / l) * 6;
+    this.ball.y = tackler.y + (dy / l) * 6;
+    this.ball.vx = tackler.vx;
+    this.ball.vy = tackler.vy;
+    tackler.kickTimer = Math.max(tackler.kickTimer, 0.18);
+    this.jostle = 0;
+    return true;
+  }
+
+  /**
+   * FIFA-style physical jostling: sustained body contact with the carrier
+   * wins the ball automatically — no button needed. Running straight into
+   * the man on the ball and staying touch-tight dislodges it after a beat.
+   * Symmetric: CPU defenders muscle you off the ball the same way.
+   */
+  private updateJostle(dt: number) {
+    const o = this.owner;
+    if (!o || o.isGK) {
+      this.jostle = 0;
+      return;
+    }
+    const opps = o.team === 'home' ? this.awayPlayers : this.homePlayers;
+    let challenger: PlayerEntity | null = null;
+    let bestD = Infinity;
+    for (const q of opps) {
+      if (q.isGK || q === this.dispossessed) continue;
+      const d = dist(q, o);
+      // Body-contact challenge: a defender touch-tight to the carrier and
+      // facing the ball is battling for it — from ANY side. You can't shield a
+      // chaser off forever, so a defender glued to your back (or alongside) is
+      // a valid challenger here (requireBallSide=false). Sustained contact then
+      // wins it below, scaled by PHYSICALITY. The threshold is TIGHT (+3) so the
+      // timer only accrues once the defender is genuinely on the carrier's back
+      // (centre gap ~3px ≈ shoulders touching) — a looser gap let the steal fire
+      // while the defender still hung half a metre off the back.
+      if (d < o.r + q.r + 3 && d < bestD && this.canTackle(q, o, false)) {
+        bestD = d;
+        challenger = q;
+      }
+    }
+    if (!challenger || this.stealProtect > 0) {
+      this.jostle = Math.max(0, this.jostle - dt * 2.5);
+      return;
+    }
+    // POSITION decides HOW FAST the duel goes. A defender dead behind the
+    // carrier (ball shielded on the far side) can only nibble — he has to work
+    // around toward the ball to actually win it. One alongside or goal-side
+    // challenges effectively. alignment = (ball-carrier)·(tackler-carrier),
+    // normalised: +1 = on the ball side (in front), 0 = directly alongside,
+    // -1 = dead behind the carrier's back.
+    const bsx = this.ball.x - o.x;
+    const bsy = this.ball.y - o.y;
+    const tsx = challenger.x - o.x;
+    const tsy = challenger.y - o.y;
+    const bl = len(bsx, bsy) || 1;
+    const tl = len(tsx, tsy) || 1;
+    const alignment = (bsx * tsx + bsy * tsy) / (bl * tl);
+    // Map to an accrual factor: dead behind ≈0.22 (so a pure back-shield takes
+    // ~2s of sustained tight contact — "eventually, if he stays glued", not
+    // right away), alongside ≈0.6 (~0.8s), ball-side 1.0 (~0.5s).
+    const posFactor = 0.22 + ((alignment + 1) / 2) * 0.78;
+    // PHYSICALITY also weights the duel: a stronger challenger muscles the
+    // carrier off sooner, a stronger carrier shields longer.
+    const duelRate = clamp(
+      1 +
+        challenger.cachedPhysicalDuelOffset -
+        o.cachedPhysicalDuelOffset,
+      0.45,
+      1.8,
+    );
+    this.jostle += dt * duelRate * posFactor;
+    if (this.jostle < 0.5) return;
+    // Contact sustained long enough — the challenger muscles the ball away.
+    // Pass requireBallSide=false: a body-contact battle wins from ANY side
+    // (the challenger was already qualified that way above). Without this the
+    // steal would be silently rejected by pokeTackle's default ball-side gate,
+    // letting the carrier shield forever by keeping his back turned.
+    this.pokeTackle(challenger, Infinity, false);
+  }
+
+  private resolvePossession() {
+    const prev = this.owner;
+
+    // A ball above chest height flies over everyone — nobody can trap it
+    // until it drops back down (FIFA: lofted balls sail past players). The
+    // throw-in taker is the exception: he holds the ball overhead in his hands.
+    if (this.ball.z > CONTROL_HEIGHT && this.owner !== this.throwInTaker) {
+      this.owner = null;
+      return;
+    }
+
+    // Just-kicked grace: the ball is in flight and untouchable for a beat so
+    // it clears the kicker's body cluster (prevents an opponent at the
+    // kicker's back from instantly "receiving" the struck ball).
+    if (this.ballFree > 0) {
+      this.owner = null;
+      return;
+    }
+
+    // A lofted pass in flight (long ball / chip / clearance / throw) can only
+    // be gathered by its intended receiver as it drops — a defender in the lane
+    // can't pluck it out of the air, it sailed over them. Once it lands the
+    // flag is cleared (updateBall) and it's a normal loose ball.
+    const aerialLock =
+      this.aerialReceiver && (this.ball.z > M(0.4) || this.ball.vz > 5)
+        ? this.aerialReceiver
+        : null;
+
+    const ballSpeed = Math.hypot(this.ball.vx, this.ball.vy);
+    let best: PlayerEntity | null = null;
+    let bestD = Infinity;
+    for (const p of this.allPlayers) {
+      if (aerialLock && p !== aerialLock) continue;
+      if (this.kickerLock > 0 && p === this.lastKicker) continue;
+      // A freshly dispossessed player can't win the ball straight back.
+      if (this.dispossessed === p) continue;
+      // Keepers have HANDS: a bigger gather radius so a slow ball at their feet
+      // is claimed (not left for an attacker to steal), and enough reach to
+      // pull in / parry a shot they get across to.
+      const reach = p.isGK
+        ? this.keeperReach(p, ballSpeed)
+        : p.cachedBallControlRadius;
+      const d = dist(p, this.ball);
+      if (d <= reach && d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+
+    // Hysteresis: the current owner keeps the ball against challengers
+    // unless the challenger gets meaningfully closer AND the protection
+    // window from winning it has elapsed.
+    if (prev && best && best !== prev && this.dispossessed !== prev) {
+      const prevD = dist(prev, this.ball);
+      if (prevD <= prev.cachedBallControlRadius + 4) {
+        const challengerWins =
+          this.stealProtect <= 0 &&
+          (best.team === prev.team || bestD < prevD - 7);
+        if (!challengerWins) best = prev;
+      }
+    }
+
+    // Offside: if the first teammate to touch the played ball was flagged
+    // offside at the moment of the pass, blow the whistle. Any other first
+    // touch (a defender, or an onside teammate) resolves the phase and clears
+    // the flags.
+    if (best && best !== prev && this.offsideFlags.size > 0) {
+      if (this.offsideFlags.has(best)) {
+        this.callOffside(best);
+        return;
+      }
+      this.offsideFlags.clear();
+    }
+
+    // Possession changed hands.
+    if (best && best !== prev) {
+      this.jostle = 0;
+      if (prev && prev.team !== best.team) {
+        // Tackle won: protect the winner and lock out the loser.
+        this.stealProtect = 0.9;
+        this.dispossessed = prev;
+        this.dispossessedTimer = 1.2;
+        // Turn the winner away from the tackled opponent so the dribble
+        // carries the ball out on the FAR side, not back into their feet.
+        const dx = best.x - prev.x;
+        const dy = best.y - prev.y;
+        const l = len(dx, dy);
+        best.facing = { x: dx / l, y: dy / l };
+        this.ball.x = best.x + (dx / l) * (best.r + this.ball.r);
+        this.ball.y = best.y + (dy / l) * (best.r + this.ball.r);
+      } else {
+        // Clean receive (pass or loose ball) — short protection.
+        this.stealProtect = 0.35;
+      }
+    }
+
+    // KEEPER CATCH vs PARRY: a keeper can only gather a weak/placed shot
+    // cleanly into his hands. A fiercely-struck shot is too hot to hold — he
+    // gets a hand/body to it and PARRIES it away to the side (toward the
+    // nearer touchline), so the ball spills wide rather than sticking to his
+    // hands or rebounding straight back into the striker's path.
+    // Threshold lowered 820→600 (≈ a charge-0.36 shot) so only WEAK/placed
+    // shots are caught cleanly — any firmly-struck shot is parried, not held
+    // (user: "the GK catches shots too easily, it should only catch weaker ones").
+    // A keeper can't HANDLE a deliberate back-pass from a team-mate, so he
+    // can't parry one either — let it run to his feet to be controlled.
+    const backPassToKeeper =
+      best?.isGK &&
+      this.lastKicker?.team === best.team &&
+      this.lastKicker !== best;
+    if (
+      best &&
+      best.isGK &&
+      best !== prev &&
+      (!prev || prev.team !== best.team) &&
+      ballSpeed > 600 &&
+      !backPassToKeeper &&
+      this.keeperInOwnBox(best)
+    ) {
+      this.keeperParry(best, ballSpeed);
+      return;
+    }
+
+    // OUTFIELD BLOCK: a fiercely-struck ball can't be cleanly trapped or
+    // "tackled" out of the air by a field player standing in its path — it
+    // ricochets off his body/legs. So when a fast ball (a shot or a driven
+    // ball) first reaches an OPPONENT of the kicker (or a loose fast ball), it
+    // DEFLECTS away as a loose rebound instead of sticking to him. Slower balls
+    // (settled passes, decayed shots) are still cleanly intercepted/received.
+    if (
+      best &&
+      !best.isGK &&
+      best !== prev &&
+      (!prev || prev.team !== best.team) &&
+      ballSpeed > 600
+    ) {
+      this.outfieldBlock(best, ballSpeed);
+      return;
+    }
+
+    this.owner = best;
+    if (best) {
+      this.lastTouchTeam = best.team;
+      // FIFA-style: when YOUR team gains possession, you control the man on the
+      // ball — INCLUDING the keeper, so you can immediately clear/throw after a
+      // save (previously the GK was excluded and you couldn't take over).
+      if (best.team === 'home') {
+        this.controlled = best;
+      } else if (this.localMultiplayer) {
+        this.awayControlled = best;
+      }
+      if (best.isGK) {
+        // May he legally take it in his hands? Not outside his box, and not off
+        // a deliberate team-mate back-pass — in those cases he controls it with
+        // his FEET like an outfielder (no scoop, no box-clamp, no protected
+        // catch). Otherwise it's a clean catch.
+        this.gkHandling = this.keeperMayHandle(best, this.lastKicker);
+        if (this.gkHandling) {
+          // A keeper CATCHES cleanly: secure the ball with a longer protection
+          // window so a striker can't instantly poke the held ball back out and
+          // tap in the rebound. The rush (if any) has done its job.
+          this.stealProtect = Math.max(this.stealProtect, 1.1);
+          this.gkRush = 0;
+          // Start the hold-in-hands clock fresh on a NEW catch so the keeper
+          // visibly gathers and holds the ball before he distributes (instead
+          // of booting it the instant he touches it with a stale timer).
+          if (best !== prev) {
+            this.gkHoldTimer = 0;
+            // A catch is only a DIVING save if the ball was genuinely beyond
+            // his standing reach — a ball gathered near his body is taken
+            // standing, so he doesn't dive on every shot close to him.
+            const off = this.ball.y - best.y;
+            if (Math.abs(off) > M(1.7) && (best.diveTimer ?? 0) <= 0) {
+              this.triggerKeeperDive(best, Math.sign(off));
+            }
+          }
+        } else if (best !== prev) {
+          // Controlling at his feet: reset the clock so he settles it before
+          // playing out (no instant boot), but no hand-catch protection.
+          this.gkHoldTimer = 0;
+        }
+      }
+      this.dribble(best);
+      // Receiving a pass clears the kicker lock so play flows.
+      this.lastKicker = null;
+      this.kickerLock = 0;
+      // The pass has been collected (or intercepted) — ball gravity ends.
+      this.passReceiver = null;
+    }
+  }
+
+  private dribble(owner: PlayerEntity) {
+    // A throw-in taker holds the ball OVERHEAD in both hands (FIFA throw-in
+    // pose), ready to throw it back into play. Lifted well above the head so it
+    // reads as a two-handed throw, not a kick.
+    if (owner === this.throwInTaker) {
+      const handZ = M(2.1);
+      this.ball.x += (owner.x - this.ball.x) * 0.4;
+      this.ball.y += (owner.y - this.ball.y) * 0.4;
+      this.ball.z += (handZ - this.ball.z) * 0.3;
+      this.ball.vz = 0;
+      this.ball.vx = owner.vx;
+      this.ball.vy = owner.vy;
+      return;
+    }
+
+    // A keeper SCOOPS the ball up into his HANDS, held at chest height just in
+    // front of his body. The ball rises from the ground (a quick gather/pickup
+    // animation) and is glued there — it never squirts out in front toward an
+    // onrushing striker. Held at M(0.95) (below CONTROL_HEIGHT so he keeps it).
+    if (owner.isGK && this.gkHandling) {
+      // Held tight against the chest — a small forward offset so the ball reads
+      // as cradled in his hands, not floating out in front of him.
+      const hold = owner.r * 0.25;
+      const tx = owner.x + owner.facing.x * hold;
+      const ty = owner.y + owner.facing.y * hold;
+      const handZ = M(0.95);
+      // Lerp toward the hand position + height: the ball arcs up off the grass
+      // into the keeper's grasp, reading as a clean catch/pickup.
+      this.ball.x += (tx - this.ball.x) * 0.4;
+      this.ball.y += (ty - this.ball.y) * 0.4;
+      this.ball.z += (handZ - this.ball.z) * 0.35;
+      this.ball.vz = 0;
+      this.ball.vx = owner.vx;
+      this.ball.vy = owner.vy;
+      return;
+    }
+    // While protected (just won a tackle / received), keep the ball glued
+    // to the feet instead of pushed out in front where it can be poked.
+    const ahead =
+      this.stealProtect > 0
+        ? owner.r + this.ball.r - 2
+        : owner.r + this.ball.r + 4;
+    const targetX = owner.x + owner.facing.x * ahead;
+    const targetY = owner.y + owner.facing.y * ahead;
+    const snap = this.stealProtect > 0 ? 0.55 : 0.3;
+    this.ball.x += (targetX - this.ball.x) * snap;
+    this.ball.y += (targetY - this.ball.y) * snap;
+    this.ball.z = 0;
+    this.ball.vz = 0;
+    this.ball.vx = owner.vx;
+    this.ball.vy = owner.vy;
+  }
+
+  /** How far a keeper can actually get to a ball. A slow/loose ball is gathered
+   *  with a generous radius (hands at his feet). But a SHOT can only be reached
+   *  if he has time to REACT — a fierce strike from close range gives him almost
+   *  no window, so his effective reach collapses toward his body and the ball
+   *  can fly past into the corner. A shot from distance (or a tame one) he reads
+   *  and gets across to. This is what stops him from magnetically saving every
+   *  shot regardless of pace or range. */
+  private keeperReach(gk: PlayerEntity, ballSpeed: number): number {
+    // Slow/loose ball — normal big gather radius.
+    if (ballSpeed < 340) return CONTROL_DIST + 34;
+    // How far away was the shot struck? The farther the shot's origin, the more
+    // time the keeper had to set himself and dive across.
+    const shooter = this.lastKicker;
+    const shotDist = shooter ? dist(shooter, gk) : 520;
+    // Reaction buffer grows with shot distance, shrinks with shot pace. A
+    // point-blank blast → almost no buffer (he can only save what's hit at him);
+    // a 25-yarder → a real dive range across the goal.
+    // Pace penalty STRENGTHENED (starts at 520 not 680, scales 0.04 not 0.02,
+    // caps at 34 not 16) so a fiercely-struck shot collapses his reach toward his
+    // body — the hardest, well-placed shots now BEAT him for a goal instead of
+    // being magnetically reached (user: "GK catches strong shots too easily").
+    const distBuf = clamp((shotDist - 120) * 0.05, 0, 26);
+    const pacePenalty = clamp((ballSpeed - 520) * 0.04, 0, 34);
+    const buffer = Math.max(0, distBuf - pacePenalty);
+    return gk.r + this.ball.r + buffer;
+  }
+
+  /** Make a keeper visibly REACT to an incoming shot: throw himself across the
+   *  goal toward where the ball is heading. Fires whenever a struck ball is
+   *  bearing down on his goal and is laterally off-centre from him — so he
+   *  dives EVEN ON SHOTS HE WON'T REACH (he commits and is beaten), not just on
+   *  ones he saves. A ball hit straight at him is taken standing (no dive). */
+  private updateKeeperReactions(dt: number) {
+    void dt;
+    if (this.owner) return; // ball is held — no shot in flight
+    const ballSpeed = Math.hypot(this.ball.vx, this.ball.vy);
+    if (ballSpeed < 420) return; // only react to genuine shots
+    for (const gk of [this.homePlayers[0], this.awayPlayers[0]]) {
+      if (!gk) continue;
+      if ((gk.diveTimer ?? 0) > 0 || (gk.diveCooldown ?? 0) > 0) continue;
+      const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
+      // Ball must be travelling toward THIS keeper's goal.
+      const towardGoal =
+        gk.team === 'home' ? this.ball.vx < -60 : this.ball.vx > 60;
+      if (!towardGoal) continue;
+      // Only once the shot is near his goal and close to him laterally.
+      const ballDX = Math.abs(this.ball.x - ownGoalX);
+      if (ballDX > M(20)) continue;
+      const d = dist(gk, this.ball);
+      if (d > 95) continue; // react as it arrives in his vicinity
+      const off = this.ball.y - gk.y;
+      // Within standing reach (a step + arm) → no dive needed, he gathers
+      // standing. Only a ball genuinely beyond his standing reach makes him
+      // throw himself across — so he doesn't dive on every shot near him.
+      if (Math.abs(off) < M(1.7)) continue;
+      this.triggerKeeperDive(gk, Math.sign(off));
+    }
+  }
+
+  /** Commit a keeper to a dive toward `dir` (world-y sign) and lunge his body
+   *  that way so the save attempt reads on screen. */
+  private triggerKeeperDive(gk: PlayerEntity, dir: number) {
+    gk.diveTimer = 0.6;
+    gk.diveDir = dir || 1;
+    gk.diveCooldown = 0.9;
+    // A modest lunge toward the ball's path — extends his frame so the dive
+    // looks committed without magically vacuuming the ball in.
+    gk.vy += dir * 90;
+  }
+
+  /** A keeper can't cleanly hold a fiercely-struck shot. He gets a hand/body
+   *  to it and PARRIES it away to the side (toward the nearer touchline), so
+   *  the ball spills WIDE and away from goal — never sticking to his hands and
+   *  never rebounding straight back into the striker. */
+  private keeperParry(gk: PlayerEntity, ballSpeed: number) {
+    this.lastTouchTeam = gk.team;
+    const outSign = gk.team === 'home' ? 1 : -1; // away from own goal
+    const mid = FIELD_H / 2;
+    // How far off-centre the shot came in (before we reposition the ball) —
+    // determines whether the parry is a dive or a standing block.
+    const incomingOff = this.ball.y - gk.y;
+    // Spill toward the NEARER touchline so the rebound goes wide, not central.
+    const side = this.ball.y < mid ? -1 : 1;
+    const speed = clamp(ballSpeed * 0.42, 200, 380);
+    // Mostly lateral with an outward component — the ball squirts off to the
+    // side and away from goal.
+    this.ball.vx = outSign * speed * 0.5;
+    this.ball.vy = side * speed * 0.9;
+    this.ball.vz = M(1.8);
+    this.ball.z = Math.max(this.ball.z, 0.4);
+    // Nudge the ball off the keeper's body to that side so it doesn't re-gather
+    // on the same frame.
+    this.ball.x = gk.x + outSign * (gk.r + this.ball.r + 5);
+    this.ball.y += side * (gk.r + 4);
+    // Keeper throws himself toward the shot — but only a true DIVE if the ball
+    // came in beyond his standing reach. A fierce shot straight at him is parried
+    // standing (no dive), so he doesn't dive on every save.
+    gk.facing = { x: outSign, y: side };
+    if (Math.abs(incomingOff) > M(1.7) && (gk.diveTimer ?? 0) <= 0) {
+      this.triggerKeeperDive(gk, Math.sign(incomingOff));
+    }
+    // Nobody owns the parried ball; lock out an instant re-gather so it spills
+    // clear (a striker has to run onto the loose rebound).
+    this.owner = null;
+    this.ballFree = 0.45;
+    this.lastKicker = null;
+    this.kickerLock = 0;
+    this.passReceiver = null;
+  }
+
+  /** A field player in the path of a fierce ball can't trap it — it ricochets
+   *  off his body. The rebound scatters (mostly back off him, with a random
+   *  sideways spray) at much-reduced pace and becomes a loose ball anyone can
+   *  chase. This stops defenders "tackling" a shot clean out of the air. */
+  private outfieldBlock(blocker: PlayerEntity, ballSpeed: number) {
+    this.lastTouchTeam = blocker.team;
+    // Deflect roughly back off the body, scattered to a random side.
+    const baseAng = Math.atan2(-this.ball.vy, -this.ball.vx);
+    const ang = baseAng + (this.rng.next() - this.rng.next()) * 1.3;
+    const speed = clamp(ballSpeed * 0.4, 140, 420);
+    this.ball.vx = Math.cos(ang) * speed;
+    this.ball.vy = Math.sin(ang) * speed;
+    this.ball.vz = M(1.0) * this.rng.next();
+    // Nudge the ball off the blocker's body so it doesn't re-collide instantly.
+    this.ball.x = blocker.x + Math.cos(ang) * (blocker.r + this.ball.r + 4);
+    this.ball.y = blocker.y + Math.sin(ang) * (blocker.r + this.ball.r + 4);
+    // Loose rebound — nobody owns it; brief lockout so it spills clear.
+    this.owner = null;
+    this.ballFree = 0.3;
+    this.lastKicker = null;
+    this.kickerLock = 0;
+    this.passReceiver = null;
+  }
+
+  /** A keeper holding the ball in his hands may not carry it out of his own
+   *  penalty area — clamp him (and the held ball) inside the box. Real
+   *  football: leaving the area with the ball in hand is a handball. */
+  private constrainKeeperWithBall() {
+    const gk = this.owner;
+    if (!gk || !gk.isGK) return;
+    // Only a keeper HOLDING the ball in his hands is bound to his box. When he
+    // is controlling it at his FEET (outside the box, or off a team-mate
+    // back-pass) he may move freely like any outfielder — don't snap him back
+    // into the area (that snap looked like he teleported/disappeared).
+    if (!this.gkHandling) return;
+    const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
+    const depth = M(16.5); // penalty area is 16.5 m deep
+    const halfW = M(20.16); // ...and 40.32 m wide
+    const mid = FIELD_H / 2;
+    if (gk.team === 'home') {
+      gk.x = clamp(gk.x, gk.r, ownGoalX + depth);
+    } else {
+      gk.x = clamp(gk.x, ownGoalX - depth, FIELD_W - gk.r);
+    }
+    gk.y = clamp(
+      gk.y,
+      Math.max(gk.r, mid - halfW),
+      Math.min(FIELD_H - gk.r, mid + halfW),
+    );
+  }
+
+  /** Soft circle-vs-circle separation so players can't stand inside each other. */
+  private separatePlayers() {
+    const all = this.allPlayers;
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const a = all[i];
+        const b = all[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.hypot(dx, dy);
+        const minD = a.r + b.r - 4; // slight overlap allowed for shoulder contact
+        if (d > 0 && d < minD) {
+          const push = (minD - d) / 2;
+          const nx = dx / d;
+          const ny = dy / d;
+          a.x -= nx * push;
+          a.y -= ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+          this.clampToField(a);
+          this.clampToField(b);
+        }
+      }
+    }
+  }
+
+  private updateBall(dt: number) {
+    if (this.owner) return; // dribble handles it
+
+    this.integrateBall(dt);
+
+    // The ball leaving the field of play is no longer a wall to bounce off —
+    // it goes OUT and the correct restart (throw-in / goal kick / corner) is
+    // awarded. A ball crossing the goal line inside the mouth & under the bar
+    // is left alone for handleGoals to score.
+    this.checkOutOfPlay();
+  }
+
+  /** Advance the free ball one step: horizontal motion, gravity + ground bounce
+   *  and rolling/air drag. `dragMul` scales the friction — used > 1 while the
+   *  ball is coasting out of play so it decelerates quickly off the pitch
+   *  (into the netting / crowd) and stays in view instead of sailing off. */
+  private integrateBall(dt: number, dragMul = 1) {
+    this.ball.x += this.ball.vx * dt;
+    this.ball.y += this.ball.vy * dt;
+
+    // ---- Height (z) integration: gravity + ground bounce ----
+    const airborne = this.ball.z > 0.01 || this.ball.vz > 0.01;
+    if (airborne) {
+      this.ball.vz -= GRAVITY * dt;
+      this.ball.z += this.ball.vz * dt;
+      if (this.ball.z <= 0) {
+        // Landed: the protected aerial pass is over — it's a normal loose ball
+        // now (whoever is at the drop can contest it).
+        this.aerialReceiver = null;
+        // Landed: bounce with restitution; settle when the hop gets tiny.
+        this.ball.z = 0;
+        if (this.ball.vz < 0) this.ball.vz = -this.ball.vz * BOUNCE;
+        if (this.ball.vz < GRAVITY * 0.03) this.ball.vz = 0;
+        // A bounce scrubs a little pace off the roll.
+        this.ball.vx *= 0.86;
+        this.ball.vy *= 0.86;
+      }
+    }
+
+    // Horizontal friction: almost none while flying, full rolling drag on
+    // the grass. A lofted ball carries; a grounded ball decays as before.
+    const decay = airborne
+      ? Math.exp(-BALL_DECAY * 0.12 * dragMul * dt)
+      : Math.exp(-BALL_DECAY * dragMul * dt);
+    this.ball.vx *= decay;
+    this.ball.vy *= decay;
+    if (!airborne && Math.hypot(this.ball.vx, this.ball.vy) < 4) {
+      this.ball.vx = 0;
+      this.ball.vy = 0;
+    }
+  }
+
+  /** Detect the ball crossing a boundary line and award the right restart.
+   *  Touchlines (y) → throw-in to the team that did NOT touch it last. Goal
+   *  lines (x), outside a scored goal → goal kick (attacker put it out) or
+   *  corner (defender put it out). */
+  private checkOutOfPlay() {
+    const b = this.ball;
+    const last = this.lastTouchTeam;
+
+    // Practice: no throw-ins / corners / goal kicks. A ball that leaves the
+    // pitch (other than a shot crossing the keeper's goal line, left for
+    // handleGoals) is simply respawned in the middle to keep free play going.
+    if (this.practice) {
+      const inMouth = b.y > goalTop && b.y < goalBottom;
+      if (b.x > FIELD_W && inMouth && b.z <= M(2.44)) return; // a goal — leave it
+      if (b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_H) {
+        this.practiceResetBall();
+      }
+      return;
+    }
+
+    // ---- Touchlines → throw-in ----
+    if (b.y < 0 || b.y > FIELD_H) {
+      const outY = b.y < 0 ? 0 : FIELD_H;
+      const toTeam: Team = last === 'home' ? 'away' : 'home';
+      const spotX = clamp(b.x, M(3), FIELD_W - M(3));
+      // No banner text for a throw-in — it's taken with the hands (see
+      // executeThrowIn) and doesn't need an on-screen announcement.
+      this.queueRestart(toTeam, spotX, outY, '', false, true);
+      return;
+    }
+
+    // ---- Goal lines → goal kick / corner (or a scored goal: leave it) ----
+    if (b.x < 0 || b.x > FIELD_W) {
+      const leftLine = b.x < 0;
+      const inMouth = b.y > goalTop && b.y < goalBottom;
+      // A ball in the mouth and under the bar is a GOAL — handleGoals scores it.
+      if (inMouth && b.z <= M(2.44)) return;
+      // Left line (x=0) is HOME's goal (home defends, away attacks); right line
+      // (x=FIELD_W) is AWAY's goal.
+      const attackingTeam: Team = leftLine ? 'away' : 'home';
+      const defendingTeam: Team = leftLine ? 'home' : 'away';
+      const goalX = leftLine ? 0 : FIELD_W;
+      if (last === attackingTeam) {
+        // Attacker put it out → goal kick to the defending keeper.
+        const dir = leftLine ? 1 : -1;
+        const spotX = goalX + dir * M(5.5); // edge of the 6-yard box
+        const spotY = clamp(b.y, FIELD_H / 2 - M(6), FIELD_H / 2 + M(6));
+        this.queueRestart(defendingTeam, spotX, spotY, 'GOAL KICK', true, false);
+      } else {
+        // Defender put it out (or unknown) → corner to the attacking side.
+        const cornerY = b.y < FIELD_H / 2 ? M(1) : FIELD_H - M(1);
+        const name = (
+          attackingTeam === 'home' ? this.homeTeam : this.awayTeam
+        ).name.toUpperCase();
+        this.queueRestart(attackingTeam, goalX, cornerY, `CORNER · ${name}`, false, false);
+      }
+    }
+  }
+
+  /** Begin the out-of-play pause: let the ball carry on past the line where it
+   *  exited (so you SEE it go out, FIFA-style) and remember the restart to award
+   *  once the pause elapses. updateBall is skipped while `outOfPlay > 0`, but the
+   *  ball still coasts via updateOutOfPlay. */
+  private queueRestart(
+    team: Team,
+    spotX: number,
+    spotY: number,
+    label: string,
+    takerIsGK: boolean,
+    isThrowIn: boolean,
+  ) {
+    // Don't freeze the ball at the line — let it carry on past the boundary and
+    // roll/fly out (like real football / FIFA) while the out-of-play pause runs.
+    // It keeps its velocity; updateOutOfPlay coasts it with extra drag so it
+    // slows quickly (into the netting / crowd) and stays in view.
+    this.owner = null;
+    this.aerialReceiver = null;
+    this.pendingRestart = { team, spotX, spotY, label, takerIsGK, isThrowIn };
+    this.outOfPlay = 1.2;
+  }
+
+  /** Stop play, place the ball at the restart spot, hand it to the nearest
+   *  eligible player of `team` (the keeper for a goal kick), reset transient
+   *  state and freeze briefly with a banner — shared by throw-ins, goal kicks
+   *  and corners. */
+  private awardRestart(
+    team: Team,
+    spotX: number,
+    spotY: number,
+    label: string,
+    takerIsGK: boolean,
+    isThrowIn = false,
+  ) {
+    const players = team === 'home' ? this.homePlayers : this.awayPlayers;
+    const atkDir = team === 'home' ? 1 : -1;
+
+    this.ball.x = spotX;
+    this.ball.y = spotY;
+    this.ball.z = 0;
+    this.ball.vx = this.ball.vy = this.ball.vz = 0;
+
+    for (const p of this.allPlayers) {
+      p.vx = p.vy = 0;
+      p.kickTimer = 0;
+      p.diveTimer = 0;
+      p.diveCooldown = 0;
+      p.throwing = false;
+      p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
+    }
+
+    const pool = takerIsGK ? [players[0]] : players.filter((p) => !p.isGK);
+    const taker = this.nearestTo(pool, { x: spotX, y: spotY }) ?? players[1];
+    taker.x = clamp(spotX - atkDir * 14, taker.r, FIELD_W - taker.r);
+    taker.y = clamp(spotY, taker.r, FIELD_H - taker.r);
+    taker.vx = taker.vy = 0;
+    taker.facing = { x: atkDir, y: 0 };
+
+    // A throw-in is taken with the HANDS: arm the taker so he holds the ball
+    // overhead and releases a hand throw (see dribble + executeThrowIn).
+    this.throwInTaker = isThrowIn ? taker : null;
+    taker.throwing = isThrowIn;
+
+    // Opponents must retreat the regulation distance from the restart (FIFA:
+    // 2 m for a throw-in, 9.15 m for a corner, and well clear of the box for a
+    // goal kick). Push any encroaching opponent radially off the spot.
+    const keepOut = isThrowIn ? M(4) : takerIsGK ? M(11) : M(9.15);
+    this.pushOpponentsFromSpot(team, { x: spotX, y: spotY }, keepOut);
+
+    this.owner = taker;
+    this.controlled =
+      team === 'home' ? taker : this.homePlayers[this.homeTeam.kickoffFwd];
+    if (this.localMultiplayer && team === 'away') this.awayControlled = taker;
+
+    this.camX = clamp(spotX, CAM_MIN, CAM_MAX);
+    this.camY = clamp(spotY, CAM_Y_MIN, CAM_Y_MAX);
+    if (label) this.setMessage(label, 1.6);
+    this.freeze = 0.9;
+
+    // Clear transient ball/possession state so play restarts cleanly.
+    this.lastKicker = null;
+    this.lastTouchTeam = team;
+    this.kickerLock = 0;
+    this.stealProtect = 1.0;
+    this.dispossessed = null;
+    this.dispossessedTimer = 0;
+    this.offsideFlags.clear();
+    this.markAssign.clear();
+    this.markTimer = 0;
+    this.ballFree = 0;
+    this.jostle = 0;
+    this.tackleTimer = 0;
+    this.tackleCooldown = 0;
+    this.gkRush = 0;
+    this.chargeKey = null;
+    this.chargeTime = 0;
+    this.awayChargeKey = null;
+    this.awayChargeTime = 0;
+    this.bufferTimer = 0;
+    this.kickPending = false;
+    this.passReceiver = null;
+  }
+
+  /** Push every player NOT on `keepTeam` to at least `minDist` from `spot`, so
+   *  opponents respect the regulation retreat at a restart (throw-in / corner /
+   *  goal kick / free kick). The taking team and keepers are left in place. */
+  private pushOpponentsFromSpot(keepTeam: Team, spot: Vec, minDist: number) {
+    for (const p of this.allPlayers) {
+      if (p.team === keepTeam || p.isGK) continue;
+      let dx = p.x - spot.x;
+      let dy = p.y - spot.y;
+      let d = Math.hypot(dx, dy);
+      if (d >= minDist) continue;
+      if (d < 0.001) {
+        // Standing right on the spot — shove toward their own goal.
+        dx = p.team === 'home' ? -1 : 1;
+        dy = 0;
+        d = 1;
+      }
+      p.x = spot.x + (dx / d) * minDist;
+      p.y = spot.y + (dy / d) * minDist;
+      this.clampToField(p);
+    }
+  }
+
+  private handleGoals() {
+    if (this.celebration > 0) return;
+    const inMouth = this.ball.y > goalTop && this.ball.y < goalBottom;
+    if (!inMouth) return;
+    // Over the bar — a ball higher than the crossbar (2.44 m) isn't a goal.
+    if (this.ball.z > M(2.44)) return;
+
+    // Practice: count strikes into the keeper's (right-hand) goal and flash a
+    // quick GOAL!, then respawn — no celebration / kickoff sequence.
+    if (this.practice) {
+      if (this.ball.x >= FIELD_W - 2) {
+        this.homeScore += 1;
+        this.setMessage('GOAL!', 1.2);
+        this.practiceResetBall();
+        this.freeze = 1.0; // brief hold so the GOAL! reads before resuming
+      } else if (this.ball.x <= 2) {
+        this.practiceResetBall();
+      }
+      return;
+    }
+
+    if (this.ball.x <= 2) {
+      this.awayScore += 1;
+      this.startCelebration(
+        'away',
+        `${this.awayTeam.name.toUpperCase()} SCORE`,
+        'home',
+        'left',
+      );
+    } else if (this.ball.x >= FIELD_W - 2) {
+      this.homeScore += 1;
+      this.startCelebration('home', 'G O A L !', 'away', 'right');
+    }
+  }
+
+  /** Kick off the goal-celebration sequence: settle the ball in the net,
+   *  ripple the net, and send the scoring side off celebrating. */
+  private startCelebration(
+    scoringTeam: Team,
+    msg: string,
+    nextKickoff: Team,
+    side: 'left' | 'right',
+  ) {
+    const CELEBRATION_SECS = 4;
+    this.celebration = CELEBRATION_SECS;
+    this.celebrateTeam = scoringTeam;
+    this.pendingKickoff = nextKickoff;
+    this.setMessage(msg, CELEBRATION_SECS);
+    this.netRipple[side] = 1;
+
+    // Nestle the ball into the back of the net so the strike clearly counts.
+    this.ball.vx = this.ball.vy = this.ball.vz = 0;
+    this.ball.z = 0;
+    this.ball.x = side === 'left' ? -M(1.4) : FIELD_W + M(1.4);
+    this.ball.y = clamp(this.ball.y, goalTop + 14, goalBottom - 14);
+
+    // The scorer is the scoring side's last kicker; teammates mob them.
+    this.scorer =
+      this.lastKicker && this.lastKicker.team === scoringTeam
+        ? this.lastKicker
+        : null;
+    const team = scoringTeam === 'home' ? this.homePlayers : this.awayPlayers;
+    for (const p of team) if (!p.isGK) p.celebrating = true;
+    this.owner = null;
+  }
+
+  /** Animate the celebrating players: the scorer wheels away toward the corner
+   *  by the goal, arms aloft, and teammates chase to mob them. The conceding
+   *  side doesn't freeze — they trudge back toward their own positions,
+   *  dejected, while their keeper retrieves the ball from the net. */
+  private updateCelebration(dt: number) {
+    if (!this.celebrateTeam) return;
+    const scoredRight = this.celebrateTeam === 'home';
+    const cornerX = scoredRight ? FIELD_W - M(16) : M(16);
+    const cornerY = FIELD_H * 0.82;
+
+    for (const p of this.allPlayers) {
+      if (p.celebrating) {
+        // Scoring side: wheel away to the corner / mob the scorer.
+        let tx = cornerX;
+        let ty = cornerY;
+        if (this.scorer && p !== this.scorer) {
+          tx = this.scorer.x + (scoredRight ? -34 : 34);
+          ty = this.scorer.y - 6;
+        }
+        this.moveToward(p, { x: tx, y: ty }, RUN_SPEED * 0.62, dt);
+      } else {
+        // Everyone else (the conceding team + the scoring keeper): walk back
+        // toward their formation anchor at a slow, dejected pace instead of
+        // standing frozen. The conceding keeper drifts toward the ball in the
+        // net as if collecting it to restart quickly.
+        const concededTeam =
+          (p.team === 'home') !== scoredRight; // true if p just conceded
+        let target = p.anchor;
+        if (p.isGK && concededTeam) {
+          target = { x: this.ball.x, y: this.ball.y };
+        }
+        this.moveToward(p, target, WALK_SPEED * 0.6, dt);
+      }
+    }
+  }
+
+  private clampToField(m: { x: number; y: number; r: number }) {
+    m.x = Math.max(m.r, Math.min(FIELD_W - m.r, m.x));
+    m.y = Math.max(m.r, Math.min(FIELD_H - m.r, m.y));
+  }
+
+  // ---- render (TV broadcast pseudo-3D) ------------------------------------
+
+  private render() {
+    renderScene(this.ctx, {
+      camX: this.camX,
+      camY: this.camY,
+      ball: this.ball,
+      players: [...this.awayPlayers, ...this.homePlayers].map((p) => ({
+        p,
+        kit: this.kitFor(p),
+      })),
+      controlled: this.controlled,
+      secondaryControlled: this.localMultiplayer ? this.awayControlled : null,
+      switchHint: this.switchHint,
+      netRipple: this.netRipple,
+    });
+  }
+}

@@ -1191,3 +1191,81 @@ If checks cannot be run, say so clearly.
   - fixed stale prior-week advanced-usage fields from contaminating newly refreshed weekly evidence
   - verified the live model prioritizes Ollie Gordon II and Braelon Allen for FC Netanyah00, with Yahoo ownership filtering preserved
   - verified with canonical league integrity, 166 fantasy model tests, TypeScript, lint (existing bachelor-party font warning only), and the production build
+
+### 2026-10-01
+
+- Added the upstream `modelence/open-soccer` project as a pinned Git submodule
+  under `vendor/open-soccer` for the new VIFA experiment.
+- Added `/vifa` as a playable Next.js route using the upstream canvas engine,
+  national-team data, CPU match/practice modes, and rebindable keyboard controls.
+- Added `docs/vifa-architecture.md` with the primary mod seams, a staged
+  authoritative-WebSocket multiplayer path, and the upstream licensing checkpoint.
+- Forked the gameplay client into `lib/vifa/game` so VIFA mods can evolve without
+  dirtying the pinned upstream submodule.
+- Added the first VIFA mod configuration layer plus a same-keyboard local
+  two-player mode with independent movement, passing, shooting, tackling,
+  switching, player markers, and power indicators.
+- Converted the VIFA match loop to a 30 Hz fixed authoritative tick while leaving
+  `requestAnimationFrame` responsible only for scheduling and rendering.
+- Added compact two-player input frames, seeded simulation randomness, replay
+  export, serializable match snapshots, snapshot digests, and headless tests that
+  prove identical command streams reproduce identical real-engine state.
+- Added `docs/vifa-roadmap.md` as the living delivery tracker for loopback
+  networking, responsive prediction/reconciliation, private browser rooms, and
+  multiplayer hardening.
+- Added `docs/vifa-mod-design.md` to capture the zero-install native Gamepad API
+  plan for PowerA controllers, a validated roster-pack direction, and a
+  deterministic feature-flagged arcade power-shot experiment.
+- Narrowed the controller target to PowerA's GameCube Style Wired Controller;
+  the leading arcade input is now a dedicated `ZR`/right-Z hold-and-release
+  power shot, subject to real browser mapping diagnostics because PowerA does
+  not guarantee full PC compatibility for its Switch wired pads.
+- Shifted the first roster-mod concept to historical men's World Cup-era squads
+  built from player names and factual statistics, with original VIFA visual
+  treatments and an explicit exclusion of player imagery, official marks,
+  copied kits, and proprietary ratings pending focused pre-publication review.
+- Refactored the live VIFA fork to model every footballer with immutable,
+  named 1-99 `individualStats` (`pac`, `sho`, `pas`, `dri`, `def`, `phy`) and a
+  separate role-weighted overall rating.
+- Added one-time player physics precomputation for pace, acceleration, shooting,
+  passing, dribbling, ball control, tackle radii, and physical duels; the fixed
+  simulation tick now reads flat cached primitives instead of converting ratings.
+- Replaced tackle reach square roots with squared-radius checks, reused a stable
+  combined roster in hot loops, and kept the pinned upstream submodule clean.
+- Verified with five VIFA determinism/profile tests, `npm run lint` (the existing
+  bachelor-party font warning only), and `npx tsc --noEmit`.
+- Added a generated VIFA men's World Cup database covering every tournament from
+  1982 through 2022 plus the existing 48-team 2026 VIFA pool, while excluding
+  unrelated tournaments, club data, media, finances, and match-event tables.
+- Added reproducible PAC/SHO/PAS/DRI/DEF/PHY calculations from granular FIFA
+  attributes, a separate goalkeeper-to-VIFA adapter, conservative player-name
+  matching, source/coverage provenance, and a formula validation report.
+- Integrated the requested 2005-2020 FIFA Model source plus separate FIFA 22 and
+  FC 26 Kaggle inputs; pre-2005 squads remain in the database with unrated player
+  records rather than invented historical ratings.
+- Repaired historical rating coverage with birth-date-first identity matching,
+  historical country aliases, the fuller FIFA 18 Kaggle table, and explicitly
+  labeled nearest-edition/interpolated FIFA Model fallbacks.
+- Split identity-match coverage from actual complete-card coverage in the VIFA
+  report, kept 2006 archive-only, and added a role-complete playable gate plus
+  generated 1 GK / 4 DF / 4 MF / 2 FW starting elevens for 2010 onward.
+- Preserved all 48 current VIFA teams by using FC 26 cards when confidently
+  matched and retaining explicitly labeled `vifa-manual` cards otherwise.
+
+### 2026-10-02
+
+- Added a narrow, reproducible tournament-evidence estimator for 42 missing
+  VIFA cards across twelve otherwise incomplete World Cup team-editions.
+- Estimates use real squad identities, rated same-role team/tournament peers,
+  and capped adjustments for World Cup starts, appearances, and goals; each
+  card retains its recipe and evidence under `estimationEvidence`.
+- Made Honduras, Japan, Nigeria, and North Korea 2010; Iran 2014; Iran, Nigeria,
+  Panama, and Tunisia 2018; and Costa Rica, Qatar, and Tunisia 2022 playable,
+  completing every team in the 2010, 2014, 2018, 2022, and 2026 pools.
+- Connected the playable historical database to `/vifa` through a compact
+  server-built era pack instead of shipping the full research JSON to the
+  browser; the selector now exposes 176 playable team-editions.
+- Home and away independently select year and nation, enabling cross-era games
+  such as France 2010 versus Argentina 2022 or the same country across eras.
+- Added clickable lock/kickoff controls for touch devices and year suffixes in
+  the live score bug so cross-era same-country matches remain distinguishable.
