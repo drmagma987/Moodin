@@ -11,6 +11,12 @@ import { precomputePlayerPhysicsScalars } from '@/lib/vifa/game/ratings';
 import { TEAMS } from '@/lib/vifa/game/teams';
 import { makeIndividualStats } from '@/lib/vifa/game/teams/types';
 import { PLAYER_TWO_BINDINGS } from '@/lib/vifa/mods';
+import {
+  DEFAULT_CONTROLLER_BINDINGS,
+  assignControllerButton,
+  gamepadToCommand,
+  type GamepadSnapshot,
+} from '@/lib/vifa/game/gamepad';
 
 const fakeCanvas = {
   getContext: () => ({}),
@@ -167,4 +173,50 @@ test('match telemetry is deterministic and accounts for possession', () => {
   assert.ok(
     telemetry.home.possessionTicks + telemetry.away.possessionTicks > 0,
   );
+});
+
+test('gamepad adapter maps analog movement, buttons, and release edges', () => {
+  const makePad = (
+    axes: number[],
+    pressed: number[],
+  ): GamepadSnapshot => ({
+    id: 'Synthetic PowerA GameCube controller',
+    index: 0,
+    mapping: 'standard',
+    axes,
+    buttons: Array.from({ length: 16 }, (_, index) => ({
+      pressed: pressed.includes(index),
+      value: pressed.includes(index) ? 1 : 0,
+    })),
+  });
+
+  const first = gamepadToCommand(
+    makePad([0.8, -0.7], [0, 7]),
+    DEFAULT_CONTROLLER_BINDINGS,
+    new Set(),
+  );
+  assert.ok(first.command.held & INPUT_BITS.moveRight);
+  assert.ok(first.command.held & INPUT_BITS.moveUp);
+  assert.ok(first.command.held & INPUT_BITS.shortPass);
+  assert.ok(first.command.held & INPUT_BITS.sprint);
+  assert.ok(first.command.pressed & INPUT_BITS.shortPass);
+
+  const released = gamepadToCommand(
+    makePad([0, 0], []),
+    DEFAULT_CONTROLLER_BINDINGS,
+    first.pressedButtons,
+  );
+  assert.ok(released.command.released & INPUT_BITS.shortPass);
+  assert.equal(released.command.held, 0);
+});
+
+test('controller rebinding swaps collisions and preserves every action', () => {
+  const rebound = assignControllerButton(
+    DEFAULT_CONTROLLER_BINDINGS,
+    'shot',
+    DEFAULT_CONTROLLER_BINDINGS.shortPass,
+  );
+  assert.equal(rebound.shot, DEFAULT_CONTROLLER_BINDINGS.shortPass);
+  assert.equal(rebound.shortPass, DEFAULT_CONTROLLER_BINDINGS.shot);
+  assert.equal(new Set(Object.values(rebound)).size, Object.values(rebound).length);
 });

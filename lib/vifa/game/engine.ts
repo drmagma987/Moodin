@@ -14,6 +14,13 @@ import {
   type KeyBindings,
 } from './keybindings';
 import {
+  DEFAULT_CONTROLLER_BINDINGS,
+  connectedGamepads,
+  gamepadToCommand,
+  type ControllerBindings,
+  type GamepadSnapshot,
+} from './gamepad';
+import {
   FIELD_W,
   FIELD_H,
   M,
@@ -126,6 +133,9 @@ export class PitchKickGame {
   private keys = new Set<string>();
   private justPressed: string[] = [];
   private justReleased: string[] = [];
+  private keyboardKeys = new Set<string>();
+  private keyboardJustPressed: string[] = [];
+  private keyboardJustReleased: string[] = [];
   /** Paused (e.g. settings popup open): the loop keeps rendering the frozen
    *  frame but skips simulation + input. */
   private paused = false;
@@ -137,6 +147,17 @@ export class PitchKickGame {
   private awayKeys = new Set<string>();
   private awayJustPressed: string[] = [];
   private awayJustReleased: string[] = [];
+  private awayKeyboardKeys = new Set<string>();
+  private awayKeyboardJustPressed: string[] = [];
+  private awayKeyboardJustReleased: string[] = [];
+  private controllerBindings: ControllerBindings = {
+    ...DEFAULT_CONTROLLER_BINDINGS,
+  };
+  private awayControllerBindings: ControllerBindings = {
+    ...DEFAULT_CONTROLLER_BINDINGS,
+  };
+  private controllerButtons = new Set<number>();
+  private awayControllerButtons = new Set<number>();
   /** Kick key currently charging (FIFA: press charges, release kicks). */
   private chargeKey: string | null = null;
   private chargeTime = 0;
@@ -300,8 +321,10 @@ export class PitchKickGame {
     opts: {
       practice?: boolean;
       bindings?: KeyBindings;
+      controllerBindings?: ControllerBindings;
       localMultiplayer?: boolean;
       awayBindings?: KeyBindings;
+      awayControllerBindings?: ControllerBindings;
       matchRealSeconds?: number;
       seed?: number;
       /** Disable replay-frame retention for large headless balance runs. */
@@ -329,7 +352,13 @@ export class PitchKickGame {
     this.localMultiplayer = opts.localMultiplayer ?? false;
     this.matchRealSeconds = opts.matchRealSeconds ?? MATCH_REAL_SECS;
     if (opts.bindings) this.setBindings(opts.bindings);
+    if (opts.controllerBindings) {
+      this.setControllerBindings(opts.controllerBindings);
+    }
     if (opts.awayBindings) this.setAwayBindings(opts.awayBindings);
+    if (opts.awayControllerBindings) {
+      this.awayControllerBindings = { ...opts.awayControllerBindings };
+    }
 
     this.homePlayers = homeTeam.players.map((p, i) =>
       this.makePlayer('home', p.pos, i),
@@ -407,10 +436,18 @@ export class PitchKickGame {
     if (paused) {
       this.keys.clear();
       this.awayKeys.clear();
+      this.keyboardKeys.clear();
+      this.awayKeyboardKeys.clear();
       this.justPressed.length = 0;
       this.justReleased.length = 0;
       this.awayJustPressed.length = 0;
       this.awayJustReleased.length = 0;
+      this.keyboardJustPressed.length = 0;
+      this.keyboardJustReleased.length = 0;
+      this.awayKeyboardJustPressed.length = 0;
+      this.awayKeyboardJustReleased.length = 0;
+      this.controllerButtons.clear();
+      this.awayControllerButtons.clear();
       this.chargeKey = null;
       this.chargeTime = 0;
       this.awayChargeKey = null;
@@ -429,6 +466,13 @@ export class PitchKickGame {
         this.keyRemap.set(physical, canonical);
       }
     }
+  }
+
+  setControllerBindings(bindings: ControllerBindings) {
+    this.controllerBindings = { ...bindings };
+    this.awayControllerBindings = { ...bindings };
+    this.controllerButtons.clear();
+    this.awayControllerButtons.clear();
   }
 
   private setAwayBindings(bindings: KeyBindings) {
@@ -450,15 +494,15 @@ export class PitchKickGame {
     if (awayCode) {
       e.preventDefault();
       if (!e.repeat && ACTION_KEYS.has(awayCode)) {
-        this.awayJustPressed.push(awayCode);
+        this.awayKeyboardJustPressed.push(awayCode);
       }
-      this.awayKeys.add(awayCode);
+      this.awayKeyboardKeys.add(awayCode);
       return;
     }
     const code = this.keyRemap.get(e.code) ?? e.code;
     if (MOVE_KEYS.has(code) || ACTION_KEYS.has(code)) e.preventDefault();
-    if (!e.repeat && ACTION_KEYS.has(code)) this.justPressed.push(code);
-    this.keys.add(code);
+    if (!e.repeat && ACTION_KEYS.has(code)) this.keyboardJustPressed.push(code);
+    this.keyboardKeys.add(code);
   };
 
   private onKeyUp = (e: KeyboardEvent) => {
@@ -467,29 +511,64 @@ export class PitchKickGame {
       ? this.awayKeyRemap.get(e.code)
       : undefined;
     if (awayCode) {
-      if (KICK_KEYS.has(awayCode)) this.awayJustReleased.push(awayCode);
-      this.awayKeys.delete(awayCode);
+      if (KICK_KEYS.has(awayCode)) this.awayKeyboardJustReleased.push(awayCode);
+      this.awayKeyboardKeys.delete(awayCode);
       return;
     }
     const code = this.keyRemap.get(e.code) ?? e.code;
-    if (KICK_KEYS.has(code)) this.justReleased.push(code);
-    this.keys.delete(code);
+    if (KICK_KEYS.has(code)) this.keyboardJustReleased.push(code);
+    this.keyboardKeys.delete(code);
   };
 
   private captureInputFrame(): InputFrame {
-    return {
+    const gamepads = connectedGamepads();
+    const homePad = gamepads[0] ?? null;
+    const awayPad = this.localMultiplayer ? gamepads[1] ?? null : null;
+    const homeController = this.captureController(
+      homePad,
+      this.controllerBindings,
+      this.controllerButtons,
+    );
+    const awayController = this.captureController(
+      awayPad,
+      this.awayControllerBindings,
+      this.awayControllerButtons,
+    );
+    this.controllerButtons = homeController.pressedButtons;
+    this.awayControllerButtons = awayController.pressedButtons;
+    const frame = {
       tick: this.tick + 1,
       home: {
-        held: codesToBits(this.keys),
-        pressed: codesToBits(this.justPressed),
-        released: codesToBits(this.justReleased),
+        held: codesToBits(this.keyboardKeys) | homeController.command.held,
+        pressed: codesToBits(this.keyboardJustPressed) | homeController.command.pressed,
+        released: codesToBits(this.keyboardJustReleased) | homeController.command.released,
       },
       away: {
-        held: codesToBits(this.awayKeys),
-        pressed: codesToBits(this.awayJustPressed),
-        released: codesToBits(this.awayJustReleased),
+        held: codesToBits(this.awayKeyboardKeys) | awayController.command.held,
+        pressed: codesToBits(this.awayKeyboardJustPressed) | awayController.command.pressed,
+        released: codesToBits(this.awayKeyboardJustReleased) | awayController.command.released,
       },
     };
+    this.keyboardJustPressed = [];
+    this.keyboardJustReleased = [];
+    this.awayKeyboardJustPressed = [];
+    this.awayKeyboardJustReleased = [];
+    return frame;
+  }
+
+  private captureController(
+    gamepad: GamepadSnapshot | null,
+    bindings: ControllerBindings,
+    previous: ReadonlySet<number>,
+  ) {
+    const snapshot = gamepad ?? {
+      id: '',
+      index: -1,
+      mapping: '',
+      axes: [],
+      buttons: [],
+    };
+    return gamepadToCommand(snapshot, bindings, previous);
   }
 
   private applyInputFrame(frame: InputFrame) {
@@ -841,6 +920,18 @@ export class PitchKickGame {
     this.steer(p, (dx / d) * speed, (dy / d) * speed, dt);
   }
 
+  /**
+   * Compact-pitch pressure should build instead of arriving as an instant
+   * full-sprint swarm. A defender closes the first few metres at a controlled
+   * run, then accelerates once genuinely close enough to challenge.
+   */
+  private pressureSpeed(p: PlayerEntity, target: Vec, topSpeed: number) {
+    const d = dist(p, target);
+    if (d > M(14)) return AWAY_FORMATION_SPEED;
+    if (d > M(7)) return RUN_SPEED;
+    return topSpeed;
+  }
+
   // ---- update -------------------------------------------------------------
 
   private loop = (now: number) => {
@@ -868,7 +959,7 @@ export class PitchKickGame {
    * replay/server path; omitting it captures the live keyboard command state. */
   advanceTick(frame?: InputFrame) {
     const command = frame ?? this.captureInputFrame();
-    if (frame) this.applyInputFrame(frame);
+    this.applyInputFrame(command);
     this.update(FIXED_DT);
     this.tick += 1;
     if (this.recordReplay) {
@@ -1777,14 +1868,14 @@ export class PitchKickGame {
     // given speed (exponential friction covers (v0 - vEnd)/BALL_DECAY px),
     // instead of dying en route like the old distance multipliers did.
     const base = isThrough
-      ? this.passPower(d, 240, 920)
-      : this.passPower(d, 260, 780);
+      ? this.passPower(d, 220, 820)
+      : this.passPower(d, 220, 750);
     // FIFA assist: targeting is automatic, but the gauge still matters —
     // undercharged passes arrive soft/short, overcharged ones run past
     // the receiver. charge ~0.4 ≈ the "right" weight. Band tightened from
     // 0.78–1.33 to 0.84–1.22 so neither extreme is wild: a tap pass isn't
     // limp and a full-charge drive doesn't rocket 27m past a 12m target —
-    // the launch ceiling (780 px/s ≈ 134 km/h ground pass) is realistic too.
+    // the launch ceiling stays crisp without turning each exchange into Pong.
     const scale = 0.84 + 0.38 * charge;
     // PASSING: accurate passers weight it better and misplace it less often.
     const power = Math.min(
@@ -2708,7 +2799,12 @@ export class PitchKickGame {
         // Drive straight at the carrier (no slow-in) to barge into a challenge;
         // chase a loose ball with anticipation instead.
         if (awayCarrier) {
-          this.driveToward(p, awayCarrier, PRESS_SPEED, dt);
+          this.driveToward(
+            p,
+            awayCarrier,
+            this.pressureSpeed(p, awayCarrier, PRESS_SPEED),
+            dt,
+          );
         } else {
           const t = this.clampTarget({
             x: this.ball.x + this.ball.vx * 0.18,
@@ -2722,7 +2818,12 @@ export class PitchKickGame {
         // Jockey into a goal-side contain spot (moveToward slow-in lets him
         // settle and hold the line rather than diving in — that's the presser's
         // job). Forces the carrier wide or into a pass.
-        this.moveToward(p, this.containTarget(p, awayCarrier), PRESS_SPEED, dt);
+        this.moveToward(
+          p,
+          this.containTarget(p, awayCarrier),
+          this.pressureSpeed(p, awayCarrier, JOCKEY_SPEED),
+          dt,
+        );
         continue;
       }
       const plan = this.practice
@@ -3096,7 +3197,14 @@ export class PitchKickGame {
         continue;
       }
       if (p === presser) {
-        if (homeCarrier) this.driveToward(p, homeCarrier, PRESS_SPEED, dt);
+        if (homeCarrier) {
+          this.driveToward(
+            p,
+            homeCarrier,
+            this.pressureSpeed(p, homeCarrier, PRESS_SPEED),
+            dt,
+          );
+        }
         else this.moveToward(p, this.ball, PRESS_SPEED, dt);
         continue;
       }
@@ -3104,7 +3212,7 @@ export class PitchKickGame {
         this.moveToward(
           p,
           this.containTarget(p, homeCarrier),
-          PRESS_SPEED * 0.9,
+          this.pressureSpeed(p, homeCarrier, JOCKEY_SPEED),
           dt,
         );
         continue;
@@ -3172,7 +3280,12 @@ export class PitchKickGame {
         // contact and wins the jostle, instead of hovering a few px behind. A
         // loose ball is chased with slight anticipation.
         if (userCarrier) {
-          this.driveToward(p, userCarrier, AWAY_CHASE_SPEED, dt);
+          this.driveToward(
+            p,
+            userCarrier,
+            this.pressureSpeed(p, userCarrier, AWAY_CHASE_SPEED),
+            dt,
+          );
         } else {
           const t = {
             x: clamp(this.ball.x + this.ball.vx * 0.18, p.r, FIELD_W - p.r),
@@ -3183,7 +3296,12 @@ export class PitchKickGame {
       } else if (p === container && userCarrier) {
         // Jockey into the containing spot (moveToward eases in so he holds the
         // line rather than barging through — the chaser is the committed one).
-        this.moveToward(p, this.containTarget(p, userCarrier), PRESS_SPEED, dt);
+        this.moveToward(
+          p,
+          this.containTarget(p, userCarrier),
+          this.pressureSpeed(p, userCarrier, JOCKEY_SPEED),
+          dt,
+        );
       } else {
         const plan = this.offBallPlan(p, AWAY_FORMATION_SPEED);
         const sp =
@@ -3270,16 +3388,18 @@ export class PitchKickGame {
     this.moveToward(p, t, AWAY_CARRY_SPEED, dt);
 
     if (this.cpuDecision > 0) return;
-    this.cpuDecision = 0.5;
+    // Let a possession breathe. At the old half-second cadence, the CPU often
+    // played one-touch pinball before its shape could support the ball.
+    this.cpuDecision = 0.75;
 
     const pressure = this.nearestOpponentDist(p);
 
     // Use the same assisted finishing model as a human instead of a special
     // fixed-power, laser-accurate CPU shot. Better shooters choose and execute
     // the chance more effectively through the shared rating scalars.
-    if (p.x < M(24) && (Math.abs(p.y - FIELD_H / 2) < M(24) || p.x < M(12))) {
+    if (p.x < M(20) && (Math.abs(p.y - FIELD_H / 2) < M(18) || p.x < M(10))) {
       const charge = clamp(
-        0.35 + (M(24) - p.x) / M(50) + (p.individualStats.sho - 75) / 250,
+        0.35 + (M(20) - p.x) / M(44) + (p.individualStats.sho - 75) / 250,
         0.3,
         0.78,
       );
@@ -3315,7 +3435,7 @@ export class PitchKickGame {
 
     // Pass under pressure, and also circulate proactively some of the time so
     // the CPU does not reduce every possession to a straight central dribble.
-    if (pressure < M(7) || this.rng.next() < 0.34) {
+    if (pressure < M(6) || this.rng.next() < 0.24) {
       let best: PlayerEntity | null = null;
       let bestScore = -Infinity;
       for (const m of this.awayPlayers) {
@@ -3338,7 +3458,7 @@ export class PitchKickGame {
         this.lastKickKind = 'pass';
         this.kickBallToward(
           { x: best.x + best.vx * 0.2, y: best.y + best.vy * 0.2 },
-          this.passPower(d, 260, 780) * p.cachedPassPowerMultiplier,
+          this.passPower(d, 220, 750) * p.cachedPassPowerMultiplier,
           p,
           0,
           0.03 * p.cachedPassSpreadMultiplier,
@@ -3596,7 +3716,10 @@ export class PitchKickGame {
         this.ball.y = best.y + (dy / l) * (best.r + this.ball.r);
       } else {
         // Clean receive (pass or loose ball) — short protection.
-        this.stealProtect = 0.25;
+        // Give a receiver one settling touch before pressure can immediately
+        // reverse possession. This is long enough to read as control, but far
+        // shorter than the protection after actually winning a tackle.
+        this.stealProtect = 0.35;
       }
     }
 
@@ -3787,12 +3910,12 @@ export class PitchKickGame {
     // Reaction buffer grows with shot distance, shrinks with shot pace. A
     // point-blank blast → almost no buffer (he can only save what's hit at him);
     // a 25-yarder → a real dive range across the goal.
-    // Pace penalty STRENGTHENED (starts at 520 not 680, scales 0.04 not 0.02,
-    // caps at 34 not 16) so a fiercely-struck shot collapses his reach toward his
-    // body — the hardest, well-placed shots now BEAT him for a goal instead of
-    // being magnetically reached (user: "GK catches strong shots too easily").
-    const distBuf = clamp((shotDist - 120) * 0.05, 0, 26);
-    const pacePenalty = clamp((ballSpeed - 520) * 0.04, 0, 34);
+    // Distance meaningfully rewards a set keeper, while pace still collapses
+    // his reach on close-range blasts. On the compact pitch the older balance
+    // reduced reach so aggressively that ordinary shots became near-automatic
+    // goals, removing the value of patient chance creation.
+    const distBuf = clamp((shotDist - 100) * 0.065, 0, 34);
+    const pacePenalty = clamp((ballSpeed - 570) * 0.03, 0, 28);
     const buffer = Math.max(0, distBuf - pacePenalty)
       * gk.cachedKeeperReachMultiplier;
     return gk.r + this.ball.r + buffer;

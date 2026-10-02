@@ -67,43 +67,45 @@ export const BOUNCE = 0.58; // vertical restitution on landing
 export const CONTROL_HEIGHT = M(1.25);
 
 // ---- Movement speeds ------------------------------------------------------
-// Tuned toward real-life pace & dynamics (a sprint is ~10 m/s, a jog ~7 m/s).
+// Tuned for readable 7-a-side possession rather than full-pitch arcade pace.
+// The compact pitch makes real-world top speeds feel much faster than they do
+// on television, so locomotion is deliberately compressed: players still have
+// a clear sprint gear, but a carrier has time to scan before pressure arrives.
 // The key relationship: a player CARRYING the ball (DRIBBLE_MULT) is slower
 // than a free runner, and a defender chasing/pressing runs at near-sprint — so
 // you can't just knock it past everyone and outrun the whole pitch to goal.
 // REAL-LIFE-ANCHORED (all converted via PX_PER_M=20.95; baseline = PAC/DRI 75,
 // then the PAC rating in ratings.ts scales the sprint/run further per player):
-//   WALK 128 ≈ 22 km/h jog · SPRINT 198 ≈ 34 km/h (avg pro max) · with-ball
-//   sprint 198×0.90 ≈ 30.6 km/h · a PAC-99 flyer reaches ~38 km/h (Mbappé), a
-//   PAC-40 plodder ~28 km/h. Was 228 (39 km/h) — unrealistically fast, which is
-//   why a (realistic) dribble felt slow next to it.
-export const WALK_SPEED = 128;
-export const SPRINT_SPEED = 198;
-export const TEAMMATE_SPEED = 128;
+//   WALK 112 · SPRINT 176 · with-ball sprint 176×0.88. Pace ratings still make
+//   quick players visibly dangerous without letting every possession cross a
+//   70 m pitch in seconds.
+export const WALK_SPEED = 112;
+export const SPRINT_SPEED = 176;
+export const TEAMMATE_SPEED = 110;
 /** A chasing defender genuinely sprints after the ball. SLIGHTLY faster than a
  *  dribbler (who pays the DRIBBLE_MULT penalty) so a free defender can run down
  *  an average carrier — he isn't carrying the ball. ≈35 km/h. */
-export const AWAY_CHASE_SPEED = 196;
+export const AWAY_CHASE_SPEED = 174;
 /** The CPU carrier dribbles at the (penalised) carrying pace. */
-export const AWAY_CARRY_SPEED = 176;
-export const AWAY_FORMATION_SPEED = 120;
+export const AWAY_CARRY_SPEED = 154;
+export const AWAY_FORMATION_SPEED = 104;
 /** Off-ball forward runs in behind (both teams). */
-export const RUN_SPEED = 178;
+export const RUN_SPEED = 156;
 /** Closing down the carrier / tracking a marked attacker — a real sprint.
  *  Matches AWAY_CHASE so your AI teammate can also run a dribbler down. */
-export const PRESS_SPEED = 196;
+export const PRESS_SPEED = 174;
 /** Contain (hold C): jockey speed while shadowing the carrier. */
-export const JOCKEY_SPEED = 150;
+export const JOCKEY_SPEED = 132;
 /** Burst speed of the standing-tackle lunge (D without the ball). */
-export const TACKLE_LUNGE_SPEED = 260;
+export const TACKLE_LUNGE_SPEED = 230;
 /** Burst speed of the committed sliding tackle (Space). Faster and longer-range
  *  than the standing tackle — it covers ground — but leaves you grounded and
  *  out of the play for ~0.7s if you commit (FIFA's high-risk/high-reward slide). */
-export const SLIDE_LUNGE_SPEED = 330;
+export const SLIDE_LUNGE_SPEED = 294;
 /** Carrying the ball is slower than running freely — a real dribble penalty.
  *  Applied to the carrier's top speed so a free defender can run you down.
- *  0.90 ≈ a real high-speed dribble keeps ~90% of free-sprint pace. */
-export const DRIBBLE_MULT = 0.90;
+ *  0.88 keeps a meaningful separation between carrying and running freely. */
+export const DRIBBLE_MULT = 0.88;
 export const CONTROL_DIST = PLAYER_R + BALL_R + 16; // ball "at feet" reach ≈ 1.4 m
 /** Ball rolling friction (exponential decay per second). A kick at power v
  *  rolls v/BALL_DECAY px total — pass powers MUST account for this. */
@@ -129,12 +131,12 @@ export const MATCH_REAL_SECS = 180; // real seconds a match actually lasts
 /** How quickly velocity approaches the desired velocity (per second). Lower =
  *  more inertia: a player can't instantly reverse or hit full pace from a
  *  standstill, momentum carries them (real-life / FIFA weight). */
-export const ACCEL = 6.2;
+export const ACCEL = 5.4;
 /** Acceleration while carrying the ball — heavier still, so a dribbler can't
  *  jink as sharply as a free runner. */
-export const DRIBBLE_ACCEL = 5.25;
+export const DRIBBLE_ACCEL = 4.5;
 /** Max turn rate in radians per second. */
-export const TURN_RATE = 11.5;
+export const TURN_RATE = 9.5;
 
 // ---- Cosmetic palettes ----------------------------------------------------
 export const HAIR_COLORS = ['#2b2118', '#0e0c0a', '#5a3b1e', '#857058'];

@@ -475,6 +475,47 @@ Use this section for intermittent progress notes between chat windows. Prefer da
     be evaluated quickly without changing deterministic gameplay
 - Verified again with `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`,
   `npm run vifa:ratings:test`, and `npm run vifa:formation:test`.
+- Retuned VIFA away from the overly frantic, Pong-like 7-a-side pace:
+  - reduced player, sprint, support-run, press, jockey, and tackle-lunge speeds
+    while adding more inertia and weight to changes of direction
+  - made distant pressure build in stages instead of sending two defenders at
+    full speed the moment possession changes
+  - slowed ground-pass arrival modestly, added a slightly longer settling touch
+    after reception, and made the solo CPU circulate less reflexively
+  - moved CPU shot selection toward better areas and restored some goalkeeper
+    reaction range on built chances so patient creation matters more
+  - updated the pressure-test bots to model jogging build-up before attacking
+    sprints and report pass, turnover, and shot tempo in addition to outcomes
+- Ran repeated 432- and 864-match formation matrices during tuning. The final
+  432-match pass completed with zero invalid states, unfinished matches, or
+  no-shot matches; maximum margin was 8. Also verified the live match surface
+  locally plus `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`, and
+  `npm run vifa:ratings:test`; lint retains the existing bachelor-party warning.
+- Added browser controller support without requiring a known hardware mapping:
+  - Gamepad API input now feeds the same deterministic action frames as the
+    keyboard, including analog/D-pad movement, held inputs, press/release edges,
+    charged kicks, and automatic controller assignment for local multiplayer
+  - settings now detects the first connected controller, displays its browser
+    ID/mapping and live button indexes, and captures custom action bindings
+  - controller bindings persist locally, duplicate assignments swap safely,
+    and a standard positional default can be restored at any time
+  - added synthetic controller tests covering axes, simultaneous buttons,
+    release edges, and collision-safe rebinding
+- Verified the controller settings UI locally plus `npm run lint`,
+  `npx tsc --noEmit`, and `npm run vifa:test`; physical PowerA verification is
+  still required to confirm its exact browser-reported ID and raw button order.
+- Reworked the VIFA front menu into an original early-2000s football-game
+  presentation inspired by the supplied reference: silver speed lines,
+  green/teal sweeps, a metallic ball crest, beveled numbered menu rows, and a
+  persistent selection/help rail without using licensed FIFA or EA branding.
+- Expanded Settings into a plain-language `Controls & Help` guide:
+  - added a four-step first-controller walkthrough, live detection guidance,
+    location-based button names, per-action gameplay explanations, local-2P
+    assignment details, safe rebinding/swap behavior, and reset reassurance
+  - clarified that controller mapping affects on-pitch actions, while menus and
+    squad setup currently use mouse, trackpad, or keyboard
+  - kept the recommended layout visible and editable even before a controller
+    is detected
 
 Future Codex sessions should update this file when they make meaningful feature, architecture, deployment, or gameplay-balance changes.
 

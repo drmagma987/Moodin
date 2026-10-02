@@ -6,6 +6,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  Gamepad2,
+  Keyboard,
   Settings,
   X,
 } from 'lucide-react';
@@ -46,6 +48,20 @@ import {
   type KeyBindings,
   type GameAction,
 } from '@/lib/vifa/game/keybindings';
+import {
+  CONTROLLER_ACTION_LABELS,
+  CONTROLLER_ACTION_HELP,
+  CONTROLLER_ACTION_ORDER,
+  DEFAULT_CONTROLLER_BINDINGS,
+  assignControllerButton,
+  connectedGamepads,
+  controllerButtonLabel,
+  loadControllerBindings,
+  pressedButtonIndexes,
+  saveControllerBindings,
+  type ControllerAction,
+  type ControllerBindings,
+} from '@/lib/vifa/game/gamepad';
 import { PLAYER_TWO_BINDINGS, VIFA_MODS } from '@/lib/vifa/mods';
 
 type Phase = 'intro' | 'select' | 'squad' | 'playing';
@@ -79,6 +95,9 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
   const [introIdx, setIntroIdx] = useState(0);
   const [gameKey, setGameKey] = useState(0);
   const [bindings, setBindings] = useState<KeyBindings>(() => loadBindings());
+  const [controllerBindings, setControllerBindings] = useState<ControllerBindings>(
+    () => loadControllerBindings(),
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Default the team picker to the next/live World Cup 2026 fixture so the
@@ -276,6 +295,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
       game = new PitchKickGame(canvasRef.current, setHud, pHome, pAway, {
         practice: true,
         bindings,
+        controllerBindings,
         matchRealSeconds: VIFA_MODS.matchRealSeconds,
         enhancementCanvas: enhancementCanvasRef.current ?? undefined,
         seed: (selectionSeed(homeOption.id) ^ selectionSeed(awayOption.id) ^ gameKey) >>> 0,
@@ -283,8 +303,10 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     } else {
       game = new PitchKickGame(canvasRef.current, setHud, home, away, {
         bindings,
+        controllerBindings,
         localMultiplayer: mode === 'local',
         awayBindings: PLAYER_TWO_BINDINGS,
+        awayControllerBindings: controllerBindings,
         matchRealSeconds: VIFA_MODS.matchRealSeconds,
         enhancementCanvas: enhancementCanvasRef.current ?? undefined,
         seed: (selectionSeed(homeOption.id) ^ selectionSeed(awayOption.id) ^ gameKey) >>> 0,
@@ -330,10 +352,19 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     if (phase !== 'intro' || settingsOpen) return;
     const onKey = (e: KeyboardEvent) => {
       const k = e.code;
-      if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'Enter')
+      if (
+        k === 'ArrowLeft' ||
+        k === 'ArrowRight' ||
+        k === 'ArrowUp' ||
+        k === 'ArrowDown' ||
+        k === 'Enter'
+      )
         e.preventDefault();
-      if (k === 'ArrowLeft') setIntroIdx((i) => Math.max(0, i - 1));
-      else if (k === 'ArrowRight') setIntroIdx((i) => Math.min(2, i + 1));
+      if (k === 'ArrowLeft' || k === 'ArrowUp') {
+        setIntroIdx((i) => Math.max(0, i - 1));
+      } else if (k === 'ArrowRight' || k === 'ArrowDown') {
+        setIntroIdx((i) => Math.min(2, i + 1));
+      }
       else if (k === 'Enter')
         startMode(introIdx === 0 ? 'match' : introIdx === 1 ? 'local' : 'practice');
     };
@@ -376,6 +407,11 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     setBindings(next);
     saveBindings(next);
     gameRef.current?.setBindings(next);
+  };
+  const applyControllerBindings = (next: ControllerBindings) => {
+    setControllerBindings(next);
+    saveControllerBindings(next);
+    gameRef.current?.setControllerBindings(next);
   };
 
   return (
@@ -518,40 +554,89 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
 
         {/* Intro / mode-select overlay */}
         {phase === 'intro' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-night-950/92 backdrop-blur-sm animate-fade-in px-4">
-            <span className="font-heading uppercase text-xs sm:text-sm tracking-[0.4em] text-night-300 mb-2">
-              Kick Off
-            </span>
-            <h2 className="font-display text-5xl sm:text-7xl text-white tracking-wide mb-2 text-center">
-              VIFA <span className="text-volt-500">KICK OFF</span>
-            </h2>
-            <p className="font-body text-night-300 text-base sm:text-lg mb-8 text-center">
-              <span className="text-volt-400 font-semibold">← →</span> to choose
-              · <span className="text-volt-400 font-semibold">Enter</span> or
-              click to start
-            </p>
-            <div className="flex flex-col sm:flex-row items-stretch gap-4 sm:gap-5">
+          <div className="absolute inset-0 overflow-hidden bg-[#edf1ee] text-[#20282d] animate-fade-in">
+            <div className="pointer-events-none absolute inset-0 opacity-70 [background:repeating-linear-gradient(165deg,transparent_0,transparent_16px,rgba(77,95,106,0.08)_17px,transparent_19px)]" />
+            <div className="pointer-events-none absolute -left-20 top-[38%] h-52 w-[70%] -rotate-6 rounded-[50%] border-[18px] border-[#91d83e]/45" />
+            <div className="pointer-events-none absolute -left-28 top-[43%] h-48 w-[75%] -rotate-6 rounded-[50%] border-[5px] border-[#15a9b4]/45" />
+            <div className="pointer-events-none absolute -right-20 top-5 h-20 w-[65%] -skew-x-[28deg] bg-gradient-to-r from-transparent via-white/80 to-[#cad3d7]/60" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-14 h-2 bg-gradient-to-r from-[#16a6b3] via-[#93d43d] to-[#ca5d65]" />
+
+            <div className="relative z-10 flex h-full flex-col px-5 pb-16 pt-5 sm:px-10 sm:pb-20 sm:pt-7">
+              <div className="flex min-h-0 flex-1 items-center justify-center gap-5 sm:gap-10">
+                <div className="relative hidden h-48 w-48 shrink-0 items-center justify-center sm:flex lg:h-60 lg:w-60">
+                  <div className="absolute inset-0 rounded-full bg-[conic-gradient(from_45deg,#87949b,#f8faf9,#36434a,#dfe6e3,#718088,#f8faf9)] shadow-[0_18px_30px_rgba(38,52,58,0.35)]" />
+                  <div className="absolute inset-[12px] rounded-full bg-[#1d272c] ring-4 ring-[#b3d26a]" />
+                  <div className="absolute inset-[28px] rounded-full bg-[radial-gradient(circle_at_35%_28%,#ffffff,#cbd3d2_55%,#7e8a8e)] shadow-inner" />
+                  <span className="relative -rotate-6 text-7xl drop-shadow-[0_5px_2px_rgba(0,0,0,0.3)] lg:text-8xl" aria-hidden="true">
+                    ⚽
+                  </span>
+                  <div className="absolute -left-14 top-3 h-2 w-24 -rotate-[28deg] bg-[#5c6b73]/60" />
+                  <div className="absolute -right-20 top-12 h-1.5 w-28 -rotate-[12deg] bg-[#5c6b73]/45" />
+                </div>
+
+                <div className="flex w-full max-w-xl flex-col justify-center">
+                  <div className="mb-4 flex items-end gap-3 border-b-2 border-[#aab5b9] pb-3 sm:mb-6">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#1f2b31] shadow-lg ring-4 ring-[#a7cb57] sm:hidden">
+                      <span className="text-4xl" aria-hidden="true">⚽</span>
+                    </div>
+                    <div>
+                      <span className="font-heading text-[10px] uppercase tracking-[0.4em] text-[#567078] sm:text-xs">
+                        Open Soccer · 7-a-side
+                      </span>
+                      <h2 className="-skew-x-6 font-display text-5xl italic leading-[0.82] tracking-[-0.04em] text-[#2d383d] sm:text-7xl lg:text-8xl">
+                        VIFA <span className="text-[#759d23]">2000</span>
+                      </h2>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
               <ModeCard
+                number="01"
                 title="PLAY MATCH"
-                blurb="Craft a seven-player squad, then take on the CPU in a fast 7v7 match."
+                blurb="Build your seven, choose a formation, and face the CPU."
                 active={introIdx === 0}
                 onHover={() => setIntroIdx(0)}
                 onClick={() => startMode('match')}
               />
               <ModeCard
+                number="02"
                 title="LOCAL 2P"
-                blurb="Both players build a seven-player squad, then battle on one keyboard."
+                blurb="Two friends, two squads—controllers or one shared keyboard."
                 active={introIdx === 1}
                 onHover={() => setIntroIdx(1)}
                 onClick={() => startMode('local')}
               />
               <ModeCard
+                number="03"
                 title="PRACTICE"
-                blurb="Free-form pitch with no clock. Learn the controls and rehearse passing and shooting."
+                blurb="No clock and no pressure. Learn movement, passing, and shooting."
                 active={introIdx === 2}
                 onHover={() => setIntroIdx(2)}
                 onClick={() => startMode('practice')}
               />
+                  </div>
+                </div>
+              </div>
+
+              <div className="absolute inset-x-0 bottom-0 flex h-14 items-center justify-between border-t border-[#aab5b9] bg-white/90 px-4 text-[#445158] shadow-[0_-4px_15px_rgba(50,70,75,0.12)] sm:h-16 sm:px-9">
+                <div className="flex items-center gap-4 font-heading text-[10px] uppercase tracking-wider sm:text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <b className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#87b63a] text-[#62891e]">↕</b>
+                    Choose
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <b className="flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-[#16a6b3] px-1 text-[#167881]">A</b>
+                    Enter / click to select
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={openSettings}
+                  className="flex items-center gap-2 font-heading text-[10px] uppercase tracking-wider text-[#4b5b62] hover:text-[#668c20] sm:text-xs"
+                >
+                  <Settings size={16} /> Controls & help
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -693,7 +778,8 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
       </p>
 
       <p className="mb-4 px-4 text-center text-xs text-night-400 font-body">
-        Current build: CPU, practice, and same-keyboard two-player play. Source
+        Current build: CPU, practice, controller support, and local two-player
+        play. Source
         adapted from{' '}
         <a
           href="https://github.com/modelence/open-soccer"
@@ -711,6 +797,11 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
           bindings={bindings}
           onChange={applyBindings}
           onReset={() => applyBindings({ ...DEFAULT_BINDINGS })}
+          controllerBindings={controllerBindings}
+          onControllerChange={applyControllerBindings}
+          onControllerReset={() =>
+            applyControllerBindings({ ...DEFAULT_CONTROLLER_BINDINGS })
+          }
           onClose={closeSettings}
         />
       )}
@@ -945,15 +1036,30 @@ function SettingsModal({
   bindings,
   onChange,
   onReset,
+  controllerBindings,
+  onControllerChange,
+  onControllerReset,
   onClose,
 }: {
   bindings: KeyBindings;
   onChange: (next: KeyBindings) => void;
   onReset: () => void;
+  controllerBindings: ControllerBindings;
+  onControllerChange: (next: ControllerBindings) => void;
+  onControllerReset: () => void;
   onClose: () => void;
 }) {
   // The action currently waiting to capture its next keypress (null = idle).
   const [capturing, setCapturing] = useState<GameAction | null>(null);
+  const [capturingController, setCapturingController] =
+    useState<ControllerAction | null>(null);
+  const [controllerStatus, setControllerStatus] = useState<{
+    id: string;
+    mapping: string;
+    pressed: number[];
+    count: number;
+  } | null>(null);
+  const previousControllerButtons = useRef(new Set<number>());
 
   // While capturing, the next keydown anywhere becomes the new binding.
   useEffect(() => {
@@ -973,8 +1079,59 @@ function SettingsModal({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [capturing, bindings, onChange]);
 
+  // Poll while settings is open so an unknown controller can identify itself
+  // and bind raw button indexes without us needing the hardware in advance.
+  useEffect(() => {
+    let raf = 0;
+    let lastStatus = '';
+    const poll = () => {
+      const gamepads = connectedGamepads();
+      const gamepad = gamepads[0];
+      if (!gamepad) {
+        previousControllerButtons.current.clear();
+        if (lastStatus !== 'none') {
+          lastStatus = 'none';
+          setControllerStatus(null);
+        }
+        raf = requestAnimationFrame(poll);
+        return;
+      }
+
+      const pressed = pressedButtonIndexes(gamepad);
+      const current = new Set(pressed);
+      if (capturingController) {
+        const fresh = pressed.find(
+          (button) => !previousControllerButtons.current.has(button),
+        );
+        if (fresh !== undefined) {
+          onControllerChange(
+            assignControllerButton(controllerBindings, capturingController, fresh),
+          );
+          setCapturingController(null);
+        }
+      }
+      previousControllerButtons.current = current;
+      const signature = `${gamepad.id}|${gamepad.mapping}|${pressed.join(',')}|${gamepads.length}`;
+      if (signature !== lastStatus) {
+        lastStatus = signature;
+        setControllerStatus({
+          id: gamepad.id,
+          mapping: gamepad.mapping || 'raw',
+          pressed,
+          count: gamepads.length,
+        });
+      }
+      raf = requestAnimationFrame(poll);
+    };
+    raf = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(raf);
+  }, [capturingController, controllerBindings, onControllerChange]);
+
   const isDefault = (Object.keys(DEFAULT_BINDINGS) as GameAction[]).every(
     (a) => bindings[a] === DEFAULT_BINDINGS[a],
+  );
+  const isControllerDefault = CONTROLLER_ACTION_ORDER.every(
+    (action) => controllerBindings[action] === DEFAULT_CONTROLLER_BINDINGS[action],
   );
 
   return (
@@ -983,14 +1140,14 @@ function SettingsModal({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl max-h-[90vh] rounded-2xl bg-night-900 ring-1 ring-night-700 shadow-2xl shadow-black/60 animate-slide-up"
+        className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-night-900 ring-1 ring-night-700 shadow-2xl shadow-black/60 animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 flex items-center justify-between px-6 py-4 bg-night-900 border-b border-night-800">
           <div className="flex items-center gap-2">
             <Settings size={18} className="text-volt-400" />
             <h3 className="font-display text-2xl text-white tracking-wide">
-              SETTINGS
+              CONTROLS &amp; HELP
             </h3>
           </div>
           <button
@@ -1002,11 +1159,182 @@ function SettingsModal({
           </button>
         </div>
 
-        <div className="px-6 py-4">
+        <div className="overflow-y-auto px-6 py-4">
+          <div className="mb-5 rounded-xl border border-volt-500/25 bg-volt-500/5 px-4 py-3 font-body text-sm leading-relaxed text-night-200">
+            <b className="text-white">This screen changes on-pitch controls only.</b>{' '}
+            Use your mouse, trackpad, or keyboard to choose teams and build the
+            squad. During the match, you can use a controller, keyboard, or both.
+            Scroll through this page to see every action before you play.
+          </div>
+
+          <section className="mb-7">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Gamepad2 size={18} className="text-volt-400" />
+                <h4 className="font-heading text-sm uppercase tracking-[0.22em] text-white">
+                  Controller
+                </h4>
+              </div>
+              <button
+                onClick={onControllerReset}
+                disabled={isControllerDefault}
+                className="font-heading text-[10px] uppercase tracking-wider text-night-300 transition-colors hover:text-volt-400 disabled:opacity-40"
+              >
+                Restore recommended layout
+              </button>
+            </div>
+
+            <div className="mb-4 rounded-xl border border-sky-300/20 bg-sky-300/5 p-4">
+              <h5 className="font-heading text-xs uppercase tracking-[0.18em] text-sky-200">
+                First-time setup — four simple steps
+              </h5>
+              <ol className="mt-3 grid gap-3 sm:grid-cols-2">
+                {[
+                  ['1', 'Plug it in', 'Connect the USB cable or pair the controller before starting a match.'],
+                  ['2', 'Wake it up', 'Click this page once, then press any controller button. Browsers often hide controllers until that first press.'],
+                  ['3', 'Test it', 'Look at “Live button test” below. A number should appear each time you press a button.'],
+                  ['4', 'Use or customize', 'Keep the recommended layout, or click an action and press the button that feels natural to you.'],
+                ].map(([step, title, copy]) => (
+                  <li key={step} className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-300 font-display text-xs text-night-950">
+                      {step}
+                    </span>
+                    <span>
+                      <b className="block font-heading text-xs uppercase tracking-wider text-white">
+                        {title}
+                      </b>
+                      <span className="mt-0.5 block font-body text-xs leading-relaxed text-night-300">
+                        {copy}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className={`mb-4 rounded-xl border px-4 py-3 ${
+              controllerStatus
+                ? 'border-volt-500/30 bg-volt-500/10'
+                : 'border-night-700 bg-night-950/60'
+            }`}>
+              {controllerStatus ? (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-heading text-xs uppercase tracking-wider text-volt-300">
+                      Connected · Player 1
+                    </span>
+                    <span className="font-body text-xs text-night-300">
+                      {controllerStatus.count > 1
+                        ? `${controllerStatus.count} controllers detected`
+                        : `${controllerStatus.mapping} mapping`}
+                    </span>
+                  </div>
+                  <p className="mt-1 truncate font-body text-xs text-night-200" title={controllerStatus.id}>
+                    {controllerStatus.id}
+                  </p>
+                  <p className="mt-2 font-body text-xs text-night-400">
+                    Live button test:{' '}
+                    <span className="text-volt-300">
+                      {controllerStatus.pressed.length
+                        ? controllerStatus.pressed.join(', ')
+                        : 'press any button to test'}
+                    </span>
+                  </p>
+                </>
+              ) : (
+                <div>
+                  <p className="font-heading text-xs uppercase tracking-wider text-orange-200">
+                    No controller detected yet
+                  </p>
+                  <p className="mt-1 font-body text-sm leading-relaxed text-night-300">
+                    That is okay. Plug it in, click anywhere on this VIFA page,
+                    and press a controller button. You do not need to reload.
+                    Keyboard controls remain available at the same time.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mb-4 grid gap-2 rounded-lg bg-night-950/60 p-3 font-body text-xs leading-relaxed text-night-300 sm:grid-cols-2">
+              <p>
+                <b className="text-white">Movement never needs mapping:</b>{' '}
+                use the left stick or D-pad. A small center dead zone prevents
+                accidental drifting.
+              </p>
+              <p>
+                <b className="text-white">Button names:</b> “Bottom face” means
+                the lowest of the four main buttons, “Right face” means the one
+                farthest right, and so on. The small number is only the name
+                your browser gives that physical button.
+              </p>
+              <p>
+                <b className="text-white">To change one:</b> click its green
+                button below. When it says “Press button…”, press the physical
+                controller button you want. Click it again to cancel.
+              </p>
+              <p>
+                <b className="text-white">Nothing can be lost:</b> duplicate
+                choices automatically swap, settings save in this browser, and
+                “Restore recommended layout” undoes every controller change.
+              </p>
+            </div>
+
+            <div className="mb-3 rounded-lg border border-volt-500/20 bg-volt-500/5 px-3 py-2 font-body text-xs leading-relaxed text-night-300">
+              <b className="text-volt-300">Local two-player:</b> the first
+              connected controller is Player 1 and the second is Player 2. If
+              only one controller is connected, Player 2 can still use the
+              second keyboard layout. This saved button layout applies to both
+              controllers.
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {CONTROLLER_ACTION_ORDER.map((action) => (
+                <div
+                  key={action}
+                  className="flex items-start justify-between gap-3 rounded-lg bg-night-950/60 px-3 py-3"
+                >
+                  <span className="min-w-0 font-body text-sm text-white">
+                    <b className="block font-heading text-xs uppercase tracking-wider">
+                      {CONTROLLER_ACTION_LABELS[action]}
+                    </b>
+                    <span className="mt-1 block text-xs leading-relaxed text-night-400">
+                      {CONTROLLER_ACTION_HELP[action]}
+                    </span>
+                  </span>
+                  <button
+                    onClick={() => {
+                      setCapturing(null);
+                      setCapturingController((current) =>
+                        current === action ? null : action,
+                      );
+                    }}
+                    className={`min-w-[7.5rem] shrink-0 rounded-md px-3 py-2 font-heading text-xs tracking-wider transition-colors ${
+                      capturingController === action
+                        ? 'bg-volt-500 text-night-950 animate-pulse'
+                        : 'bg-night-800 text-volt-400 hover:bg-night-700'
+                    }`}
+                  >
+                    {capturingController === action
+                      ? controllerStatus ? 'Press button…' : 'Connect pad…'
+                      : controllerButtonLabel(controllerBindings[action])}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <Keyboard size={18} className="text-volt-400" />
+              <h4 className="font-heading text-sm uppercase tracking-[0.22em] text-white">
+                Keyboard
+              </h4>
+            </div>
           <p className="font-body text-sm text-night-300 mb-4">
             Click a key to rebind it, then press any key. Press{' '}
             <span className="text-volt-400">Esc</span> to cancel. Changes save
-            automatically and the game stays paused while this is open.
+            automatically and the game stays paused while this is open. The
+            action names mean exactly the same thing as the controller
+            explanations above.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 items-start">
@@ -1044,6 +1372,7 @@ function SettingsModal({
             </div>
             ))}
           </div>
+          </section>
         </div>
 
         <div className="sticky bottom-0 flex items-center justify-between px-6 py-4 bg-night-900 border-t border-night-800">
@@ -1053,7 +1382,7 @@ function SettingsModal({
             className="flex items-center gap-2 font-heading uppercase text-xs tracking-wider text-night-300 hover:text-volt-400 transition-colors disabled:opacity-40 disabled:hover:text-night-300"
           >
             <RotateCcw size={14} />
-            Reset to defaults
+            Reset keyboard defaults
           </button>
           <button
             onClick={onClose}
@@ -1068,12 +1397,14 @@ function SettingsModal({
 }
 
 function ModeCard({
+  number,
   title,
   blurb,
   active,
   onHover,
   onClick,
 }: {
+  number: string;
   title: string;
   blurb: string;
   active: boolean;
@@ -1085,28 +1416,35 @@ function ModeCard({
       onMouseEnter={onHover}
       onFocus={onHover}
       onClick={onClick}
-      className={`group flex flex-col text-left w-72 sm:w-80 rounded-2xl p-6 transition-all duration-200 ${
+      className={`group relative flex min-h-[66px] w-full items-center overflow-hidden border text-left transition-all duration-150 [clip-path:polygon(2%_0,100%_0,97%_100%,0_100%)] ${
         active
-          ? 'ring-4 ring-volt-500 scale-105 shadow-xl shadow-black/40 bg-night-900'
-          : 'ring-1 ring-night-700 opacity-80 hover:opacity-100 bg-night-900/70'
+          ? 'z-10 -translate-x-1 border-[#6d872e] bg-gradient-to-r from-[#d9ec8c] via-[#f6f8df] to-white shadow-[0_5px_12px_rgba(65,83,48,0.28)] sm:-translate-x-3'
+          : 'border-[#abb4b7] bg-gradient-to-r from-[#d7dcde] via-white to-white/60 hover:-translate-x-1 hover:border-[#7e969d]'
       }`}
     >
       <span
-        className={`font-display text-3xl sm:text-4xl tracking-wide mb-3 ${
-          active ? 'text-volt-500' : 'text-white'
+        className={`ml-3 mr-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 font-display text-xs shadow-inner sm:ml-5 ${
+          active
+            ? 'border-[#70862f] bg-[radial-gradient(circle_at_35%_25%,#f9ff9a,#8bab31_58%,#50670e)] text-[#243006]'
+            : 'border-[#6f777b] bg-[radial-gradient(circle_at_35%_25%,#ef9a9d,#9e2f3c_58%,#55151d)] text-white'
         }`}
       >
-        {title}
+        {number}
       </span>
-      <span className="font-body text-sm text-night-300 leading-relaxed">
-        {blurb}
+      <span className="min-w-0 flex-1 py-2 pr-3">
+        <span className={`block -skew-x-6 font-display text-xl italic tracking-wide sm:text-2xl ${
+          active ? 'text-[#202a2e]' : 'text-[#3d474c]'
+        }`}>
+          {title}
+        </span>
+        <span className="block truncate font-body text-[11px] text-[#607078] sm:text-xs">
+          {blurb}
+        </span>
       </span>
-      <span
-        className={`mt-5 font-heading uppercase text-xs tracking-[0.25em] transition-colors ${
-          active ? 'text-volt-400' : 'text-night-500'
-        }`}
-      >
-        {active ? '▶ Start' : 'Select'}
+      <span className={`mr-5 text-2xl transition-transform ${
+        active ? 'translate-x-0 text-[#719523]' : '-translate-x-2 text-[#9ca6aa]'
+      }`} aria-hidden="true">
+        ▶
       </span>
     </button>
   );

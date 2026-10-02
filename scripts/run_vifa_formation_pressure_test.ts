@@ -84,14 +84,21 @@ function botCommand(
   if (owns) {
     const lanePhase = tick / 135 + controlledRef.index * 1.7 + (side === 'home' ? 0 : Math.PI);
     const targetY = FIELD_H / 2 + Math.sin(lanePhase) * M(14);
-    command.held |= movementBits(attackX - px, targetY - py);
     const goalDistance = Math.abs(attackX - px);
+    // Model deliberate possession: jog through the build-up and only open up
+    // into a sprint in the attacking third. The previous always-sprint,
+    // pass-every-0.6s bot measured arcade chaos more than normal play.
+    command.held |= movementBits(
+      attackX - px,
+      targetY - py,
+      goalDistance < M(25),
+    );
     if (state.action === null && tick >= state.nextDecisionTick) {
-      const action = goalDistance < M(23) ? INPUT_BITS.shot : INPUT_BITS.shortPass;
+      const action = goalDistance < M(20) ? INPUT_BITS.shot : INPUT_BITS.shortPass;
       const chargeTicks = action === INPUT_BITS.shot ? 8 : 4;
       state.action = action;
       state.releaseTick = tick + chargeTicks;
-      state.nextDecisionTick = tick + (action === INPUT_BITS.shot ? 24 : 38);
+      state.nextDecisionTick = tick + (action === INPUT_BITS.shot ? 34 : 68);
       command.held |= action;
       command.pressed |= action;
     }
@@ -282,6 +289,10 @@ const margins = results.map((result) => Math.abs(result.homeScore - result.awayS
 const noShotMatches = results.filter(
   (result) => result.telemetry.home.shots + result.telemetry.away.shots === 0,
 ).length;
+const teamGames = results.flatMap((result) => [
+  result.telemetry.home,
+  result.telemetry.away,
+]);
 const summary = {
   matches: results.length,
   teams: testOptions.map((option) => option.id),
@@ -292,6 +303,12 @@ const summary = {
   noShotPct: Number((noShotMatches / results.length * 100).toFixed(1)),
   averageMargin: Number(average(margins).toFixed(3)),
   maxMargin: Math.max(...margins),
+  averagePassesPerTeam: Number(average(teamGames.map((team) => team.passesAttempted)).toFixed(2)),
+  averagePassCompletionPct: Number((average(teamGames.map((team) => team.passesAttempted
+    ? team.passesCompleted / team.passesAttempted
+    : 0)) * 100).toFixed(1)),
+  averageTurnoversWonPerTeam: Number(average(teamGames.map((team) => team.turnoversWon)).toFixed(2)),
+  averageShotsPerTeam: Number(average(teamGames.map((team) => team.shots)).toFixed(2)),
   incompleteMatches: results.filter((result) => result.elapsed < 180).length,
   invalidStates: results.filter((result) => result.invalidState).length,
 };
