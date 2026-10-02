@@ -7,6 +7,21 @@ import {
 } from '@/lib/vifa/data/rating-formulas';
 import { buildPlayableEraTeamOptions } from '@/lib/vifa/data/playable-era-teams';
 import {
+  buildSevenASideTeam,
+  chooseCpuFormation,
+  isCompleteSeven,
+  makeSelectableSquadPlayer,
+  pickBalancedSeven,
+} from '@/lib/vifa/game/seven-a-side';
+import { SEVEN_A_SIDE_FORMATIONS } from '@/lib/vifa/game/teams/formations';
+import {
+  PITCH_LENGTH_M,
+  PITCH_WIDTH_M,
+  GOAL_CROSSBAR_HEIGHT,
+  GOAL_HEIGHT,
+  M,
+} from '@/lib/vifa/game/constants';
+import {
   getPlayableVifaHistoricalTeams,
   getVifaHistoricalStartingXi,
   VIFA_WORLD_CUP_DATABASE,
@@ -175,6 +190,58 @@ test('playable era packs support independent cross-era matchups', () => {
   });
   assert.ok(options.some((option) => option.id === '2010-FRA'));
   assert.ok(options.some((option) => option.id === '2022-ARG'));
-  assert.ok(options.every((option) => option.team.players.length === 11));
+  assert.ok(options.every((option) => option.team.players.length === 7));
+  assert.ok(options.every((option) => option.squad.length >= 11));
+  assert.ok(options.every((option) => (
+    option.team.players.filter((player) => player.role === 'GK').length === 1
+    && option.team.players.filter((player) => player.role === 'DF').length === 2
+    && option.team.players.filter((player) => player.role === 'MF').length === 2
+    && option.team.players.filter((player) => player.role === 'ST').length === 2
+  )));
   assert.ok(options.every((option) => option.team.players[0].overallRating > 0));
+});
+
+test('all six seven-a-side formations build role-correct lineups', () => {
+  const option = buildPlayableEraTeamOptions().find((candidate) => candidate.id === '2022-ARG');
+  assert.ok(option);
+  for (const formation of SEVEN_A_SIDE_FORMATIONS) {
+    const ids = pickBalancedSeven(option.squad, formation.id);
+    const team = buildSevenASideTeam(option.team, option.squad, ids, formation.id);
+    assert.equal(team.players.length, 7);
+    assert.equal(team.formation, formation.id);
+    assert.deepEqual(
+      team.players.map((player) => player.role),
+      formation.roles,
+    );
+  }
+});
+
+test('squad legality allows six outfielders from the same natural role', () => {
+  const squad = [
+    makeSelectableSquadPlayer({ id: 'gk', num: 1, name: 'KEEPER', role: 'GK', ratings: [60, 20, 65, 55, 80, 78] }),
+    ...Array.from({ length: 6 }, (_, index) => makeSelectableSquadPlayer({
+      id: `st-${index}`,
+      num: index + 2,
+      name: `ATTACKER ${index + 1}`,
+      role: 'ST' as const,
+      ratings: [85, 84, 72, 82, 35, 70],
+    })),
+  ];
+  assert.equal(isCompleteSeven(squad, squad.map((player) => player.id)), true);
+});
+
+test('CPU formation choice is deterministic and evaluates every tactical shape', () => {
+  const option = buildPlayableEraTeamOptions().find((candidate) => candidate.id === '2022-ARG');
+  assert.ok(option);
+  const first = chooseCpuFormation(option.squad, '1-2-3', 2022);
+  const second = chooseCpuFormation(option.squad, '1-2-3', 2022);
+  assert.equal(first, second);
+  assert.ok(SEVEN_A_SIDE_FORMATIONS.some((formation) => formation.id === first));
+});
+
+test('VIFA uses compact seven-a-side pitch and goal dimensions', () => {
+  assert.equal(PITCH_LENGTH_M, 70);
+  assert.equal(PITCH_WIDTH_M, 50);
+  assert.equal(GOAL_HEIGHT, Math.round(M(5)));
+  assert.equal(GOAL_CROSSBAR_HEIGHT, M(2));
 });

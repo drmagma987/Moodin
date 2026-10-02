@@ -1,11 +1,14 @@
 // ---- World configuration: real-world scale, geometry, physics, tunables ----
-// Everything on the pitch is derived from a single pixels-per-metre scale so
-// the field, goals, markings, ball and players keep true FIFA proportions.
-// A regulation pitch is 105 m (goal-to-goal) × 68 m (touchline-to-touchline).
+// Everything on the pitch is derived from one pixels-per-metre scale. VIFA is
+// now played on a compact 70 m × 50 m 7-a-side pitch rather than a regulation
+// 105 m × 68 m eleven-a-side surface. We retain the original visual scale so
+// players, the ball, and movement speeds remain physically consistent.
 
-export const FIELD_W = 2200; // 105 m  → PX_PER_M ≈ 20.95
-export const PX_PER_M = FIELD_W / 105;
-export const FIELD_H = Math.round(68 * PX_PER_M); // 68 m ≈ 1425 (true 105:68)
+export const PX_PER_M = 2200 / 105;
+export const PITCH_LENGTH_M = 70;
+export const PITCH_WIDTH_M = 50;
+export const FIELD_W = Math.round(PITCH_LENGTH_M * PX_PER_M);
+export const FIELD_H = Math.round(PITCH_WIDTH_M * PX_PER_M);
 export const MARGIN = 56;
 // Broadcast viewport. A wider (2:1) frame than the pitch is tall shows more of
 // the goal-to-goal axis at once, so the goalmouth + net behind it stay fully on
@@ -18,10 +21,21 @@ export const CANVAS_H = 700;
 export const M = (m: number) => m * PX_PER_M;
 
 // ---- Goal geometry --------------------------------------------------------
-export const GOAL_HEIGHT = Math.round(M(7.32)); // goal mouth width = 7.32 m ≈ 153
-export const GOAL_DEPTH = Math.round(M(2.0)); // net depth ≈ 2 m ≈ 42
+export const GOAL_HEIGHT = Math.round(M(5)); // 7-a-side goal mouth width
+export const GOAL_CROSSBAR_HEIGHT = M(2);
+export const GOAL_DEPTH = Math.round(M(1.5));
 export const goalTop = FIELD_H / 2 - GOAL_HEIGHT / 2;
 export const goalBottom = FIELD_H / 2 + GOAL_HEIGHT / 2;
+
+// Compact-pitch markings and restart distances.
+export const CENTER_CIRCLE_RADIUS = M(7);
+export const PENALTY_AREA_DEPTH = M(12);
+export const PENALTY_AREA_WIDTH = M(25);
+export const GOAL_AREA_DEPTH = M(4);
+export const GOAL_AREA_WIDTH = M(13);
+export const PENALTY_SPOT_DISTANCE = M(9);
+export const RESTART_DISTANCE = M(7);
+export const GOAL_KICK_DISTANCE = GOAL_AREA_DEPTH;
 
 // ---- Body / ball scale ----------------------------------------------------
 // A player's ground footprint ≈ 0.5 m radius; a regulation ball is 0.22 m

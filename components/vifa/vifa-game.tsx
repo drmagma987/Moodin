@@ -18,6 +18,20 @@ import {
 import type { VifaEraTeamOption } from '@/lib/vifa/data/playable-era-teams';
 import type { TeamData } from '@/lib/vifa/game/teams';
 import {
+  assignPlayersToFormation,
+  buildSevenASideTeam,
+  chooseCpuFormation,
+  isCompleteSeven,
+  pickBalancedSeven,
+  SEVEN_ROLE_ORDER,
+  type SelectableSquadPlayer,
+  type SevenRole,
+} from '@/lib/vifa/game/seven-a-side';
+import {
+  SEVEN_A_SIDE_FORMATIONS,
+  type SevenFormationId,
+} from '@/lib/vifa/game/teams/formations';
+import {
   findCurrentOrNextMatch,
   type Match,
 } from '@/lib/vifa/game/teams/schedule';
@@ -34,7 +48,7 @@ import {
 } from '@/lib/vifa/game/keybindings';
 import { PLAYER_TWO_BINDINGS, VIFA_MODS } from '@/lib/vifa/mods';
 
-type Phase = 'intro' | 'select' | 'playing';
+type Phase = 'intro' | 'select' | 'squad' | 'playing';
 type Mode = 'match' | 'local' | 'practice';
 
 function fmtTime(secs: number) {
@@ -92,13 +106,40 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
   const [homeSelectionId, setHomeSelectionId] = useState(fallbackHome.id);
   const [awaySelectionId, setAwaySelectionId] = useState(fallbackAway.id);
   const [activeSide, setActiveSide] = useState<'home' | 'away'>('home');
+  const [activeSquadSide, setActiveSquadSide] = useState<'home' | 'away'>('home');
+  const [homeFormationId, setHomeFormationId] = useState<SevenFormationId>('2-2-2');
+  const [awayFormationId, setAwayFormationId] = useState<SevenFormationId>('2-2-2');
+  const [homeLineupIds, setHomeLineupIds] = useState<string[]>(() =>
+    pickBalancedSeven(fallbackHome.squad),
+  );
+  const [awayLineupIds, setAwayLineupIds] = useState<string[]>(() =>
+    pickBalancedSeven(fallbackAway.squad),
+  );
 
   const homeOption = eraTeams.find((option) => option.id === homeSelectionId)
     ?? fallbackHome;
   const awayOption = eraTeams.find((option) => option.id === awaySelectionId)
     ?? fallbackAway;
-  const home: TeamData = homeOption.team;
-  const away: TeamData = awayOption.team;
+  const homeLineupComplete = isCompleteSeven(homeOption.squad, homeLineupIds);
+  const awayLineupComplete = isCompleteSeven(awayOption.squad, awayLineupIds);
+  const home: TeamData = useMemo(
+    () => buildSevenASideTeam(
+      homeOption.team,
+      homeOption.squad,
+      homeLineupIds,
+      homeFormationId,
+    ),
+    [homeFormationId, homeLineupIds, homeOption],
+  );
+  const away: TeamData = useMemo(
+    () => buildSevenASideTeam(
+      awayOption.team,
+      awayOption.squad,
+      awayLineupIds,
+      awayFormationId,
+    ),
+    [awayFormationId, awayLineupIds, awayOption],
+  );
   const availableYears = useMemo(
     () => [...new Set(eraTeams.map((option) => option.year))].sort((a, b) => b - a),
     [eraTeams],
@@ -117,21 +158,92 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     );
     const next = sameNation ?? yearOptions[0];
     if (!next) return;
-    if (side === 'home') setHomeSelectionId(next.id);
-    else setAwaySelectionId(next.id);
-  }, [awayOption, homeOption, optionsForYear]);
+    if (side === 'home') {
+      setHomeSelectionId(next.id);
+      setHomeLineupIds(pickBalancedSeven(next.squad, homeFormationId));
+    } else {
+      setAwaySelectionId(next.id);
+      setAwayLineupIds(pickBalancedSeven(next.squad, awayFormationId));
+    }
+  }, [awayFormationId, awayOption, homeFormationId, homeOption, optionsForYear]);
   const cycleSelection = useCallback((side: 'home' | 'away', direction: number) => {
     const current = side === 'home' ? homeOption : awayOption;
     const yearOptions = optionsForYear(current.year);
     const index = Math.max(0, yearOptions.findIndex((option) => option.id === current.id));
     const next = yearOptions[wrap(index + direction, yearOptions.length)];
-    if (side === 'home') setHomeSelectionId(next.id);
-    else setAwaySelectionId(next.id);
-  }, [awayOption, homeOption, optionsForYear]);
+    if (side === 'home') {
+      setHomeSelectionId(next.id);
+      setHomeLineupIds(pickBalancedSeven(next.squad, homeFormationId));
+    } else {
+      setAwaySelectionId(next.id);
+      setAwayLineupIds(pickBalancedSeven(next.squad, awayFormationId));
+    }
+  }, [awayFormationId, awayOption, homeFormationId, homeOption, optionsForYear]);
   const confirmActiveSelection = useCallback(() => {
     if (activeSide === 'home') setActiveSide('away');
-    else setPhase('playing');
+    else {
+      setActiveSquadSide('home');
+      setPhase('squad');
+    }
   }, [activeSide]);
+
+  const setTeamSelection = useCallback((side: 'home' | 'away', id: string) => {
+    const next = eraTeams.find((option) => option.id === id);
+    if (!next) return;
+    if (side === 'home') {
+      setHomeSelectionId(id);
+      setHomeLineupIds(pickBalancedSeven(next.squad, homeFormationId));
+    } else {
+      setAwaySelectionId(id);
+      setAwayLineupIds(pickBalancedSeven(next.squad, awayFormationId));
+    }
+  }, [awayFormationId, eraTeams, homeFormationId]);
+
+  const toggleLineupPlayer = useCallback((side: 'home' | 'away', player: SelectableSquadPlayer) => {
+    const option = side === 'home' ? homeOption : awayOption;
+    const setLineup = side === 'home' ? setHomeLineupIds : setAwayLineupIds;
+    setLineup((current) => {
+      if (current.includes(player.id)) {
+        return current.filter((id) => id !== player.id);
+      }
+      const selected = new Set(current);
+      const selectedPlayers = option.squad.filter((candidate) => selected.has(candidate.id));
+      const roleCount = selectedPlayers.filter((candidate) => candidate.role === player.role).length;
+      if (player.role === 'GK' && roleCount >= 1) return current;
+      if (player.role !== 'GK' && selectedPlayers.filter((candidate) => candidate.role !== 'GK').length >= 6) {
+        return current;
+      }
+      return [...current, player.id];
+    });
+  }, [awayOption, homeOption]);
+
+  const confirmSquad = useCallback(() => {
+    const complete = activeSquadSide === 'home' ? homeLineupComplete : awayLineupComplete;
+    if (!complete) return;
+    if (mode === 'local' && activeSquadSide === 'home') {
+      setActiveSquadSide('away');
+      return;
+    }
+    if (mode === 'match') {
+      const cpuFormation = chooseCpuFormation(
+        awayOption.squad,
+        homeFormationId,
+        selectionSeed(`${homeOption.id}:${awayOption.id}:${gameKey}`),
+      );
+      setAwayFormationId(cpuFormation);
+      setAwayLineupIds(pickBalancedSeven(awayOption.squad, cpuFormation));
+    }
+    setPhase('playing');
+  }, [
+    activeSquadSide,
+    awayLineupComplete,
+    awayOption,
+    gameKey,
+    homeFormationId,
+    homeLineupComplete,
+    homeOption.id,
+    mode,
+  ]);
 
   const [hud, setHud] = useState<HudState>({
     homeScore: 0,
@@ -234,6 +346,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     if (m === 'match' || m === 'local') {
       setPhase('select');
       setActiveSide('home');
+      setActiveSquadSide('home');
     } else {
       setPhase('playing');
     }
@@ -242,6 +355,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
   const handleRestart = () => {
     setPhase('intro');
     setActiveSide('home');
+    setActiveSquadSide('home');
   };
   const handleRematch = () => {
     // Re-mount the canvas game (the boot effect keys off gameKey) for a fresh
@@ -419,14 +533,14 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
             <div className="flex flex-col sm:flex-row items-stretch gap-4 sm:gap-5">
               <ModeCard
                 title="PLAY MATCH"
-                blurb="Full 11v11 against the CPU. Pick your nation and go."
+                blurb="Craft a seven-player squad, then take on the CPU in a fast 7v7 match."
                 active={introIdx === 0}
                 onHover={() => setIntroIdx(0)}
                 onClick={() => startMode('match')}
               />
               <ModeCard
                 title="LOCAL 2P"
-                blurb="Two players, one keyboard, one shared match simulation. Player 2 uses IJKL."
+                blurb="Both players build a seven-player squad, then battle on one keyboard."
                 active={introIdx === 1}
                 onHover={() => setIntroIdx(1)}
                 onClick={() => startMode('local')}
@@ -468,7 +582,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                 active={activeSide === 'home'}
                 locked={activeSide === 'away'}
                 onYearChange={(year) => setSelectionYear('home', year)}
-                onTeamChange={setHomeSelectionId}
+                onTeamChange={(id) => setTeamSelection('home', id)}
                 onPrevious={() => cycleSelection('home', -1)}
                 onNext={() => cycleSelection('home', 1)}
               />
@@ -486,7 +600,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                 locked={false}
                 useAwayKit
                 onYearChange={(year) => setSelectionYear('away', year)}
-                onTeamChange={setAwaySelectionId}
+                onTeamChange={(id) => setTeamSelection('away', id)}
                 onPrevious={() => cycleSelection('away', -1)}
                 onNext={() => cycleSelection('away', 1)}
               />
@@ -501,6 +615,38 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                 : `Kick Off: ${home.name} ${homeOption.year} vs ${away.name} ${awayOption.year}`}
             </button>
           </div>
+        )}
+
+        {phase === 'squad' && (
+          <SquadBuilder
+            option={activeSquadSide === 'home' ? homeOption : awayOption}
+            selectedIds={activeSquadSide === 'home' ? homeLineupIds : awayLineupIds}
+            formationId={activeSquadSide === 'home' ? homeFormationId : awayFormationId}
+            sideLabel={activeSquadSide === 'home'
+              ? 'Player 1'
+              : mode === 'local' ? 'Player 2' : 'CPU'}
+            complete={activeSquadSide === 'home' ? homeLineupComplete : awayLineupComplete}
+            onToggle={(player) => toggleLineupPlayer(activeSquadSide, player)}
+            onFormationChange={(formationId) => {
+              if (activeSquadSide === 'home') setHomeFormationId(formationId);
+              else setAwayFormationId(formationId);
+            }}
+            onAutoPick={() => {
+              const formationId = activeSquadSide === 'home'
+                ? homeFormationId
+                : awayFormationId;
+              const ids = pickBalancedSeven(
+                activeSquadSide === 'home' ? homeOption.squad : awayOption.squad,
+                formationId,
+              );
+              if (activeSquadSide === 'home') setHomeLineupIds(ids);
+              else setAwayLineupIds(ids);
+            }}
+            onConfirm={confirmSquad}
+            confirmLabel={mode === 'local' && activeSquadSide === 'home'
+              ? 'Lock squad · Player 2 next'
+              : 'Lock squad · Kick off'}
+          />
         )}
       </div>
 
@@ -568,6 +714,229 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
           onClose={closeSettings}
         />
       )}
+    </div>
+  );
+}
+
+const ROLE_LABELS: Record<SevenRole, string> = {
+  GK: 'Keeper',
+  DF: 'Defense',
+  MF: 'Midfield',
+  ST: 'Attack',
+};
+
+function SelectionCount({
+  label,
+  count,
+  limit,
+}: {
+  label: string;
+  count: number;
+  limit: number;
+}) {
+  const ready = count === limit;
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-1 font-heading text-[10px] uppercase tracking-wider sm:text-xs ${
+        ready
+          ? 'border-volt-500/40 bg-volt-500/10 text-volt-300'
+          : 'border-orange-400/40 bg-orange-400/10 text-orange-200'
+      }`}
+    >
+      {label} {count}/{limit}
+    </span>
+  );
+}
+
+function SquadBuilder({
+  option,
+  selectedIds,
+  formationId,
+  sideLabel,
+  complete,
+  onToggle,
+  onFormationChange,
+  onAutoPick,
+  onConfirm,
+  confirmLabel,
+}: {
+  option: VifaEraTeamOption;
+  selectedIds: string[];
+  formationId: SevenFormationId;
+  sideLabel: string;
+  complete: boolean;
+  onToggle: (player: SelectableSquadPlayer) => void;
+  onFormationChange: (formationId: SevenFormationId) => void;
+  onAutoPick: () => void;
+  onConfirm: () => void;
+  confirmLabel: string;
+}) {
+  const selected = new Set(selectedIds);
+  const selectedPlayers = option.squad.filter((player) => selected.has(player.id));
+  const goalkeeperCount = selectedPlayers.filter((player) => player.role === 'GK').length;
+  const outfieldCount = selectedPlayers.length - goalkeeperCount;
+  const assignments = assignPlayersToFormation(option.squad, selectedIds, formationId);
+  const assignmentByPlayer = new Map(
+    assignments.map((assignment) => [assignment.player.id, assignment]),
+  );
+
+  return (
+    <div className="absolute inset-0 overflow-y-auto bg-night-950/96 backdrop-blur-sm animate-fade-in">
+      <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-3 sm:px-6 sm:py-5">
+        <div className="sticky top-0 z-20 -mx-3 -mt-3 mb-3 border-b border-night-800 bg-night-950/95 px-3 py-3 backdrop-blur sm:-mx-6 sm:-mt-5 sm:px-6 sm:py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <span className="font-heading text-[10px] uppercase tracking-[0.28em] text-volt-400 sm:text-xs">
+                {sideLabel} · {option.year} World Cup
+              </span>
+              <h2 className="truncate font-display text-3xl tracking-wide text-white sm:text-5xl">
+                BUILD <span className="text-volt-500">{option.team.abbr} 7</span>
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={onAutoPick}
+              className="shrink-0 rounded-md border border-night-700 bg-night-900 px-3 py-2 font-heading text-[10px] uppercase tracking-wider text-night-200 transition-colors hover:border-volt-500 hover:text-volt-300 sm:text-xs"
+            >
+              Pick best 7
+            </button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <SelectionCount label="Keeper" count={goalkeeperCount} limit={1} />
+            <SelectionCount label="Outfield" count={outfieldCount} limit={6} />
+          </div>
+        </div>
+
+        <p className="mb-3 font-body text-sm text-night-300 sm:text-base">
+          Pick any six outfielders. VIFA fits them into your shape using their actual attributes—an attacker can play midfield, but only their passing, dribbling, defending, pace, and strength make it work.
+        </p>
+
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" role="radiogroup" aria-label="Formation">
+          {SEVEN_A_SIDE_FORMATIONS.map((formation) => {
+            const active = formation.id === formationId;
+            return (
+              <button
+                key={formation.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => onFormationChange(formation.id)}
+                className={`rounded-xl border p-2.5 text-left transition-colors ${
+                  active
+                    ? 'border-volt-500 bg-volt-500/12'
+                    : 'border-night-700 bg-night-900 hover:border-volt-500/50'
+                }`}
+              >
+                <span className={`block font-display text-2xl ${active ? 'text-volt-400' : 'text-white'}`}>
+                  {formation.id}
+                </span>
+                <span className="block font-heading text-xs uppercase tracking-wider text-white">
+                  {formation.name}
+                </span>
+                <span className="mt-1 block font-body text-[11px] leading-snug text-night-400">
+                  {formation.identity}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mb-4 rounded-xl border border-night-700 bg-night-900/80 px-3 py-2 font-body text-sm text-night-300">
+          <span className="font-heading uppercase tracking-wider text-volt-300">
+            {SEVEN_A_SIDE_FORMATIONS.find((formation) => formation.id === formationId)?.name} risk:{' '}
+          </span>
+          {SEVEN_A_SIDE_FORMATIONS.find((formation) => formation.id === formationId)?.tradeoff}
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {SEVEN_ROLE_ORDER.map((role) => {
+            const roleFull = role === 'GK' ? goalkeeperCount >= 1 : outfieldCount >= 6;
+            return (
+              <section key={role} aria-labelledby={`squad-${role}`}>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <h3 id={`squad-${role}`} className="font-display text-xl tracking-wide text-white sm:text-2xl">
+                    {ROLE_LABELS[role]}
+                  </h3>
+                  <span className="font-heading text-[10px] uppercase tracking-wider text-night-400">
+                    Natural role
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {option.squad
+                    .filter((player) => player.role === role)
+                    .sort((a, b) => b.overallRating - a.overallRating || a.name.localeCompare(b.name))
+                    .map((player) => {
+                      const isSelected = selected.has(player.id);
+                      const blocked = roleFull && !isSelected;
+                      const stats = player.ratings;
+                      const assignment = assignmentByPlayer.get(player.id);
+                      return (
+                        <button
+                          key={player.id}
+                          type="button"
+                          aria-pressed={isSelected}
+                          disabled={blocked}
+                          onClick={() => onToggle(player)}
+                          className={`rounded-xl border p-2.5 text-left transition-all ${
+                            isSelected
+                              ? 'border-volt-500 bg-volt-500/12 shadow-[0_0_0_1px_rgba(184,255,44,0.25)]'
+                              : blocked
+                                ? 'cursor-not-allowed border-night-800 bg-night-900/45 opacity-45'
+                                : 'border-night-700 bg-night-900 hover:border-volt-500/60'
+                          }`}
+                        >
+                          <span className="flex items-start justify-between gap-2">
+                            <span className="min-w-0">
+                              <span className="block truncate font-heading text-sm uppercase tracking-wide text-white">
+                                <span className="mr-1.5 text-night-400">#{player.num}</span>{player.name}
+                              </span>
+                              <span className="mt-0.5 block font-body text-[11px] text-night-400">
+                                {assignment
+                                  ? assignment.targetRole === player.role
+                                    ? `Natural ${ROLE_LABELS[assignment.targetRole]} · Fit ${assignment.fitRating}`
+                                    : `${ROLE_LABELS[player.role]} → ${ROLE_LABELS[assignment.targetRole]} · Fit ${assignment.fitRating}`
+                                  : isSelected
+                                    ? 'Complete the seven to calculate fit'
+                                    : blocked ? 'Open a slot first' : 'Available'}
+                              </span>
+                            </span>
+                            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg font-display text-xl ${
+                              isSelected ? 'bg-volt-500 text-night-950' : 'bg-night-800 text-white'
+                            }`}>
+                              {player.overallRating}
+                            </span>
+                          </span>
+                          <span className="mt-2 grid grid-cols-6 gap-1">
+                            {(['PAC', 'SHO', 'PAS', 'DRI', 'DEF', 'PHY'] as const).map((label, index) => (
+                              <span key={label} className="text-center">
+                                <span className="block font-heading text-[8px] text-night-500">{label}</span>
+                                <span className="block font-heading text-[11px] text-night-100">{stats[index]}</span>
+                              </span>
+                            ))}
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        <div className="sticky bottom-0 z-20 -mx-3 mt-4 flex items-center justify-between gap-3 border-t border-night-800 bg-night-950/95 px-3 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+          <span className={`font-heading text-xs uppercase tracking-wider ${complete ? 'text-volt-300' : 'text-orange-200'}`}>
+            {complete ? '7/7 ready' : 'Fill every position'}
+          </span>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!complete}
+            className="rounded-lg bg-volt-500 px-4 py-2.5 font-heading text-xs uppercase tracking-[0.16em] text-night-950 transition-colors hover:bg-volt-400 disabled:cursor-not-allowed disabled:bg-night-700 disabled:text-night-400 sm:px-6 sm:text-sm"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

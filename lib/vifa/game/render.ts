@@ -22,6 +22,14 @@ import {
   CANVAS_W,
   CANVAS_H,
   GOAL_DEPTH,
+  GOAL_CROSSBAR_HEIGHT,
+  CENTER_CIRCLE_RADIUS,
+  PENALTY_AREA_DEPTH,
+  PENALTY_AREA_WIDTH,
+  GOAL_AREA_DEPTH,
+  GOAL_AREA_WIDTH,
+  PENALTY_SPOT_DISTANCE,
+  RESTART_DISTANCE,
   goalTop,
   goalBottom,
   BALL_VIS_SCALE,
@@ -249,17 +257,17 @@ function drawPitch(ctx: CanvasRenderingContext2D, camX: number) {
   ], false);
   ctx.stroke();
 
-  // Centre circle: radius 9.15 m (projected → ellipse-ish, sampled).
-  const circleR = M(9.15);
+  // Compact 7-a-side centre circle (projected → ellipse-ish, sampled).
+  const circleR = CENTER_CIRCLE_RADIUS;
   strokeArc(ctx, FIELD_W / 2, FIELD_H / 2, circleR, 0, Math.PI * 2);
   spot(ctx, FIELD_W / 2, FIELD_H / 2);
 
-  // Penalty area: 40.32 m × 16.5 m. Goal area (six-yard): 18.32 m × 5.5 m.
-  const boxH = M(40.32); // penalty-area width (along the goal line)
-  const boxW = M(16.5); // penalty-area depth (into the pitch)
-  const sixH = M(18.32); // goal-area width
-  const sixW = M(5.5); // goal-area depth
-  const pkX = M(11); // penalty spot: 11 m from the goal line
+  // Scaled 7-a-side penalty and goal areas.
+  const boxH = PENALTY_AREA_WIDTH;
+  const boxW = PENALTY_AREA_DEPTH;
+  const sixH = GOAL_AREA_WIDTH;
+  const sixW = GOAL_AREA_DEPTH;
+  const pkX = PENALTY_SPOT_DISTANCE;
   const by = (FIELD_H - boxH) / 2;
   const sy = (FIELD_H - sixH) / 2;
   for (const left of [true, false]) {
@@ -279,14 +287,14 @@ function drawPitch(ctx: CanvasRenderingContext2D, camX: number) {
       { x: gx, y: sy + sixH },
     ], false);
     ctx.stroke();
-    // Penalty spot + the "D" arc (radius 9.15 m from the spot) poking out
+    // Penalty spot + the compact-pitch "D" arc poking out
     // of the box past its edge.
     const px = gx + dir * pkX;
     spot(ctx, px, FIELD_H / 2);
-    const cos = (boxW - pkX) / circleR; // where the arc crosses the box edge
+    const cos = (boxW - pkX) / RESTART_DISTANCE;
     const a = Math.acos(clamp(cos, -1, 1));
-    if (left) strokeArc(ctx, px, FIELD_H / 2, circleR, -a, a);
-    else strokeArc(ctx, px, FIELD_H / 2, circleR, Math.PI - a, Math.PI + a);
+    if (left) strokeArc(ctx, px, FIELD_H / 2, RESTART_DISTANCE, -a, a);
+    else strokeArc(ctx, px, FIELD_H / 2, RESTART_DISTANCE, Math.PI - a, Math.PI + a);
   }
 
   // Corner arcs: 1 m radius.
@@ -396,7 +404,7 @@ function goalGeom(side: 'left' | 'right') {
   const near = proj(gx, goalBottom);
   const backFar = proj(backX, goalTop + 10);
   const backNear = proj(backX, goalBottom - 10);
-  const postH = (s: number) => M(2.44) * s; // crossbar height = 2.44 m
+  const postH = (s: number) => GOAL_CROSSBAR_HEIGHT * s;
   return { far, near, backFar, backNear, postH };
 }
 

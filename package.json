@@ -9,6 +9,7 @@
     "lint": "eslint",
     "vifa:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/vifa-determinism.test.ts",
     "vifa:ratings:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/vifa-ratings.test.ts",
+    "vifa:formation:test": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/run_vifa_formation_pressure_test.ts",
     "vifa:data": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./scripts/build_vifa_world_cup_database.mjs",
     "fantasy:integrity": "node ./lib/fantasy/validateLeagueIntegrity.mjs",
     "fantasy:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/fantasy-model.test.ts",

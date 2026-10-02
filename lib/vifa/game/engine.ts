@@ -1,4 +1,4 @@
-// PitchKick — arcade football engine (11v11 vs CPU).
+// PitchKick — arcade football engine (variable-sided, currently 7v7 vs CPU).
 // Pure canvas renderer around a fixed-step authoritative simulation. The
 // browser uses requestAnimationFrame only to schedule 30 Hz simulation ticks
 // and paint frames; gameplay outcomes do not depend on display refresh rate.
@@ -19,6 +19,11 @@ import {
   M,
   goalTop,
   goalBottom,
+  GOAL_CROSSBAR_HEIGHT,
+  PENALTY_AREA_DEPTH,
+  PENALTY_AREA_WIDTH,
+  GOAL_KICK_DISTANCE,
+  RESTART_DISTANCE,
   PLAYER_R,
   BALL_R,
   GRAVITY,
@@ -77,6 +82,17 @@ export type { TeamData } from './teams/types';
 export type { HudState } from './types';
 export { CANVAS_W, CANVAS_H } from './constants';
 
+export interface SimulationProbe {
+  tick: number;
+  elapsed: number;
+  score: { home: number; away: number };
+  ball: { x: number; y: number; z: number; vx: number; vy: number; vz: number };
+  players: Record<Team, Array<{ x: number; y: number }>>;
+  possession: EntityRef | null;
+  controlled: EntityRef;
+  awayControlled: EntityRef;
+}
+
 const KICK_KEYS = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD']);
 const ACTION_KEYS = new Set(['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyQ']);
 const MOVE_KEYS = new Set([
@@ -89,8 +105,8 @@ const MOVE_KEYS = new Set([
 ]);
 
 // Team line-ups are no longer hardcoded here — they come from the two
-// `TeamData` (home + away) passed into the engine. Each squad lists 11 players
-// (index 0 = GK) with formation positions as fractions of the field attacking
+// `TeamData` (home + away) passed into the engine. Each squad lists its matchday
+// players (index 0 = GK) with formation positions as fractions of the field attacking
 // RIGHT; the away side is mirrored horizontally when built. See
 // `./teams/` for the per-country data.
 
@@ -105,6 +121,7 @@ export class PitchKickGame {
   private readonly seed: number;
   private rng: SeededRandom;
   private replayFrames: InputFrame[] = [];
+  private readonly recordReplay: boolean;
 
   private keys = new Set<string>();
   private justPressed: string[] = [];
@@ -287,6 +304,8 @@ export class PitchKickGame {
       awayBindings?: KeyBindings;
       matchRealSeconds?: number;
       seed?: number;
+      /** Disable replay-frame retention for large headless balance runs. */
+      recordReplay?: boolean;
       /** Optional transparent WebGL canvas for progressive 2.5D effects. */
       enhancementCanvas?: HTMLCanvasElement;
     } = {},
@@ -301,6 +320,7 @@ export class PitchKickGame {
       void this.enhancements?.init(opts.enhancementCanvas);
     }
     this.seed = (opts.seed ?? 0x56494641) >>> 0;
+    this.recordReplay = opts.recordReplay ?? true;
     this.rng = new SeededRandom(this.seed);
     this.listener = listener;
     this.homeTeam = homeTeam;
@@ -341,7 +361,7 @@ export class PitchKickGame {
       hair: HAIR_COLORS[(i + (team === 'away' ? 2 : 0)) % HAIR_COLORS.length],
       skin: SKIN_TONES[(i + (team === 'away' ? 1 : 0)) % SKIN_TONES.length],
       isGK: i === 0,
-      role: i === 0 ? 'GK' : i <= 4 ? 'DF' : i <= 8 ? 'MF' : 'ST',
+      role: squad.role,
       num: squad.num,
       name: squad.name,
       individualStats,
@@ -542,6 +562,30 @@ export class PitchKickGame {
         celebration: this.celebration,
         message: this.message,
       },
+    };
+  }
+
+  /** Lightweight, allocation-conscious state for automated match controllers. */
+  exportSimulationProbe(): SimulationProbe {
+    return {
+      tick: this.tick,
+      elapsed: this.elapsed,
+      score: { home: this.homeScore, away: this.awayScore },
+      ball: {
+        x: this.ball.x,
+        y: this.ball.y,
+        z: this.ball.z,
+        vx: this.ball.vx,
+        vy: this.ball.vy,
+        vz: this.ball.vz,
+      },
+      players: {
+        home: this.homePlayers.map(({ x, y }) => ({ x, y })),
+        away: this.awayPlayers.map(({ x, y }) => ({ x, y })),
+      },
+      possession: this.entityRef(this.owner),
+      controlled: this.entityRef(this.controlled) ?? { team: 'home', index: 0 },
+      awayControlled: this.entityRef(this.awayControlled) ?? { team: 'away', index: 0 },
     };
   }
 
@@ -827,11 +871,13 @@ export class PitchKickGame {
     if (frame) this.applyInputFrame(frame);
     this.update(FIXED_DT);
     this.tick += 1;
-    this.replayFrames.push({
-      tick: this.tick,
-      home: { ...command.home },
-      away: { ...command.away },
-    });
+    if (this.recordReplay) {
+      this.replayFrames.push({
+        tick: this.tick,
+        home: { ...command.home },
+        away: { ...command.away },
+      });
+    }
   }
 
   private update(dt: number) {
@@ -2100,8 +2146,8 @@ export class PitchKickGame {
     taker.vx = taker.vy = 0;
     taker.facing = { x: defAtk, y: 0 };
 
-    // Attackers must retreat the regulation free-kick distance (9.15 m).
-    this.pushOpponentsFromSpot(defTeam, { x: spotX, y: spotY }, M(9.15));
+    // Attackers retreat the compact-pitch restart distance.
+    this.pushOpponentsFromSpot(defTeam, { x: spotX, y: spotY }, RESTART_DISTANCE);
 
     this.owner = taker;
     this.controlled =
@@ -2715,8 +2761,8 @@ export class PitchKickGame {
   /** Is the keeper inside his OWN penalty area (where handling is legal)? */
   private keeperInOwnBox(gk: PlayerEntity): boolean {
     const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
-    const depth = M(16.5); // penalty area depth
-    const halfW = M(20.16); // half its width
+    const depth = PENALTY_AREA_DEPTH;
+    const halfW = PENALTY_AREA_WIDTH / 2;
     const mid = FIELD_H / 2;
     const inX =
       gk.team === 'home' ? gk.x <= ownGoalX + depth : gk.x >= ownGoalX - depth;
@@ -3873,8 +3919,8 @@ export class PitchKickGame {
     // into the area (that snap looked like he teleported/disappeared).
     if (!this.gkHandling) return;
     const ownGoalX = gk.team === 'home' ? 0 : FIELD_W;
-    const depth = M(16.5); // penalty area is 16.5 m deep
-    const halfW = M(20.16); // ...and 40.32 m wide
+    const depth = PENALTY_AREA_DEPTH;
+    const halfW = PENALTY_AREA_WIDTH / 2;
     const mid = FIELD_H / 2;
     if (gk.team === 'home') {
       gk.x = clamp(gk.x, gk.r, ownGoalX + depth);
@@ -3979,7 +4025,7 @@ export class PitchKickGame {
     // handleGoals) is simply respawned in the middle to keep free play going.
     if (this.practice) {
       const inMouth = b.y > goalTop && b.y < goalBottom;
-      if (b.x > FIELD_W && inMouth && b.z <= M(2.44)) return; // a goal — leave it
+      if (b.x > FIELD_W && inMouth && b.z <= GOAL_CROSSBAR_HEIGHT) return;
       if (b.x < 0 || b.x > FIELD_W || b.y < 0 || b.y > FIELD_H) {
         this.practiceResetBall();
       }
@@ -4002,7 +4048,7 @@ export class PitchKickGame {
       const leftLine = b.x < 0;
       const inMouth = b.y > goalTop && b.y < goalBottom;
       // A ball in the mouth and under the bar is a GOAL — handleGoals scores it.
-      if (inMouth && b.z <= M(2.44)) return;
+      if (inMouth && b.z <= GOAL_CROSSBAR_HEIGHT) return;
       // Left line (x=0) is HOME's goal (home defends, away attacks); right line
       // (x=FIELD_W) is AWAY's goal.
       const attackingTeam: Team = leftLine ? 'away' : 'home';
@@ -4011,7 +4057,7 @@ export class PitchKickGame {
       if (last === attackingTeam) {
         // Attacker put it out → goal kick to the defending keeper.
         const dir = leftLine ? 1 : -1;
-        const spotX = goalX + dir * M(5.5); // edge of the 6-yard box
+        const spotX = goalX + dir * GOAL_KICK_DISTANCE;
         const spotY = clamp(b.y, FIELD_H / 2 - M(6), FIELD_H / 2 + M(6));
         this.queueRestart(defendingTeam, spotX, spotY, 'GOAL KICK', true, false);
       } else {
@@ -4089,9 +4135,9 @@ export class PitchKickGame {
     taker.throwing = isThrowIn;
 
     // Opponents must retreat the regulation distance from the restart (FIFA:
-    // 2 m for a throw-in, 9.15 m for a corner, and well clear of the box for a
+    // Extra room for a throw-in, the compact restart distance for corners, and clear space for a
     // goal kick). Push any encroaching opponent radially off the spot.
-    const keepOut = isThrowIn ? M(4) : takerIsGK ? M(11) : M(9.15);
+    const keepOut = isThrowIn ? M(4) : takerIsGK ? PENALTY_AREA_DEPTH : RESTART_DISTANCE;
     this.pushOpponentsFromSpot(team, { x: spotX, y: spotY }, keepOut);
 
     this.owner = taker;
@@ -4155,8 +4201,8 @@ export class PitchKickGame {
     if (this.celebration > 0) return;
     const inMouth = this.ball.y > goalTop && this.ball.y < goalBottom;
     if (!inMouth) return;
-    // Over the bar — a ball higher than the crossbar (2.44 m) isn't a goal.
-    if (this.ball.z > M(2.44)) return;
+    // Over the bar — a ball higher than the 7-a-side crossbar isn't a goal.
+    if (this.ball.z > GOAL_CROSSBAR_HEIGHT) return;
 
     // Practice: count strikes into the keeper's (right-hand) goal and flash a
     // quick GOAL!, then respawn — no celebration / kickoff sequence.

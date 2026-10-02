@@ -112,6 +112,8 @@ export interface SquadPlayer {
   name: string;
   /** Formation position as a fraction of the field, attacking RIGHT. */
   pos: Vec;
+  /** Tactical role used by the engine. Do not infer this from lineup size. */
+  role: SquadRole;
   /** This specific player's six face attributes. */
   individualStats: IndividualStats;
   /** Role-weighted display value; gameplay uses the six attributes directly. */
@@ -136,7 +138,7 @@ export interface TeamData {
   gkKit: Kit;
   /** Index of the player who takes the kickoff (usually the central striker). */
   kickoffFwd: number;
-  /** Exactly 11 players; index 0 is always the goalkeeper. */
+  /** Matchday lineup; index 0 is always the goalkeeper. */
   players: SquadPlayer[];
 }
 
@@ -145,19 +147,20 @@ export interface TeamData {
  *  FIFA-style ratings; omitted players fall back to a role baseline. */
 export function buildSquad(
   formation: Vec[],
-  roster: { num: number; name: string; r?: RatingTuple }[],
+  roster: { num: number; name: string; r?: RatingTuple; role?: SquadRole }[],
 ): SquadPlayer[] {
   if (formation.length < roster.length) {
     throw new Error('Formation does not contain a position for every player');
   }
 
   return roster.map((entry, i) => {
-    const role = roleForIndex(i);
+    const role = entry.role ?? roleForIndex(i);
     const individualStats = makeIndividualStats(role, entry.r);
     return {
       num: entry.num,
       name: entry.name,
       pos: formation[i],
+      role,
       individualStats,
       overallRating: computeOverallRating(role, individualStats),
     };

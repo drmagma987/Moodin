@@ -1,13 +1,19 @@
 import { VIFA_WORLD_CUP_DATABASE } from './world-cup-database';
 import { TEAMS } from '../game/teams';
-import { F_442 } from '../game/teams/formations';
-import { buildSquad, type Kit, type TeamData } from '../game/teams/types';
+import type { Kit, TeamData } from '../game/teams/types';
+import {
+  buildSevenASideTeam,
+  makeSelectableSquadPlayer,
+  pickBalancedSeven,
+  type SelectableSquadPlayer,
+} from '../game/seven-a-side';
 
 export interface VifaEraTeamOption {
   id: string;
   year: number;
   tournamentName: string;
   team: TeamData;
+  squad: SelectableSquadPlayer[];
 }
 
 const CURRENT_NAME_ALIASES: Record<string, string> = {
@@ -85,30 +91,27 @@ export function buildPlayableEraTeamOptions(): VifaEraTeamOption[] {
     tournament.teams
       .filter((team) => team.playable)
       .map((team) => {
-        const selectedIds = new Set(team.startingXiPlayerIds);
-        const selected = team.squad.filter((player) => selectedIds.has(player.playerId));
-        const ordered = (['GK', 'DF', 'MF', 'FW'] as const).flatMap((role) =>
-          selected.filter((player) => player.position === role),
-        );
-        if (ordered.length !== 11 || ordered.some((player) => !player.ratings)) {
-          throw new Error(`${tournament.year} ${team.name} lacks a valid starting XI`);
-        }
+        const squad = team.squad
+          .filter((player) => player.ratings)
+          .map((player) => makeSelectableSquadPlayer({
+            id: player.playerId,
+            num: player.shirtNumber,
+            name: player.name,
+            role: player.position === 'FW' ? 'ST' : player.position,
+            ratings: player.ratings!,
+          }));
+        const style = teamStyle(team.name);
+        const shell = {
+          name: team.name,
+          abbr: team.code,
+          ...style,
+        };
         return {
           id: `${tournament.year}-${team.code}`,
           year: tournament.year,
           tournamentName: tournament.name,
-          team: {
-            name: team.name,
-            abbr: team.code,
-            formation: '4-4-2',
-            ...teamStyle(team.name),
-            kickoffFwd: 9,
-            players: buildSquad(F_442, ordered.map((player) => ({
-              num: player.shirtNumber,
-              name: player.name,
-              r: player.ratings!,
-            }))),
-          },
+          team: buildSevenASideTeam(shell, squad, pickBalancedSeven(squad)),
+          squad,
         };
       })
   ));

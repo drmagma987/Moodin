@@ -424,6 +424,57 @@ Use this section for intermittent progress notes between chat windows. Prefer da
 - Verified with `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`, and
   `npm run vifa:ratings:test`; lint retains the pre-existing bachelor-party
   single-page font warning.
+- Converted VIFA match play from fixed starting elevens to selectable 7-a-side
+  squads:
+  - every match lineup now uses 1 goalkeeper, 2 defenders, 2 midfielders, and
+    2 attackers in a 2-2-2 shape
+  - playable historical teams retain every rated tournament-squad player for
+    pre-match selection instead of discarding the bench
+  - the new squad builder exposes player names, overall ratings, and all six
+    gameplay attributes, with balanced auto-picks and sequential local-2P setup
+  - engine players now carry explicit tactical roles, so smaller and future
+    flexible formations are no longer coupled to 11-player array indexes
+- Verified with `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`, and
+  `npm run vifa:ratings:test`; lint retains the pre-existing bachelor-party
+  single-page font warning.
+- Expanded VIFA squad strategy from one fixed 2-2-2 into six selectable
+  7-a-side formations: Balanced 2-2-2, Fortress 3-2-1, All Out 1-2-3,
+  Control 2-3-1, Press 1-3-2, and Counter 3-1-2.
+  - squad legality is now 1 goalkeeper plus any 6 outfielders, so managers can
+    deliberately overload one natural position group
+  - a deterministic formation optimizer assigns the selected players to slots
+    using their six real attributes and exposes the resulting position-fit
+    score in the squad builder
+  - formation slots feed explicit engine roles and anchors, affecting team
+    lines, marking, width, support runs, and transition risk on the pitch
+- Verified with `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`, and
+  `npm run vifa:ratings:test`; lint retains the pre-existing bachelor-party
+  single-page font warning.
+- Completed the remaining 7-a-side conversion details:
+  - solo CPU teams now evaluate all six formations after the human locks a
+    shape, combining roster-specific position fit with matchup counter bonuses
+    and a deterministic tie-break
+  - the match surface now uses a compact 70 m by 50 m pitch with 5 m by 2 m
+    goals and scaled penalty areas, goal areas, center circle, penalty spot,
+    goal-kick placement, keeper handling bounds, and restart distances
+- Verified with `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`,
+  `npm run vifa:ratings:test`, and `npm run build`; lint retains the existing
+  bachelor-party font warning.
+- Added a reusable full-match VIFA formation pressure harness and ran an
+  864-match high-confidence matrix across 2022 Argentina, 2010 North Korea,
+  and 2026 USA with every formation pairing mirrored home/away.
+  - all 864 matches finished with zero invalid physics states, zero unfinished
+    matches, zero no-shot matches, and a 0.1% scoreless rate
+  - average combined scoring was 6.57 goals, average margin was 2.05, and the
+    largest margin was 9
+  - initial bot behavior over-rewarded central attacking lanes; the harness now
+    varies attacking lanes and mirrors seeds before judging formation balance
+  - diversified CPU formation preferences while keeping roster fit and matchup
+    counters dominant; every formation is now selected across the full era pool
+  - added a lightweight non-replay engine probe so hundreds of full matches can
+    be evaluated quickly without changing deterministic gameplay
+- Verified again with `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`,
+  `npm run vifa:ratings:test`, and `npm run vifa:formation:test`.
 
 Future Codex sessions should update this file when they make meaningful feature, architecture, deployment, or gameplay-balance changes.
 
