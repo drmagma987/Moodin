@@ -406,6 +406,25 @@ Use this section for intermittent progress notes between chat windows. Prefer da
 
 ## Ongoing Maintenance Notes
 
+### 2026-10-02
+
+- Completed a VIFA engine balance and parity pass after keyboard playtesting:
+  - gave both local players first-time action buffering, assisted receiving,
+    goalkeeper rush, mirrored switch selection, containment, and team support
+  - removed AI auto-poke tackles from local multiplayer while retaining them
+    for CPU play
+  - widened the on-pitch effect of pace, passing, shooting, dribbling,
+    defending, physicality, and goalkeeper ratings
+  - made aerial passes contestable, added over-bar shot variance, and reduced
+    automatic shot-lane correction
+  - expanded CPU possession choices and moved CPU finishing onto the same shot
+    model used by human players
+  - added deterministic match telemetry for future balance harnesses
+  - widened the broadcast camera slightly and improved follow responsiveness
+- Verified with `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`, and
+  `npm run vifa:ratings:test`; lint retains the pre-existing bachelor-party
+  single-page font warning.
+
 Future Codex sessions should update this file when they make meaningful feature, architecture, deployment, or gameplay-balance changes.
 
 Prefer adding dated bullets under `Current Progress Log` rather than rewriting the whole file.
@@ -1269,3 +1288,14 @@ If checks cannot be run, say so clearly.
   such as France 2010 versus Argentina 2022 or the same country across eras.
 - Added clickable lock/kickoff controls for touch devices and year suffixes in
   the live score bug so cross-era same-country matches remain distinguishable.
+- Added a progressive PixiJS/WebGL 2.5D enhancement layer above the existing
+  VIFA Canvas2D renderer rather than replacing the proven match presentation.
+- Added projected mowing sheen, floodlight depth, soft player/ball shadows,
+  sprint trails, controlled-player glow, airborne-ball glints, and goal-net
+  impact energy; all effects consume read-only scene snapshots and cannot alter
+  deterministic simulation state.
+- Preserved Canvas2D as an automatic fallback when WebGL initialization fails,
+  and verified the stacked renderer in a live Chrome match.
+- Verified with `npm run lint` (existing bachelor-party font warning only),
+  `npx tsc --noEmit`, `npm run vifa:test`, `npm run vifa:ratings:test`, and
+  `npm run build`.

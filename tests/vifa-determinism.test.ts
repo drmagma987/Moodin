@@ -139,9 +139,32 @@ test('rating math is precomputed into flat runtime physics scalars', () => {
   assert.ok(high.cachedPassSpreadMultiplier < low.cachedPassSpreadMultiplier);
   assert.ok(high.cachedBallControlRadius > low.cachedBallControlRadius);
   assert.ok(high.cachedTackleRadius > low.cachedTackleRadius);
+  assert.ok(high.cachedKeeperReachMultiplier > low.cachedKeeperReachMultiplier);
+
+  // Attribute gaps should be plainly felt, not merely visible on the card.
+  assert.ok(high.cachedPaceMultiplier / low.cachedPaceMultiplier > 1.35);
+  assert.ok(high.cachedPassPowerMultiplier / low.cachedPassPowerMultiplier > 1.22);
+  assert.ok(low.cachedPassSpreadMultiplier / high.cachedPassSpreadMultiplier > 1.45);
+  assert.ok(high.cachedDribbleAccelerationMultiplier / low.cachedDribbleAccelerationMultiplier > 1.35);
 
   const runtimePlayer = createGame().exportSnapshot().players.home[0];
   assert.equal(typeof runtimePlayer.cachedPaceMultiplier, 'number');
   assert.equal(typeof runtimePlayer.cachedTackleRadius, 'number');
   assert.equal('ratings' in runtimePlayer, false);
+});
+
+test('match telemetry is deterministic and accounts for possession', () => {
+  const frames = commandFrames(360);
+  const first = createGame(8844);
+  const second = createGame(8844);
+  for (const frame of frames) {
+    first.advanceTick(frame);
+    second.advanceTick(frame);
+  }
+
+  assert.deepEqual(first.exportTelemetry(), second.exportTelemetry());
+  const telemetry = first.exportTelemetry();
+  assert.ok(
+    telemetry.home.possessionTicks + telemetry.away.possessionTicks > 0,
+  );
 });

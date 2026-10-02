@@ -25,6 +25,11 @@ architecture belong in [`vifa-architecture.md`](./vifa-architecture.md).
 - [x] Compact per-tick commands for both players.
 - [x] Replay export and serializable snapshot export.
 - [x] Headless replay determinism tests.
+- [x] Deterministic match telemetry for possession, passing, shooting,
+  tackling, saves, and turnovers.
+- [x] Wider, bounded player-rating effects across pace, passing, shooting,
+  dribbling, defending, physicality, and goalkeeping.
+- [x] Progressive PixiJS/WebGL 2.5D presentation with Canvas2D fallback.
 - [ ] Snapshot import/restore.
 - [ ] Native browser gamepad support.
 - [ ] Network transport or online rooms.
@@ -135,7 +140,7 @@ deterministic command/simulation boundary.
 
 ### Arcade physics
 
-- [ ] Inventory the current shot, ball-flight, collision, goalkeeper, and
+- [x] Inventory the current shot, ball-flight, collision, goalkeeper, and
   ratings paths.
 - [ ] Prototype a dedicated PowerA `ZR`/right-Z power shot behind a VIFA feature
   flag, with keyboard and generic-controller equivalents.
@@ -155,6 +160,21 @@ third-party mapper. The diagnostics should explicitly identify the reported
 `ZL`/`ZR` controls and whether the browser exposes them as buttons or axes.
 
 ## Progress log
+
+### 2026-10-02
+
+- Completed the keyboard-playtest engine pass with local-player parity for
+  buffered actions, receiving, goalkeeper rush, switching, containment, and
+  teammate support.
+- Widened the visible effect of individual ratings while keeping every curve
+  bounded and role-specific; aligned CPU finishing with the human shot model.
+- Added deterministic match telemetry so future balance changes can be tested
+  against repeatable match and scenario evidence.
+- Added a progressive PixiJS/WebGL layer for projected turf light, soft depth
+  shadows, motion accents, airborne-ball cues, and net impact effects while
+  retaining the complete Canvas2D renderer as a fail-safe fallback.
+- Verified lint, TypeScript, both VIFA test suites, the production build, and a
+  live Chrome match.
 
 ### 2026-10-01
 

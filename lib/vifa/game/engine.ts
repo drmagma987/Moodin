@@ -50,8 +50,16 @@ import {
 import { len, dist, clamp, distToSegment } from './math';
 import { precomputePlayerPhysicsScalars } from './ratings';
 import { CAM_MIN, CAM_MAX, CAM_Y_MIN, CAM_Y_MAX } from './projection';
-import type { Vec, Team, PlayerEntity, StateListener } from './types';
+import type {
+  Vec,
+  Team,
+  PlayerEntity,
+  StateListener,
+  MatchTelemetry,
+  TeamTelemetry,
+} from './types';
 import { renderScene } from './render';
+import { PixiEnhancementRenderer } from './render-pixi';
 import {
   FIXED_DT,
   FIXED_TICK_RATE,
@@ -88,6 +96,7 @@ const MOVE_KEYS = new Set([
 
 export class PitchKickGame {
   private ctx: CanvasRenderingContext2D;
+  private readonly enhancements: PixiEnhancementRenderer | null;
   private raf = 0;
   private last = 0;
   private running = false;
@@ -124,6 +133,8 @@ export class PitchKickGame {
   private awayChargeKey: string | null = null;
   private awayChargeTime = 0;
   private awayChargeLofted = false;
+  private awayBufferTimer = 0;
+  private awayKickPending = false;
 
   private ball = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, r: BALL_R };
   private homePlayers: PlayerEntity[] = [];
@@ -180,6 +191,7 @@ export class PitchKickGame {
    *  the keeper charges off his line to claim/smother the ball (FIFA's "rush
    *  keeper out"). Decays each frame; cleared the instant he gathers it. */
   private gkRush = 0;
+  private awayGkRush = 0;
   /** Which team last touched the ball (persists after the ball goes loose,
    *  unlike `lastKicker` which is cleared on possession). Drives out-of-play
    *  restart decisions: throw-in / goal kick / corner go to the right side. */
@@ -229,7 +241,28 @@ export class PitchKickGame {
   /** TV camera depth (field coordinates), follows the ball vertically. */
   private camY = FIELD_H / 2;
 
+  private telemetry: MatchTelemetry = {
+    home: this.emptyTeamTelemetry(),
+    away: this.emptyTeamTelemetry(),
+  };
+  private lastKickKind: 'pass' | 'shot' | null = null;
+  private shotOnTargetRecorded = false;
+
   private listener: StateListener;
+
+  private emptyTeamTelemetry(): TeamTelemetry {
+    return {
+      possessionTicks: 0,
+      passesAttempted: 0,
+      passesCompleted: 0,
+      shots: 0,
+      shotsOnTarget: 0,
+      tacklesAttempted: 0,
+      tacklesWon: 0,
+      saves: 0,
+      turnoversWon: 0,
+    };
+  }
 
   /** Selected nations driving the match (lineups, names, numbers, kits). */
   readonly homeTeam: TeamData;
@@ -254,11 +287,19 @@ export class PitchKickGame {
       awayBindings?: KeyBindings;
       matchRealSeconds?: number;
       seed?: number;
+      /** Optional transparent WebGL canvas for progressive 2.5D effects. */
+      enhancementCanvas?: HTMLCanvasElement;
     } = {},
   ) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context unavailable');
     this.ctx = ctx;
+    this.enhancements = opts.enhancementCanvas
+      ? new PixiEnhancementRenderer()
+      : null;
+    if (opts.enhancementCanvas) {
+      void this.enhancements?.init(opts.enhancementCanvas);
+    }
     this.seed = (opts.seed ?? 0x56494641) >>> 0;
     this.rng = new SeededRandom(this.seed);
     this.listener = listener;
@@ -333,6 +374,7 @@ export class PitchKickGame {
   stop() {
     this.running = false;
     cancelAnimationFrame(this.raf);
+    this.enhancements?.destroy();
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
   }
@@ -465,6 +507,14 @@ export class PitchKickGame {
     };
   }
 
+  /** Deterministic balance/debug counters for headless scenario tests. */
+  exportTelemetry(): MatchTelemetry {
+    return {
+      home: { ...this.telemetry.home },
+      away: { ...this.telemetry.away },
+    };
+  }
+
   exportSnapshot(): MatchSnapshot {
     const clonePlayer = (player: PlayerEntity): Record<string, unknown> =>
       JSON.parse(JSON.stringify(player)) as Record<string, unknown>;
@@ -538,11 +588,13 @@ export class PitchKickGame {
 
     this.owner = null;
     this.lastKicker = null;
+    this.lastKickKind = null;
     this.lastTouchTeam = kickingTeam;
     this.kickerLock = 0;
     this.passReceiver = null;
     this.aerialReceiver = null;
     this.gkRush = 0;
+    this.awayGkRush = 0;
     this.stealProtect = 0;
     this.dispossessed = null;
     this.dispossessedTimer = 0;
@@ -552,6 +604,8 @@ export class PitchKickGame {
     this.chargeTime = 0;
     this.awayChargeKey = null;
     this.awayChargeTime = 0;
+    this.awayBufferTimer = 0;
+    this.awayKickPending = false;
     this.bufferTimer = 0;
     this.kickPending = false;
     this.ballFree = 0;
@@ -618,6 +672,7 @@ export class PitchKickGame {
    *  play resumes cleanly instead of leaving the pitch empty/stuck. */
   private practiceResetBall() {
     this.lastKicker = null;
+    this.lastKickKind = null;
     this.kickerLock = 0;
     this.passReceiver = null;
     this.aerialReceiver = null;
@@ -784,10 +839,10 @@ export class PitchKickGame {
       this.messageTimer -= dt;
       if (this.messageTimer <= 0) this.message = '';
     }
-    if (this.kickerLock > 0) this.kickerLock -= dt;
-    else this.lastKicker = null;
+    if (this.kickerLock > 0) this.kickerLock = Math.max(0, this.kickerLock - dt);
     if (this.ballFree > 0) this.ballFree -= dt;
     if (this.gkRush > 0) this.gkRush -= dt;
+    if (this.awayGkRush > 0) this.awayGkRush -= dt;
     if (this.cpuDecision > 0) this.cpuDecision -= dt;
     if (this.stealProtect > 0) this.stealProtect -= dt;
     if (this.tackleCooldown > 0) this.tackleCooldown -= dt;
@@ -872,6 +927,8 @@ export class PitchKickGame {
       }
     }
 
+    if (this.owner) this.telemetry[this.owner.team].possessionTicks += 1;
+
     this.markTimer -= dt;
     if (this.markTimer <= 0) {
       this.markTimer = 0.35;
@@ -881,9 +938,19 @@ export class PitchKickGame {
 
     this.updateSwitchHint();
     this.handleSwitchKey();
-    this.updateControlled(dt);
-    this.updateHomeTeammates(dt);
-    this.updateAwayTeam(dt);
+    // The two sides mutate shared player/ball state in one fixed tick. Alternate
+    // which local side updates first so neither player permanently receives the
+    // last-move advantage in same-keyboard play. CPU matches keep the stable
+    // human-first order.
+    if (this.localMultiplayer && (this.tick + this.seed) % 2 === 1) {
+      this.updateAwayTeam(dt);
+      this.updateControlled(dt);
+      this.updateHomeTeammates(dt);
+    } else {
+      this.updateControlled(dt);
+      this.updateHomeTeammates(dt);
+      this.updateAwayTeam(dt);
+    }
     this.separatePlayers();
     this.constrainKeeperWithBall();
     this.updateJostle(dt);
@@ -919,13 +986,13 @@ export class PitchKickGame {
   /** Pan the TV camera toward the ball (with a little velocity lookahead). */
   private updateCamera(dt: number) {
     const target = clamp(this.ball.x + this.ball.vx * 0.25, CAM_MIN, CAM_MAX);
-    const k = 1 - Math.exp(-2.6 * dt);
+    const k = 1 - Math.exp(-3.15 * dt);
     this.camX += (target - this.camX) * k;
 
     // Vertical follow is gentler and clamped — a TV cam drifts in depth only
     // a little, keeping the action framed without swinging up and down.
     const targetY = clamp(this.ball.y + this.ball.vy * 0.18, CAM_Y_MIN, CAM_Y_MAX);
-    const ky = 1 - Math.exp(-1.8 * dt);
+    const ky = 1 - Math.exp(-2.15 * dt);
     this.camY += (targetY - this.camY) * ky;
   }
 
@@ -939,12 +1006,20 @@ export class PitchKickGame {
    * goal-side defenders over players level with or behind the play.
    */
   private switchScore(p: PlayerEntity): number {
-    const carrier = this.owner && this.owner.team === 'away' ? this.owner : null;
+    return this.switchScoreForTeam(p, 'home');
+  }
+
+  private switchScoreForTeam(p: PlayerEntity, defendingTeam: Team): number {
+    const carrier =
+      this.owner && this.owner.team !== defendingTeam ? this.owner : null;
 
     if (carrier) {
       // Direction of the attack: blend "toward our goal" with the
       // carrier's actual movement.
-      const goal = { x: 0, y: FIELD_H / 2 };
+      const goal = {
+        x: defendingTeam === 'home' ? 0 : FIELD_W,
+        y: FIELD_H / 2,
+      };
       const gl = len(goal.x - carrier.x, goal.y - carrier.y);
       let dirX = (goal.x - carrier.x) / gl;
       let dirY = (goal.y - carrier.y) / gl;
@@ -964,8 +1039,14 @@ export class PitchKickGame {
       let score = dist(p, intercept);
       // Goal-side (between carrier and our goal) is what defending is
       // about — reward it; punish being behind the play.
-      if (p.x < carrier.x - 5) score -= 55;
-      else if (p.x > carrier.x + 15) score += 60;
+      const goalSide = defendingTeam === 'home'
+        ? p.x < carrier.x - 5
+        : p.x > carrier.x + 5;
+      const behindPlay = defendingTeam === 'home'
+        ? p.x > carrier.x + 15
+        : p.x < carrier.x - 15;
+      if (goalSide) score -= 55;
+      else if (behindPlay) score += 60;
       return score;
     }
 
@@ -1056,7 +1137,10 @@ export class PitchKickGame {
     // flight) — i.e. it's "incoming" to our team. In this state a kick key
     // is buffered as a first-time shot/pass, NOT a tackle.
     const incoming =
-      !owns && this.owner === null && this.lastKicker?.team === 'home';
+      !owns &&
+      this.owner === null &&
+      this.lastKicker?.team === 'home' &&
+      this.passReceiver === p;
 
     // True while we're already committed to a slide — locks out other inputs
     // (you can't change your mind mid-slide; that's the FIFA risk).
@@ -1087,6 +1171,7 @@ export class PitchKickGame {
       p.slideDir = { x: sx / sl, y: sy / sl };
       p.slideTimer = 0.7;
       this.slideCooldown = 1.5;
+      this.telemetry.home.tacklesAttempted += 1;
       p.facing = { ...p.slideDir };
     }
 
@@ -1117,6 +1202,7 @@ export class PitchKickGame {
       this.tackleDir = { x: bx / l, y: by / l };
       this.tackleTimer = 0.22;
       this.tackleCooldown = 0.8;
+      this.telemetry.home.tacklesAttempted += 1;
       p.kickTimer = Math.max(p.kickTimer, 0.22);
     }
 
@@ -1209,67 +1295,11 @@ export class PitchKickGame {
       let hx = ix;
       let hy = iy;
 
-      // FIFA-style "ball gravity": while OUR pass is in flight to this exact
-      // receiver, predict whether continuing the user's CURRENT run will
-      // actually intercept the ball. If it will (they're already on a path to
-      // meet it), leave their run alone. If it WON'T — e.g. they're holding a
-      // direction that runs them away/ahead and the ball can't catch them —
-      // override toward the meeting point so they don't miss it. With no arrow
-      // held, the receiver fully takes over and collects the ball.
       if (incoming && p === this.passReceiver) {
-        // FIFA auto-receive: instead of asking "will the user's current run
-        // happen to intercept the ball?" (which oscillates — the moment we
-        // nudge toward the ball the run looks fine again, so the receiver
-        // parks short and never collects it), we solve for the EARLIEST point
-        // on the ball's path the receiver can actually run onto, then commit
-        // to it. The user's input only biases the APPROACH ANGLE — it can
-        // never steer the receiver away from a ball they'd otherwise miss.
-        const airborne = this.ball.z > 0.01 || this.ball.vz > 0.01;
-        const k = airborne ? BALL_DECAY * 0.12 : BALL_DECAY;
-        let bx = this.ball.x;
-        let by = this.ball.y;
-        let bvx = this.ball.vx;
-        let bvy = this.ball.vy;
-        const stepT = 0.05;
-        const decayStep = Math.exp(-k * stepT);
-        // Displacement over one step for the current velocity (∫v dt).
-        const dispK = k > 1e-3 ? (1 - decayStep) / k : stepT;
-        // Pace we will actually run to meet it at.
-        const runSpeed = sprint ? SPRINT_SPEED : RUN_SPEED;
-        // March the ball forward; the first point the receiver can reach in
-        // time (running straight at it) is the interception. If they can never
-        // catch it within the window, chase where it ends up (last sim point) —
-        // covers a pass that stops SHORT, so the receiver always goes to get it.
-        let meetX = bx;
-        let meetY = by;
-        for (let t = 0; t <= 2.5; t += stepT) {
-          meetX = bx;
-          meetY = by;
-          const gap = len(bx - p.x, by - p.y);
-          const tReach =
-            Math.max(0, gap - p.cachedBallControlRadius) / runSpeed;
-          if (tReach <= t) break; // we can be here as the ball arrives
-          bx += bvx * dispK;
-          by += bvy * dispK;
-          bvx *= decayStep;
-          bvy *= decayStep;
-        }
-
-        const ax = meetX - p.x;
-        const ay = meetY - p.y;
-        const al = len(ax, ay);
-        // Once the ball is essentially at our feet, hand full control back to
-        // the user; until then, drive to the meeting point.
-        if (al > p.cachedBallControlRadius) {
-          const ux = ax / al;
-          const uy = ay / al;
-          // A little user steer (to choose which side to take it on) but the
-          // run to the ball dominates so the receiver never drifts off it.
-          const inputW = hasInput ? 0.3 : 0;
-          hx = ux * (1 - inputW) + ix * inputW;
-          hy = uy * (1 - inputW) + iy * inputW;
-          if (!sprint) speed = RUN_SPEED;
-        }
+        const assisted = this.receiveAssist(p, ix, iy, hasInput, sprint);
+        hx = assisted.x;
+        hy = assisted.y;
+        if (!sprint) speed = RUN_SPEED;
       }
 
       let tvx = 0;
@@ -1364,6 +1394,50 @@ export class PitchKickGame {
     return clamp(this.chargeTime / CHARGE_FULL, 0, 1);
   }
 
+  /** Shared incoming-pass steering used by the second local player. Player 1
+   * has the same interception solve inline in updateControlled. */
+  private receiveAssist(
+    p: PlayerEntity,
+    inputX: number,
+    inputY: number,
+    hasInput: boolean,
+    sprint: boolean,
+  ): Vec {
+    const airborne = this.ball.z > 0.01 || this.ball.vz > 0.01;
+    const k = airborne ? BALL_DECAY * 0.12 : BALL_DECAY;
+    let bx = this.ball.x;
+    let by = this.ball.y;
+    let bvx = this.ball.vx;
+    let bvy = this.ball.vy;
+    const stepT = 0.05;
+    const decayStep = Math.exp(-k * stepT);
+    const dispK = k > 1e-3 ? (1 - decayStep) / k : stepT;
+    let meetX = bx;
+    let meetY = by;
+    for (let t = 0; t <= 2.5; t += stepT) {
+      meetX = bx;
+      meetY = by;
+      const gap = len(bx - p.x, by - p.y);
+      const receiveSpeed = sprint ? SPRINT_SPEED : RUN_SPEED;
+      if (Math.max(0, gap - p.cachedBallControlRadius) / receiveSpeed <= t) {
+        break;
+      }
+      bx += bvx * dispK;
+      by += bvy * dispK;
+      bvx *= decayStep;
+      bvy *= decayStep;
+    }
+    const ax = meetX - p.x;
+    const ay = meetY - p.y;
+    const al = len(ax, ay);
+    if (al <= p.cachedBallControlRadius) return { x: inputX, y: inputY };
+    const inputWeight = hasInput ? 0.3 : 0;
+    return {
+      x: (ax / al) * (1 - inputWeight) + inputX * inputWeight,
+      y: (ay / al) * (1 - inputWeight) + inputY * inputWeight,
+    };
+  }
+
   // ---- kicking / passing --------------------------------------------------
 
   /** @param charge 0..1 power gauge from how long the key was held. */
@@ -1426,6 +1500,9 @@ export class PitchKickGame {
     charge: number,
     inputKeys: ReadonlySet<string> = this.keys,
   ) {
+    this.telemetry[kicker.team].shots += 1;
+    this.lastKickKind = 'shot';
+    this.shotOnTargetRecorded = false;
     let vert = 0;
     if (inputKeys.has('ArrowUp')) vert -= 1;
     if (inputKeys.has('ArrowDown')) vert += 1;
@@ -1477,8 +1554,8 @@ export class PitchKickGame {
       // Clearance dominates (capped so wide-open lanes stop competing),
       // input preference breaks ties between similarly open lanes.
       const score =
-        Math.min(clearance, 50) +
-        (1 - Math.abs(ty - desiredY) / zoneSpan) * 16;
+        Math.min(clearance, 28) +
+        (1 - Math.abs(ty - desiredY) / zoneSpan) * 24;
       if (score > bestScore) {
         bestScore = score;
         bestY = ty;
@@ -1500,10 +1577,16 @@ export class PitchKickGame {
     // start to climb, a full-power strike flying high toward the top corners.
     // With the realistic GRAVITY the apex is reached ~20m out, so from a normal
     // shooting position a hard shot is still RISING as it crosses the line.
-    // Capped just under the M(2.44) bar so the peak can't sail over.
+    // Base apex sits near the bar; vertical execution error below can now send
+    // an over-hit power shot above it, especially for a weak finisher.
     const liftCharge = clamp((charge - 0.25) / 0.75, 0, 1);
-    const shotApex = Math.min(liftCharge * liftCharge * M(2.7), M(2.35));
-    const loft = shotApex > 0 ? Math.sqrt(2 * GRAVITY * shotApex) : 0;
+    const shotApex = Math.min(liftCharge * liftCharge * M(2.7), M(2.38));
+    const verticalSpread =
+      (0.025 + charge * 0.055) * kicker.cachedShotSpreadMultiplier;
+    const loft = shotApex > 0
+      ? Math.sqrt(2 * GRAVITY * shotApex)
+        * (1 + verticalSpread * this.kickNoise())
+      : 0;
     // Shots scatter — and the harder you hit it, the LESS precise it is (FIFA:
     // a power blast can fly wide of the post, while a placed side-foot is far
     // tighter). The charge term dominates so full-power efforts genuinely miss
@@ -1511,7 +1594,7 @@ export class PitchKickGame {
     // SHOOTING: better strikers hit it harder and straighter — more power and
     // a tighter spread, so a weak forward sprays the same chance wide.
     const shotSpread =
-      (0.06 + charge * 0.2) * kicker.cachedShotSpreadMultiplier;
+      (0.045 + charge * 0.12) * kicker.cachedShotSpreadMultiplier;
     this.kickBallToward(
       { x: goalX, y: bestY },
       power,
@@ -1532,6 +1615,8 @@ export class PitchKickGame {
     },
     inputKeys: ReadonlySet<string> = this.keys,
   ) {
+    this.telemetry[kicker.team].passesAttempted += 1;
+    this.lastKickKind = 'pass';
     const { isShort, isLong, isThrough, charge } = opts;
     const lofted = !!opts.lofted;
 
@@ -1599,7 +1684,10 @@ export class PitchKickGame {
       // Lower, faster arc than a raking long ball so it still threads behind.
       const T = clamp(0.5 + d / M(95) + charge * 0.2, 0.5, 1.15);
       const vz = 0.5 * GRAVITY * T;
-      const hspeed = Math.min((d / T) * 1.08, 1500);
+      const hspeed = Math.min(
+        (d / T) * 1.08 * kicker.cachedPassPowerMultiplier,
+        1500,
+      );
       this.kickBallToward(
         aim,
         hspeed,
@@ -1621,7 +1709,10 @@ export class PitchKickGame {
       // floats it higher and longer.
       const T = clamp(0.62 + d / M(70) + charge * 0.25, 0.6, 1.5);
       const vz = 0.5 * GRAVITY * T;
-      const hspeed = Math.min((d / T) * 1.12, 1500);
+      const hspeed = Math.min(
+        (d / T) * 1.12 * kicker.cachedPassPowerMultiplier,
+        1500,
+      );
       // A raking long ball is harder to land on a sixpence than a short pass.
       this.kickBallToward(
         aim,
@@ -1671,6 +1762,8 @@ export class PitchKickGame {
   /** Release a throw-in by HAND: a gentle two-handed lofted toss to a teammate
    *  (limited range, no foot kick / shot). Clears the throw-in armed state. */
   private executeThrowIn(thrower: PlayerEntity, isHome: boolean) {
+    this.telemetry[thrower.team].passesAttempted += 1;
+    this.lastKickKind = 'pass';
     const inputKeys = isHome ? this.keys : this.awayKeys;
     const target = this.pickPassTarget(thrower, {
       short: true,
@@ -1811,6 +1904,10 @@ export class PitchKickGame {
       }
     }
 
+    // Do not bend a pass to a teammate well outside the player's aimed cone.
+    // A poor direction now produces a genuine knock into space rather than an
+    // implausible 120-degree assisted pass.
+    if (best && bestScore < 18) return null;
     return best;
   }
 
@@ -2019,6 +2116,7 @@ export class PitchKickGame {
     // Clear all transient ball/possession state so play restarts cleanly.
     this.offsideFlags.clear();
     this.lastKicker = null;
+    this.lastKickKind = null;
     this.kickerLock = 0;
     this.stealProtect = 1.2;
     this.dispossessed = null;
@@ -2083,7 +2181,8 @@ export class PitchKickGame {
       const py = p.y + kby * t;
       return len(m.x - px, m.y - py) < 70;
     });
-    const manualRush = p.team === 'home' && this.gkRush > 0;
+    const manualRush =
+      p.team === 'home' ? this.gkRush > 0 : this.awayGkRush > 0;
     const ballInBoxX = ballDX < M(18); // ~ edge of the penalty area (depth)
     // Only commit to a rush when the ball is also CENTRAL — within the penalty
     // area's width. A ball out on the flank is near the goal LINE but no direct
@@ -2133,7 +2232,8 @@ export class PitchKickGame {
     // ---- Angle play (no rush) ----
     // Come off the line more as the ball nears: ~14px when it's a long way
     // out, up to ~150px on the edge of the box.
-    const comeOut = clamp(220 - ballDX * 0.26, 14, 150);
+    const comeOut =
+      clamp(220 - ballDX * 0.26, 14, 150) * p.cachedKeeperPositionMultiplier;
     const gx = bx - ownGoalX;
     const gy = by - mid;
     const gl = Math.max(120, len(gx, gy));
@@ -2148,7 +2248,12 @@ export class PitchKickGame {
     // touch more central and can't cover both corners. Tracking only ~72% of
     // the way means a well-placed shot into the open corner can beat him,
     // rather than every shot flying straight at a magnetically-positioned GK.
-    const ty = clamp(mid + gy * f * 0.72, goalTop + 14, goalBottom - 14);
+    const tracking = clamp(
+      0.64 + 0.08 * p.cachedKeeperPositionMultiplier,
+      0.62,
+      0.76,
+    );
+    const ty = clamp(mid + gy * f * tracking, goalTop + 14, goalBottom - 14);
     // Hustle back into position when badly out of it, else glide.
     const here = { x: tx, y: ty };
     const speed = dist(p, here) > 90 ? RUN_SPEED : WALK_SPEED;
@@ -2208,7 +2313,9 @@ export class PitchKickGame {
       // Only commit to a man-mark when genuinely close (was 320 — too eager).
       let bestD = 250;
       for (const def of defenders) {
-        if (def.isGK || def === this.controlled || taken.has(def)) continue;
+        const userControlled =
+          def.team === 'home' ? this.controlled : this.awayControlled;
+        if (def.isGK || def === userControlled || taken.has(def)) continue;
         const dd = dist(def, threat);
         if (dd < bestD) {
           bestD = dd;
@@ -2285,7 +2392,10 @@ export class PitchKickGame {
     const depthToGoal = (x: number) => Math.abs(x - goalX);
     const carrierDepth = depthToGoal(carrier.x);
     const pool = defenders.filter(
-      (p) => !p.isGK && p !== presser && p !== this.controlled,
+      (p) =>
+        !p.isGK &&
+        p !== presser &&
+        p !== (p.team === 'home' ? this.controlled : this.awayControlled),
     );
     const goalSide = pool.filter((p) => depthToGoal(p.x) <= carrierDepth + 30);
     return this.nearestTo(goalSide.length ? goalSide : pool, carrier);
@@ -2581,7 +2691,7 @@ export class PitchKickGame {
     // Your AI teammates also commit tackles on the away carrier (so you aren't
     // forced to switch + tackle manually for every challenge). Same realism
     // gate + shared cooldown as the CPU side.
-    if (awayCarrier && this.cpuTackleCd <= 0) {
+    if (!this.localMultiplayer && awayCarrier && this.cpuTackleCd <= 0) {
       for (const p of this.homePlayers) {
         if (p.isGK || p === this.controlled) continue;
         if (this.pokeTackle(p, p.cachedAiTackleRadius)) {
@@ -2666,6 +2776,9 @@ export class PitchKickGame {
     }
     if (!best) return;
 
+    this.telemetry[gk.team].passesAttempted += 1;
+    this.lastKickKind = 'pass';
+
     const aim = {
       x: clamp(best.x + best.vx * 0.2, 20, FIELD_W - 20),
       y: clamp(best.y + best.vy * 0.2, 20, FIELD_H - 20),
@@ -2689,15 +2802,20 @@ export class PitchKickGame {
   // ---- CPU team AI ---------------------------------------------------------
 
   private bestAwaySwitchCandidate(): PlayerEntity | null {
-    const ahead = {
-      x: clamp(this.ball.x + this.ball.vx * 0.35, 0, FIELD_W),
-      y: clamp(this.ball.y + this.ball.vy * 0.35, 0, FIELD_H),
-    };
     const candidates = this.awayPlayers.filter((p) => {
       if (p === this.awayControlled) return false;
       return !p.isGK || this.owner === p || dist(p, this.ball) <= 160;
     });
-    return this.nearestTo(candidates, ahead);
+    let best: PlayerEntity | null = null;
+    let bestScore = Infinity;
+    for (const candidate of candidates) {
+      const score = this.switchScoreForTeam(candidate, 'away');
+      if (score < bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+    return best;
   }
 
   private updateAwayControlled(dt: number) {
@@ -2706,6 +2824,11 @@ export class PitchKickGame {
     const carrier =
       this.owner && this.owner.team === 'home' ? this.owner : null;
     const sliding = (p.slideTimer ?? 0) > 0;
+    const incoming =
+      !owns &&
+      this.owner === null &&
+      this.lastKicker?.team === 'away' &&
+      this.passReceiver === p;
 
     if (
       this.awayJustPressed.includes('KeyQ') &&
@@ -2718,6 +2841,7 @@ export class PitchKickGame {
 
     if (
       !owns &&
+      !incoming &&
       !sliding &&
       this.awaySlideCooldown <= 0 &&
       this.awayJustPressed.includes('KeyA')
@@ -2732,11 +2856,13 @@ export class PitchKickGame {
       p.slideDir = { x: sx / sl, y: sy / sl };
       p.slideTimer = 0.7;
       this.awaySlideCooldown = 1.5;
+      this.telemetry.away.tacklesAttempted += 1;
       p.facing = { ...p.slideDir };
     }
 
     if (
       !owns &&
+      !incoming &&
       !sliding &&
       this.awayTackleCooldown <= 0 &&
       this.awayJustPressed.includes('KeyD')
@@ -2747,7 +2873,15 @@ export class PitchKickGame {
       this.awayTackleDir = { x: bx / l, y: by / l };
       this.awayTackleTimer = 0.22;
       this.awayTackleCooldown = 0.8;
+      this.telemetry.away.tacklesAttempted += 1;
       p.kickTimer = Math.max(p.kickTimer, 0.22);
+    }
+
+    if (!owns && !incoming && !sliding) {
+      if (this.awayJustPressed.includes('KeyW')) this.awayGkRush = 1.5;
+      else if (this.awayKeys.has('KeyW')) {
+        this.awayGkRush = Math.max(this.awayGkRush, 0.25);
+      }
     }
 
     const containing = this.awayKeys.has('KeyC') && !owns;
@@ -2807,48 +2941,79 @@ export class PitchKickGame {
       if (this.awayKeys.has('ArrowLeft')) dx -= 1;
       if (this.awayKeys.has('ArrowRight')) dx += 1;
       const l = len(dx, dy);
+      const hasInput = l > 0;
       const sprint = this.awayKeys.has('KeyE');
       let speed = sprint ? SPRINT_SPEED : WALK_SPEED;
       if (owns) speed *= p.cachedDribbleSpeedMultiplier;
+      let ix = l ? dx / l : 0;
+      let iy = l ? dy / l : 0;
+      if (incoming && p === this.passReceiver) {
+        const assisted = this.receiveAssist(p, ix, iy, hasInput, sprint);
+        ix = assisted.x;
+        iy = assisted.y;
+        if (!sprint) speed = RUN_SPEED;
+      }
+      const assistedLen = len(ix, iy);
       this.steer(
         p,
-        l ? (dx / l) * speed : 0,
-        l ? (dy / l) * speed : 0,
+        assistedLen ? (ix / assistedLen) * speed : 0,
+        assistedLen ? (iy / assistedLen) * speed : 0,
         dt,
         owns ? DRIBBLE_ACCEL * p.cachedDribbleAccelerationMultiplier : ACCEL,
       );
     }
 
-    if (!this.awayChargeKey && owns) {
+    if (!this.awayChargeKey && (owns || incoming)) {
       const code = this.awayJustPressed.find((key) => KICK_KEYS.has(key));
       if (code) {
         this.awayChargeKey = code;
         this.awayChargeTime = 0;
         this.awayChargeLofted = this.awayKeys.has('KeyQ');
+        this.awayKickPending = false;
+        this.awayBufferTimer = owns ? 0 : KICK_BUFFER;
       }
     }
 
     if (this.awayChargeKey) {
       const released = this.awayJustReleased.includes(this.awayChargeKey);
-      if (!owns) {
+      if (owns) {
+        if (this.awayKickPending || released) {
+          const code = this.awayChargeKey;
+          const charge = clamp(this.awayChargeTime / CHARGE_FULL, 0, 1);
+          const lofted = this.awayChargeLofted || this.awayKeys.has('KeyQ');
+          this.awayChargeKey = null;
+          this.awayChargeTime = 0;
+          this.awayKickPending = false;
+          this.doAwayKick(code, charge, lofted);
+        } else {
+          const chargeRate =
+            this.awayChargeKey === 'KeyD'
+              ? p.cachedShotChargeRate
+              : p.cachedPassChargeRate;
+          this.awayChargeTime = Math.min(
+            this.awayChargeTime + dt * chargeRate,
+            CHARGE_FULL,
+          );
+        }
+      } else if (this.owner && this.owner.team === 'home') {
         this.awayChargeKey = null;
         this.awayChargeTime = 0;
-      } else if (released) {
-        const code = this.awayChargeKey;
-        const charge = clamp(this.awayChargeTime / CHARGE_FULL, 0, 1);
-        const lofted = this.awayChargeLofted || this.awayKeys.has('KeyQ');
-        this.awayChargeKey = null;
-        this.awayChargeTime = 0;
-        this.doAwayKick(code, charge, lofted);
       } else {
-        const chargeRate =
-          this.awayChargeKey === 'KeyD'
+        this.awayBufferTimer -= dt;
+        if (this.awayBufferTimer <= 0) {
+          this.awayChargeKey = null;
+          this.awayKickPending = false;
+        } else if (released) {
+          this.awayKickPending = true;
+        } else if (!this.awayKickPending) {
+          const chargeRate = this.awayChargeKey === 'KeyD'
             ? p.cachedShotChargeRate
             : p.cachedPassChargeRate;
-        this.awayChargeTime = Math.min(
-          this.awayChargeTime + dt * chargeRate,
-          CHARGE_FULL,
-        );
+          this.awayChargeTime = Math.min(
+            this.awayChargeTime + dt * chargeRate,
+            CHARGE_FULL,
+          );
+        }
       }
     }
   }
@@ -2864,6 +3029,9 @@ export class PitchKickGame {
       : !this.owner && this.lastKicker?.team === 'home'
         ? this.nearestTo(candidates, this.ball)
         : null;
+    const container = homeCarrier
+      ? this.pickContainer(this.awayPlayers, homeCarrier, presser)
+      : null;
 
     for (const p of this.awayPlayers) {
       if (p === this.awayControlled) continue;
@@ -2886,10 +3054,32 @@ export class PitchKickGame {
         else this.moveToward(p, this.ball, PRESS_SPEED, dt);
         continue;
       }
-      const plan = this.offBallPlan(p, AWAY_FORMATION_SPEED);
+      if (p === container && homeCarrier) {
+        this.moveToward(
+          p,
+          this.containTarget(p, homeCarrier),
+          PRESS_SPEED * 0.9,
+          dt,
+        );
+        continue;
+      }
+      const plan = this.offBallPlan(
+        p,
+        this.localMultiplayer ? TEAMMATE_SPEED : AWAY_FORMATION_SPEED,
+      );
       const speed =
         dist(p, plan.pos) > 240 ? Math.max(plan.speed, RUN_SPEED) : plan.speed;
       this.moveToward(p, plan.pos, speed, dt);
+    }
+
+    if (!this.localMultiplayer && homeCarrier && this.cpuTackleCd <= 0) {
+      for (const p of this.awayPlayers) {
+        if (p.isGK || p === this.awayControlled) continue;
+        if (this.pokeTackle(p, p.cachedAiTackleRadius)) {
+          this.cpuTackleCd = 0.62;
+          break;
+        }
+      }
     }
   }
 
@@ -3038,34 +3228,59 @@ export class PitchKickGame {
 
     const pressure = this.nearestOpponentDist(p);
 
-    // Shoot when in range.
-    if (p.x < 300) {
-      const gy = clamp(p.y, goalTop + 24, goalBottom - 24);
-      // SHOOTING applies to the CPU too — a weak forward hits it softer and
-      // less accurately, a clinical one rifles it in.
-      this.kickBallToward(
-        { x: 0, y: gy },
-        600 * p.cachedShotPowerMultiplier,
-        p,
-        // Same apex-height model as the human shot: aim for a low ~M(0.7) peak
-        // so the CPU's strike is a driven, mostly-rising effort (loft solved
-        // from the new realistic GRAVITY) rather than a fixed up-and-over lob.
-        Math.sqrt(2 * GRAVITY * M(0.7)),
-        0.05 * p.cachedShotSpreadMultiplier,
+    // Use the same assisted finishing model as a human instead of a special
+    // fixed-power, laser-accurate CPU shot. Better shooters choose and execute
+    // the chance more effectively through the shared rating scalars.
+    if (p.x < M(24) && (Math.abs(p.y - FIELD_H / 2) < M(24) || p.x < M(12))) {
+      const charge = clamp(
+        0.35 + (M(24) - p.x) / M(50) + (p.individualStats.sho - 75) / 250,
+        0.3,
+        0.78,
       );
+      this.shootAssisted(p, charge, new Set());
       return;
     }
 
-    // Pass when pressured and a teammate is further forward + open.
-    if (pressure < 85) {
+    // Cross from a genuine wide advanced position to the best central runner.
+    if (p.x < M(27) && Math.abs(p.y - FIELD_H / 2) > M(15)) {
+      const targets = this.awayPlayers
+        .filter((m) => m !== p && !m.isGK && m.x < p.x + M(8))
+        .sort((a, b) =>
+          Math.abs(a.y - FIELD_H / 2) - Math.abs(b.y - FIELD_H / 2),
+        );
+      const target = targets[0];
+      if (target) {
+        const aim = { x: Math.max(M(5), target.x - M(2)), y: target.y };
+        const d = dist(this.ball, aim);
+        const T = clamp(0.75 + d / M(75), 0.75, 1.35);
+        this.telemetry.away.passesAttempted += 1;
+        this.lastKickKind = 'pass';
+        this.kickBallToward(
+          aim,
+          Math.min((d / T) * 1.08 * p.cachedPassPowerMultiplier, 1450),
+          p,
+          0.5 * GRAVITY * T,
+          0.055 * p.cachedPassSpreadMultiplier,
+        );
+        this.aerialReceiver = target;
+        return;
+      }
+    }
+
+    // Pass under pressure, and also circulate proactively some of the time so
+    // the CPU does not reduce every possession to a straight central dribble.
+    if (pressure < M(7) || this.rng.next() < 0.34) {
       let best: PlayerEntity | null = null;
       let bestScore = -Infinity;
       for (const m of this.awayPlayers) {
-        if (m === p) continue;
-        if (m.x > p.x - 40) continue; // must be more advanced (closer to left goal)
+        if (m === p || m.isGK) continue;
         const openness = this.nearestOpponentDist(m);
-        if (openness < 90) continue;
-        const score = openness - dist(p, m) * 0.2;
+        const forward = p.x - m.x;
+        const score =
+          Math.min(openness, M(12)) +
+          forward * 0.32 -
+          dist(p, m) * 0.12 +
+          (openness < M(4) ? -500 : 0);
         if (score > bestScore) {
           bestScore = score;
           best = m;
@@ -3073,6 +3288,8 @@ export class PitchKickGame {
       }
       if (best) {
         const d = dist(this.ball, best);
+        this.telemetry.away.passesAttempted += 1;
+        this.lastKickKind = 'pass';
         this.kickBallToward(
           { x: best.x + best.vx * 0.2, y: best.y + best.vy * 0.2 },
           this.passPower(d, 260, 780) * p.cachedPassPowerMultiplier,
@@ -3155,6 +3372,7 @@ export class PitchKickGame {
     this.ball.vy = tackler.vy;
     tackler.kickTimer = Math.max(tackler.kickTimer, 0.18);
     this.jostle = 0;
+    this.telemetry[tackler.team].tacklesWon += 1;
     return true;
   }
 
@@ -3252,7 +3470,7 @@ export class PitchKickGame {
     // be gathered by its intended receiver as it drops — a defender in the lane
     // can't pluck it out of the air, it sailed over them. Once it lands the
     // flag is cleared (updateBall) and it's a normal loose ball.
-    const aerialLock =
+    const aerialTarget =
       this.aerialReceiver && (this.ball.z > M(0.4) || this.ball.vz > 5)
         ? this.aerialReceiver
         : null;
@@ -3261,16 +3479,18 @@ export class PitchKickGame {
     let best: PlayerEntity | null = null;
     let bestD = Infinity;
     for (const p of this.allPlayers) {
-      if (aerialLock && p !== aerialLock) continue;
       if (this.kickerLock > 0 && p === this.lastKicker) continue;
       // A freshly dispossessed player can't win the ball straight back.
       if (this.dispossessed === p) continue;
       // Keepers have HANDS: a bigger gather radius so a slow ball at their feet
       // is claimed (not left for an attacker to steal), and enough reach to
       // pull in / parry a shot they get across to.
-      const reach = p.isGK
+      let reach = p.isGK
         ? this.keeperReach(p, ballSpeed)
         : p.cachedBallControlRadius;
+      // The intended player reads the flight first, but opponents can now
+      // contest a dropping aerial ball instead of being hard-locked out.
+      if (p === aerialTarget) reach += M(0.35);
       const d = dist(p, this.ball);
       if (d <= reach && d < bestD) {
         bestD = d;
@@ -3306,11 +3526,20 @@ export class PitchKickGame {
     // Possession changed hands.
     if (best && best !== prev) {
       this.jostle = 0;
+      if (
+        this.lastKickKind === 'pass' &&
+        this.lastKicker &&
+        best.team === this.lastKicker.team &&
+        best !== this.lastKicker
+      ) {
+        this.telemetry[best.team].passesCompleted += 1;
+      }
       if (prev && prev.team !== best.team) {
         // Tackle won: protect the winner and lock out the loser.
-        this.stealProtect = 0.9;
+        this.stealProtect = 0.7;
         this.dispossessed = prev;
-        this.dispossessedTimer = 1.2;
+        this.dispossessedTimer = 0.9;
+        this.telemetry[best.team].turnoversWon += 1;
         // Turn the winner away from the tackled opponent so the dribble
         // carries the ball out on the FAR side, not back into their feet.
         const dx = best.x - prev.x;
@@ -3321,7 +3550,7 @@ export class PitchKickGame {
         this.ball.y = best.y + (dy / l) * (best.r + this.ball.r);
       } else {
         // Clean receive (pass or loose ball) — short protection.
-        this.stealProtect = 0.35;
+        this.stealProtect = 0.25;
       }
     }
 
@@ -3344,10 +3573,17 @@ export class PitchKickGame {
       best.isGK &&
       best !== prev &&
       (!prev || prev.team !== best.team) &&
-      ballSpeed > 600 &&
+      ballSpeed > 600 * best.cachedKeeperCatchMultiplier &&
       !backPassToKeeper &&
       this.keeperInOwnBox(best)
     ) {
+      if (this.lastKickKind === 'shot' && this.lastKicker?.team !== best.team) {
+        if (!this.shotOnTargetRecorded) {
+          this.telemetry[this.lastKicker!.team].shotsOnTarget += 1;
+          this.shotOnTargetRecorded = true;
+        }
+        this.telemetry[best.team].saves += 1;
+      }
       this.keeperParry(best, ballSpeed);
       return;
     }
@@ -3381,6 +3617,17 @@ export class PitchKickGame {
         this.awayControlled = best;
       }
       if (best.isGK) {
+        if (
+          this.lastKickKind === 'shot' &&
+          this.lastKicker &&
+          this.lastKicker.team !== best.team
+        ) {
+          if (!this.shotOnTargetRecorded) {
+            this.telemetry[this.lastKicker.team].shotsOnTarget += 1;
+            this.shotOnTargetRecorded = true;
+          }
+          this.telemetry[best.team].saves += 1;
+        }
         // May he legally take it in his hands? Not outside his box, and not off
         // a deliberate team-mate back-pass — in those cases he controls it with
         // his FEET like an outfielder (no scoop, no box-clamp, no protected
@@ -3391,7 +3638,8 @@ export class PitchKickGame {
           // window so a striker can't instantly poke the held ball back out and
           // tap in the rebound. The rush (if any) has done its job.
           this.stealProtect = Math.max(this.stealProtect, 1.1);
-          this.gkRush = 0;
+          if (best.team === 'home') this.gkRush = 0;
+          else this.awayGkRush = 0;
           // Start the hold-in-hands clock fresh on a NEW catch so the keeper
           // visibly gathers and holds the ball before he distributes (instead
           // of booting it the instant he touches it with a stale timer).
@@ -3415,6 +3663,7 @@ export class PitchKickGame {
       // Receiving a pass clears the kicker lock so play flows.
       this.lastKicker = null;
       this.kickerLock = 0;
+      this.lastKickKind = null;
       // The pass has been collected (or intercepted) — ball gravity ends.
       this.passReceiver = null;
     }
@@ -3482,7 +3731,9 @@ export class PitchKickGame {
    *  shot regardless of pace or range. */
   private keeperReach(gk: PlayerEntity, ballSpeed: number): number {
     // Slow/loose ball — normal big gather radius.
-    if (ballSpeed < 340) return CONTROL_DIST + 34;
+    if (ballSpeed < 340) {
+      return (CONTROL_DIST + 34) * gk.cachedKeeperReachMultiplier;
+    }
     // How far away was the shot struck? The farther the shot's origin, the more
     // time the keeper had to set himself and dive across.
     const shooter = this.lastKicker;
@@ -3496,7 +3747,8 @@ export class PitchKickGame {
     // being magnetically reached (user: "GK catches strong shots too easily").
     const distBuf = clamp((shotDist - 120) * 0.05, 0, 26);
     const pacePenalty = clamp((ballSpeed - 520) * 0.04, 0, 34);
-    const buffer = Math.max(0, distBuf - pacePenalty);
+    const buffer = Math.max(0, distBuf - pacePenalty)
+      * gk.cachedKeeperReachMultiplier;
     return gk.r + this.ball.r + buffer;
   }
 
@@ -3509,7 +3761,7 @@ export class PitchKickGame {
     void dt;
     if (this.owner) return; // ball is held — no shot in flight
     const ballSpeed = Math.hypot(this.ball.vx, this.ball.vy);
-    if (ballSpeed < 420) return; // only react to genuine shots
+    if (ballSpeed < 360) return; // only react to genuine shots
     for (const gk of [this.homePlayers[0], this.awayPlayers[0]]) {
       if (!gk) continue;
       if ((gk.diveTimer ?? 0) > 0 || (gk.diveCooldown ?? 0) > 0) continue;
@@ -3522,7 +3774,7 @@ export class PitchKickGame {
       const ballDX = Math.abs(this.ball.x - ownGoalX);
       if (ballDX > M(20)) continue;
       const d = dist(gk, this.ball);
-      if (d > 95) continue; // react as it arrives in his vicinity
+      if (d > 95 * gk.cachedKeeperReactionMultiplier) continue;
       const off = this.ball.y - gk.y;
       // Within standing reach (a step + arm) → no dive needed, he gathers
       // standing. Only a ball genuinely beyond his standing reach makes him
@@ -3579,6 +3831,7 @@ export class PitchKickGame {
     this.owner = null;
     this.ballFree = 0.45;
     this.lastKicker = null;
+    this.lastKickKind = null;
     this.kickerLock = 0;
     this.passReceiver = null;
   }
@@ -3604,6 +3857,7 @@ export class PitchKickGame {
     this.ballFree = 0.3;
     this.lastKicker = null;
     this.kickerLock = 0;
+    this.lastKickKind = null;
     this.passReceiver = null;
   }
 
@@ -3852,6 +4106,7 @@ export class PitchKickGame {
 
     // Clear transient ball/possession state so play restarts cleanly.
     this.lastKicker = null;
+    this.lastKickKind = null;
     this.lastTouchTeam = team;
     this.kickerLock = 0;
     this.stealProtect = 1.0;
@@ -3939,6 +4194,12 @@ export class PitchKickGame {
     nextKickoff: Team,
     side: 'left' | 'right',
   ) {
+    if (this.lastKickKind === 'shot' && this.lastKicker) {
+      if (!this.shotOnTargetRecorded) {
+        this.telemetry[this.lastKicker.team].shotsOnTarget += 1;
+        this.shotOnTargetRecorded = true;
+      }
+    }
     const CELEBRATION_SECS = 4;
     this.celebration = CELEBRATION_SECS;
     this.celebrateTeam = scoringTeam;
@@ -4006,7 +4267,7 @@ export class PitchKickGame {
   // ---- render (TV broadcast pseudo-3D) ------------------------------------
 
   private render() {
-    renderScene(this.ctx, {
+    const scene = {
       camX: this.camX,
       camY: this.camY,
       ball: this.ball,
@@ -4018,6 +4279,8 @@ export class PitchKickGame {
       secondaryControlled: this.localMultiplayer ? this.awayControlled : null,
       switchHint: this.switchHint,
       netRipple: this.netRipple,
-    });
+    };
+    renderScene(this.ctx, scene);
+    this.enhancements?.render(scene);
   }
 }

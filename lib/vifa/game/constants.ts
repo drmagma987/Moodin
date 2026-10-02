@@ -69,7 +69,7 @@ export const TEAMMATE_SPEED = 128;
 /** A chasing defender genuinely sprints after the ball. SLIGHTLY faster than a
  *  dribbler (who pays the DRIBBLE_MULT penalty) so a free defender can run down
  *  an average carrier — he isn't carrying the ball. ≈35 km/h. */
-export const AWAY_CHASE_SPEED = 204;
+export const AWAY_CHASE_SPEED = 196;
 /** The CPU carrier dribbles at the (penalised) carrying pace. */
 export const AWAY_CARRY_SPEED = 176;
 export const AWAY_FORMATION_SPEED = 120;
@@ -77,7 +77,7 @@ export const AWAY_FORMATION_SPEED = 120;
 export const RUN_SPEED = 178;
 /** Closing down the carrier / tracking a marked attacker — a real sprint.
  *  Matches AWAY_CHASE so your AI teammate can also run a dribbler down. */
-export const PRESS_SPEED = 204;
+export const PRESS_SPEED = 196;
 /** Contain (hold C): jockey speed while shadowing the carrier. */
 export const JOCKEY_SPEED = 150;
 /** Burst speed of the standing-tackle lunge (D without the ball). */
@@ -115,12 +115,12 @@ export const MATCH_REAL_SECS = 180; // real seconds a match actually lasts
 /** How quickly velocity approaches the desired velocity (per second). Lower =
  *  more inertia: a player can't instantly reverse or hit full pace from a
  *  standstill, momentum carries them (real-life / FIFA weight). */
-export const ACCEL = 5.5;
+export const ACCEL = 6.2;
 /** Acceleration while carrying the ball — heavier still, so a dribbler can't
  *  jink as sharply as a free runner. */
-export const DRIBBLE_ACCEL = 4.6;
+export const DRIBBLE_ACCEL = 5.25;
 /** Max turn rate in radians per second. */
-export const TURN_RATE = 10;
+export const TURN_RATE = 11.5;
 
 // ---- Cosmetic palettes ----------------------------------------------------
 export const HAIR_COLORS = ['#2b2118', '#0e0c0a', '#5a3b1e', '#857058'];

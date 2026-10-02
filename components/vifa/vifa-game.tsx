@@ -58,6 +58,7 @@ function selectionSeed(value: string): number {
 
 export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const enhancementCanvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<PitchKickGame | null>(null);
   const [phase, setPhase] = useState<Phase>('intro');
   const [mode, setMode] = useState<Mode>('match');
@@ -164,6 +165,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
         practice: true,
         bindings,
         matchRealSeconds: VIFA_MODS.matchRealSeconds,
+        enhancementCanvas: enhancementCanvasRef.current ?? undefined,
         seed: (selectionSeed(homeOption.id) ^ selectionSeed(awayOption.id) ^ gameKey) >>> 0,
       });
     } else {
@@ -172,6 +174,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
         localMultiplayer: mode === 'local',
         awayBindings: PLAYER_TWO_BINDINGS,
         matchRealSeconds: VIFA_MODS.matchRealSeconds,
+        enhancementCanvas: enhancementCanvasRef.current ?? undefined,
         seed: (selectionSeed(homeOption.id) ^ selectionSeed(awayOption.id) ^ gameKey) >>> 0,
       });
     }
@@ -317,6 +320,13 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
             aspectRatio: `${CANVAS_W} / ${CANVAS_H}`,
             maxHeight: 'calc(100vh - 168px)',
           }}
+        />
+        <canvas
+          ref={enhancementCanvasRef}
+          width={CANVAS_W}
+          height={CANVAS_H}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 block h-full w-full"
         />
 
         {/* Practice badge replaces the scoreboard — no score/team display. */}
@@ -512,12 +522,14 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
       </div>
 
       {mode === 'local' && phase === 'playing' && (
-        <div className="mx-4 mt-2 grid grid-cols-2 gap-2 rounded-xl border border-orange-400/25 bg-orange-400/10 p-3 text-center font-heading text-sm text-orange-100 sm:grid-cols-6">
+        <div className="mx-4 mt-2 grid grid-cols-2 gap-2 rounded-xl border border-orange-400/25 bg-orange-400/10 p-3 text-center font-heading text-sm text-orange-100 sm:grid-cols-8">
           <span><b>I J K L</b> Move</span>
           <span><b>Right Shift</b> Sprint</span>
           <span><b>O</b> Shoot / Tackle</span>
           <span><b>U</b> Short pass</span>
           <span><b>P</b> Long / Slide</span>
+          <span><b>Y</b> Through / Rush GK</span>
+          <span><b>;</b> Contain</span>
           <span><b>H</b> Switch</span>
         </div>
       )}

@@ -35,8 +35,12 @@ commit `e82cd43bc83498b0fd51b3530fe38fb15308888c`.
   movement, shooting, passing, dribbling, tackling, and duels.
 - `lib/vifa/game/engine.ts`: authoritative simulation,
   input, possession, AI, and rules.
-- `lib/vifa/game/render.ts`: canvas presentation and the
-  broadcast camera.
+- `lib/vifa/game/render.ts`: complete Canvas2D presentation and the broadcast
+  camera. This remains the guaranteed fallback picture.
+- `lib/vifa/game/render-pixi.ts`: optional transparent PixiJS/WebGL enhancement
+  layer. It consumes the same read-only `Scene` snapshot and adds projected
+  light, soft depth shadows, motion accents, airborne-ball cues, and net-impact
+  effects without participating in simulation.
 - `components/vifa/vifa-game.tsx`: VIFA branding, menus, HUD, key bindings, and
   the React shell around the engine.
 
@@ -78,9 +82,40 @@ The detailed checklist lives in `docs/vifa-roadmap.md`.
   snapshot for comparison and future server reconciliation.
 - `npm run vifa:test` replays commands through fresh real-engine instances and
   verifies byte-stable snapshot equality. It also rejects out-of-order ticks.
+- `PitchKickGame.exportTelemetry()` exposes deterministic per-side possession,
+  passing, shooting, tackling, save, and turnover counters for balance suites.
+
+## Gameplay balance foundation
+
+- Both local players now have the same first-time input buffer, assisted pass
+  reception, goalkeeper rush, switch scoring, containment, and teammate shape.
+- Local multiplayer keeps AI pressure and containment but leaves the actual
+  tackle to the two people playing; CPU matches retain teammate auto-tackles.
+- Attribute-to-physics curves are deliberately wider. Pace, passing weight and
+  error, shooting, dribbling, defending, physical duels, and goalkeeper quality
+  now have bounded but plainly visible gameplay effects.
+- CPU finishing uses the human shooting model, and CPU possession includes
+  circulation and wide crossing decisions instead of only central dribbling.
+- Lofted passes are contestable while still giving their intended receiver a
+  small read-of-flight advantage.
 
 The renderer may still use wall-clock time for purely visual crowd/net effects;
 those values never feed back into the authoritative match simulation.
+
+## Progressive 2.5D rendering
+
+The React host stacks a transparent PixiJS canvas over the existing Canvas2D
+match canvas. `PitchKickGame` sends the same scene snapshot to both renderers.
+This is intentional: WebGL setup is asynchronous and may fail on constrained
+devices, while the base renderer must remain immediately playable. The Pixi
+layer therefore fails closed and never owns input, physics, camera state, or
+authoritative timing.
+
+New GPU effects should stay presentation-only and should derive their placement
+from `projection.ts`. Avoid introducing a second animation/game clock or a
+physics package into the visual layer. If a future pass replaces base artwork
+with Pixi objects, migrate one render layer at a time while retaining Canvas2D
+as the fallback until mobile performance and visual parity are verified.
 
 ## Local multiplayer controls
 

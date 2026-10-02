@@ -35,6 +35,8 @@
     "lucide-react": "^1.17.0",
     "next": "16.1.6",
     "pdfjs-dist": "^6.3.289",
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.21.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "sonner": "^2.0.7",

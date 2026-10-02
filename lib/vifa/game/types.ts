@@ -25,6 +25,28 @@ export interface PlayerPhysicsScalars {
   readonly cachedContainTackleRadius: number;
   readonly cachedAiTackleRadius: number;
   readonly cachedPhysicalDuelOffset: number;
+  /** Goalkeeper-only quality scalars. Outfielders retain harmless baselines. */
+  readonly cachedKeeperReachMultiplier: number;
+  readonly cachedKeeperPositionMultiplier: number;
+  readonly cachedKeeperCatchMultiplier: number;
+  readonly cachedKeeperReactionMultiplier: number;
+}
+
+export interface TeamTelemetry {
+  possessionTicks: number;
+  passesAttempted: number;
+  passesCompleted: number;
+  shots: number;
+  shotsOnTarget: number;
+  tacklesAttempted: number;
+  tacklesWon: number;
+  saves: number;
+  turnoversWon: number;
+}
+
+export interface MatchTelemetry {
+  home: TeamTelemetry;
+  away: TeamTelemetry;
 }
 
 export interface Player extends PlayerPhysicsScalars {

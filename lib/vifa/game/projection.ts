@@ -17,7 +17,7 @@ const AVG_S = (S_FAR + S_NEAR) / 2;
 // it crops in close and pans to follow the ball both horizontally AND
 // vertically (depth). ZOOM>1 enlarges everything and crops the field; the
 // vertical camera (viewCamY) then keeps the action framed.
-export const ZOOM = 1.5;
+export const ZOOM = 1.42;
 /** Screen y where the camera-centre depth (viewCamY) is drawn (≈ the ball). */
 const VIEW_ANCHOR_Y = 400;
 
