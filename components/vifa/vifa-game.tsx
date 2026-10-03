@@ -343,6 +343,9 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     }
     gameRef.current = game;
     game.setTouchInput(touchHeldRef.current);
+    game.setPaused(
+      touchEnvironment.capable && !touchEnvironment.landscape,
+    );
     game.start();
     return () => {
       touchHeldRef.current = 0;
@@ -436,7 +439,6 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
   };
   const closeSettings = () => {
     setSettingsOpen(false);
-    gameRef.current?.setPaused(false);
   };
   // Persist + push every binding change to the live engine immediately.
   const applyBindings = (next: KeyBindings) => {
@@ -476,6 +478,10 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     touchHeldRef.current = 0;
     gameRef.current?.setTouchInput(0);
   }, [touchLandscapePlaying]);
+
+  useEffect(() => {
+    gameRef.current?.setPaused(settingsOpen || touchPortraitPlaying);
+  }, [gameKey, settingsOpen, touchPortraitPlaying]);
 
   return (
     <div className={`min-h-full flex flex-col bg-night-950 ${
@@ -665,7 +671,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                         Open Soccer · 7-a-side
                       </span>
                       <h2 className="-skew-x-6 font-display text-5xl italic leading-[0.82] tracking-[-0.04em] text-[#2d383d] sm:text-7xl lg:text-8xl">
-                        VIFA <span className="text-[#759d23]">2000</span>
+                        VIFA
                       </h2>
                     </div>
                   </div>
@@ -751,17 +757,18 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
 
         {/* Team-select overlay */}
         {phase === 'select' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-night-950/92 backdrop-blur-sm animate-fade-in px-4">
-            <h2 className="font-display text-3xl sm:text-6xl text-white tracking-wide mb-2">
-              SELECT <span className="text-volt-500">TEAMS</span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center overflow-y-auto bg-[#edf1ee] px-4 text-[#273237] animate-fade-in [background-image:radial-gradient(circle_at_10%_70%,rgba(145,216,62,0.22),transparent_30%),radial-gradient(circle_at_90%_20%,rgba(21,169,180,0.14),transparent_28%),repeating-linear-gradient(165deg,transparent_0,transparent_16px,rgba(77,95,106,0.07)_17px,transparent_19px)]">
+            <div className="mb-2 h-1 w-40 bg-gradient-to-r from-[#16a6b3] via-[#91d83e] to-transparent" />
+            <h2 className="mb-2 -skew-x-6 font-display text-3xl italic tracking-wide text-[#273237] sm:text-6xl">
+              SELECT <span className="text-[#759d23]">TEAMS</span>
             </h2>
-            <p className="font-body text-night-300 text-sm sm:text-lg mb-4 text-center">
-              <span className="text-volt-400 font-semibold">← →</span> to choose
+            <p className="mb-4 text-center font-body text-sm text-[#5c6c73] sm:text-lg">
+              <span className="font-semibold text-[#6f9623]">← →</span> to choose
               ·{' '}
-              <span className="text-volt-400 font-semibold">Enter / S / D</span>{' '}
+              <span className="font-semibold text-[#6f9623]">Enter / S / D</span>{' '}
               to confirm
             </p>
-            <div className="mb-4 rounded-full border border-volt-500/30 bg-volt-500/10 px-4 py-1.5 font-heading text-[10px] uppercase tracking-[0.24em] text-volt-300 sm:text-xs">
+            <div className="mb-4 border border-[#7f969b] bg-white/75 px-4 py-1.5 font-heading text-[10px] uppercase tracking-[0.24em] text-[#4f656d] shadow-sm sm:text-xs">
               Cross-era matchups enabled
             </div>
             <div className="grid w-full max-w-3xl grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-1 sm:gap-10">
@@ -779,7 +786,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                 onPrevious={() => cycleSelection('home', -1)}
                 onNext={() => cycleSelection('home', 1)}
               />
-              <div className="flex items-center font-display text-2xl sm:text-5xl text-night-500">
+              <div className="flex items-center font-display text-2xl text-[#829096] sm:text-5xl">
                 VS
               </div>
               <TeamCrest
@@ -801,7 +808,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
             <button
               type="button"
               onClick={confirmActiveSelection}
-              className="mt-4 rounded-lg bg-volt-500 px-6 py-2 font-heading text-sm uppercase tracking-[0.2em] text-night-950 transition-colors hover:bg-volt-400"
+              className="mt-4 border border-[#5d781d] bg-gradient-to-r from-[#90b936] to-[#b8df62] px-6 py-2 font-heading text-sm uppercase tracking-[0.2em] text-[#26310d] shadow-[0_4px_10px_rgba(62,83,34,0.25)] transition-colors hover:brightness-105"
             >
               {activeSide === 'home'
                 ? `Lock ${home.name} ${homeOption.year}`
@@ -859,7 +866,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
             Turn your phone sideways
           </h2>
           <p className="mt-3 max-w-sm font-body text-sm leading-relaxed text-night-200">
-            VIFA&apos;s joystick and action buttons appear automatically in landscape mode. Keep this webpage open and rotate your phone now. If the screen will not rotate, turn off Orientation Lock in iPhone Control Center.
+            The match is paused—no time or action will pass. VIFA&apos;s joystick and action buttons appear automatically in landscape mode. Keep this webpage open and rotate your phone now. If the screen will not rotate, turn off Orientation Lock in iPhone Control Center.
           </p>
           <button
             type="button"
@@ -1155,8 +1162,8 @@ function SelectionCount({
     <span
       className={`rounded-full border px-2.5 py-1 font-heading text-[10px] uppercase tracking-wider sm:text-xs ${
         ready
-          ? 'border-volt-500/40 bg-volt-500/10 text-volt-300'
-          : 'border-orange-400/40 bg-orange-400/10 text-orange-200'
+          ? 'border-[#789c2a] bg-[#dff0ad] text-[#405a13]'
+          : 'border-[#b36b4b] bg-[#f7e3d5] text-[#83442b]'
       }`}
     >
       {label} {count}/{limit}
@@ -1197,22 +1204,22 @@ function SquadBuilder({
   );
 
   return (
-    <div className="absolute inset-0 overflow-y-auto bg-night-950/96 backdrop-blur-sm animate-fade-in">
+    <div className="absolute inset-0 overflow-y-auto bg-[#edf1ee] text-[#273237] animate-fade-in [background-image:radial-gradient(circle_at_5%_30%,rgba(145,216,62,0.18),transparent_26%),radial-gradient(circle_at_95%_15%,rgba(21,169,180,0.12),transparent_24%),repeating-linear-gradient(165deg,transparent_0,transparent_17px,rgba(77,95,106,0.055)_18px,transparent_20px)]">
       <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-3 sm:px-6 sm:py-5">
-        <div className="sticky top-0 z-20 -mx-3 -mt-3 mb-3 border-b border-night-800 bg-night-950/95 px-3 py-3 backdrop-blur sm:-mx-6 sm:-mt-5 sm:px-6 sm:py-4">
+        <div className="sticky top-0 z-20 -mx-3 -mt-3 mb-3 border-b border-[#aab5b9] bg-white/90 px-3 py-3 shadow-[0_4px_12px_rgba(60,75,80,0.12)] backdrop-blur sm:-mx-6 sm:-mt-5 sm:px-6 sm:py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <span className="font-heading text-[10px] uppercase tracking-[0.28em] text-volt-400 sm:text-xs">
+              <span className="font-heading text-[10px] uppercase tracking-[0.28em] text-[#657980] sm:text-xs">
                 {sideLabel} · {option.year} World Cup
               </span>
-              <h2 className="truncate font-display text-3xl tracking-wide text-white sm:text-5xl">
-                BUILD <span className="text-volt-500">{option.team.abbr} 7</span>
+              <h2 className="-skew-x-6 truncate font-display text-3xl italic tracking-wide text-[#273237] sm:text-5xl">
+                BUILD <span className="text-[#759d23]">{option.team.abbr} 7</span>
               </h2>
             </div>
             <button
               type="button"
               onClick={onAutoPick}
-              className="shrink-0 rounded-md border border-night-700 bg-night-900 px-3 py-2 font-heading text-[10px] uppercase tracking-wider text-night-200 transition-colors hover:border-volt-500 hover:text-volt-300 sm:text-xs"
+              className="shrink-0 border border-[#8d9ca1] bg-gradient-to-r from-[#d8dfe0] to-white px-3 py-2 font-heading text-[10px] uppercase tracking-wider text-[#3e4d53] shadow-sm transition-colors hover:border-[#789c2a] hover:text-[#5f8120] sm:text-xs"
             >
               Pick best 7
             </button>
@@ -1223,7 +1230,7 @@ function SquadBuilder({
           </div>
         </div>
 
-        <p className="mb-3 font-body text-sm text-night-300 sm:text-base">
+        <p className="mb-3 border-l-4 border-[#8bb33a] bg-white/65 px-3 py-2 font-body text-sm text-[#58686f] sm:text-base">
           Pick any six outfielders. VIFA fits them into your shape using their actual attributes—an attacker can play midfield, but only their passing, dribbling, defending, pace, and strength make it work.
         </p>
 
@@ -1237,19 +1244,19 @@ function SquadBuilder({
                 role="radio"
                 aria-checked={active}
                 onClick={() => onFormationChange(formation.id)}
-                className={`rounded-xl border p-2.5 text-left transition-colors ${
+                className={`border p-2.5 text-left shadow-sm transition-colors ${
                   active
-                    ? 'border-volt-500 bg-volt-500/12'
-                    : 'border-night-700 bg-night-900 hover:border-volt-500/50'
+                    ? 'border-[#789c2a] bg-gradient-to-r from-[#dcec9c] to-white'
+                    : 'border-[#aab5b9] bg-white/80 hover:border-[#789c2a]'
                 }`}
               >
-                <span className={`block font-display text-2xl ${active ? 'text-volt-400' : 'text-white'}`}>
+                <span className={`block font-display text-2xl ${active ? 'text-[#668b20]' : 'text-[#3c484d]'}`}>
                   {formation.id}
                 </span>
-                <span className="block font-heading text-xs uppercase tracking-wider text-white">
+                <span className="block font-heading text-xs uppercase tracking-wider text-[#273237]">
                   {formation.name}
                 </span>
-                <span className="mt-1 block font-body text-[11px] leading-snug text-night-400">
+                <span className="mt-1 block font-body text-[11px] leading-snug text-[#718087]">
                   {formation.identity}
                 </span>
               </button>
@@ -1257,8 +1264,8 @@ function SquadBuilder({
           })}
         </div>
 
-        <div className="mb-4 rounded-xl border border-night-700 bg-night-900/80 px-3 py-2 font-body text-sm text-night-300">
-          <span className="font-heading uppercase tracking-wider text-volt-300">
+        <div className="mb-4 border border-[#9eaaae] bg-[#dbe2e2]/85 px-3 py-2 font-body text-sm text-[#53636a]">
+          <span className="font-heading uppercase tracking-wider text-[#63871e]">
             {SEVEN_A_SIDE_FORMATIONS.find((formation) => formation.id === formationId)?.name} risk:{' '}
           </span>
           {SEVEN_A_SIDE_FORMATIONS.find((formation) => formation.id === formationId)?.tradeoff}
@@ -1270,10 +1277,10 @@ function SquadBuilder({
             return (
               <section key={role} aria-labelledby={`squad-${role}`}>
                 <div className="mb-2 flex items-baseline justify-between">
-                  <h3 id={`squad-${role}`} className="font-display text-xl tracking-wide text-white sm:text-2xl">
+                  <h3 id={`squad-${role}`} className="font-display text-xl tracking-wide text-[#273237] sm:text-2xl">
                     {ROLE_LABELS[role]}
                   </h3>
-                  <span className="font-heading text-[10px] uppercase tracking-wider text-night-400">
+                  <span className="font-heading text-[10px] uppercase tracking-wider text-[#76858b]">
                     Natural role
                   </span>
                 </div>
@@ -1293,20 +1300,20 @@ function SquadBuilder({
                           aria-pressed={isSelected}
                           disabled={blocked}
                           onClick={() => onToggle(player)}
-                          className={`rounded-xl border p-2.5 text-left transition-all ${
+                          className={`border p-2.5 text-left shadow-sm transition-all ${
                             isSelected
-                              ? 'border-volt-500 bg-volt-500/12 shadow-[0_0_0_1px_rgba(184,255,44,0.25)]'
+                              ? 'border-[#789c2a] bg-gradient-to-r from-[#e3f1b5] to-white shadow-[0_0_0_1px_rgba(120,156,42,0.2)]'
                               : blocked
-                                ? 'cursor-not-allowed border-night-800 bg-night-900/45 opacity-45'
-                                : 'border-night-700 bg-night-900 hover:border-volt-500/60'
+                                ? 'cursor-not-allowed border-[#c5cdcf] bg-[#d9dede]/65 opacity-45'
+                                : 'border-[#aab5b9] bg-white/85 hover:border-[#789c2a]'
                           }`}
                         >
                           <span className="flex items-start justify-between gap-2">
                             <span className="min-w-0">
-                              <span className="block truncate font-heading text-sm uppercase tracking-wide text-white">
-                                <span className="mr-1.5 text-night-400">#{player.num}</span>{player.name}
+                              <span className="block truncate font-heading text-sm uppercase tracking-wide text-[#273237]">
+                                <span className="mr-1.5 text-[#738188]">#{player.num}</span>{player.name}
                               </span>
-                              <span className="mt-0.5 block font-body text-[11px] text-night-400">
+                              <span className="mt-0.5 block font-body text-[11px] text-[#6a797f]">
                                 {assignment
                                   ? assignment.targetRole === player.role
                                     ? `Natural ${ROLE_LABELS[assignment.targetRole]} · Fit ${assignment.fitRating}`
@@ -1317,7 +1324,7 @@ function SquadBuilder({
                               </span>
                             </span>
                             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg font-display text-xl ${
-                              isSelected ? 'bg-volt-500 text-night-950' : 'bg-night-800 text-white'
+                              isSelected ? 'bg-[#8fb936] text-[#27310f]' : 'bg-[#d7dfe0] text-[#273237]'
                             }`}>
                               {player.overallRating}
                             </span>
@@ -1325,8 +1332,8 @@ function SquadBuilder({
                           <span className="mt-2 grid grid-cols-6 gap-1">
                             {(['PAC', 'SHO', 'PAS', 'DRI', 'DEF', 'PHY'] as const).map((label, index) => (
                               <span key={label} className="text-center">
-                                <span className="block font-heading text-[8px] text-night-500">{label}</span>
-                                <span className="block font-heading text-[11px] text-night-100">{stats[index]}</span>
+                                <span className="block font-heading text-[8px] text-[#879399]">{label}</span>
+                                <span className="block font-heading text-[11px] text-[#334046]">{stats[index]}</span>
                               </span>
                             ))}
                           </span>
@@ -1339,15 +1346,15 @@ function SquadBuilder({
           })}
         </div>
 
-        <div className="sticky bottom-0 z-20 -mx-3 mt-4 flex items-center justify-between gap-3 border-t border-night-800 bg-night-950/95 px-3 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-          <span className={`font-heading text-xs uppercase tracking-wider ${complete ? 'text-volt-300' : 'text-orange-200'}`}>
+        <div className="sticky bottom-0 z-20 -mx-3 mt-4 flex items-center justify-between gap-3 border-t border-[#aab5b9] bg-white/92 px-3 py-3 shadow-[0_-4px_12px_rgba(60,75,80,0.1)] backdrop-blur sm:-mx-6 sm:px-6">
+          <span className={`font-heading text-xs uppercase tracking-wider ${complete ? 'text-[#5f8120]' : 'text-[#9a5234]'}`}>
             {complete ? '7/7 ready' : 'Fill every position'}
           </span>
           <button
             type="button"
             onClick={onConfirm}
             disabled={!complete}
-            className="rounded-lg bg-volt-500 px-4 py-2.5 font-heading text-xs uppercase tracking-[0.16em] text-night-950 transition-colors hover:bg-volt-400 disabled:cursor-not-allowed disabled:bg-night-700 disabled:text-night-400 sm:px-6 sm:text-sm"
+            className="border border-[#5d781d] bg-gradient-to-r from-[#90b936] to-[#b8df62] px-4 py-2.5 font-heading text-xs uppercase tracking-[0.16em] text-[#26310d] shadow-sm transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:border-[#aeb8ba] disabled:bg-[#d4dbdc] disabled:text-[#8a969a] sm:px-6 sm:text-sm"
           >
             {confirmLabel}
           </button>
@@ -1465,26 +1472,26 @@ function SettingsModal({
       onClick={onClose}
     >
       <div
-        className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-night-900 ring-1 ring-night-700 shadow-2xl shadow-black/60 animate-slide-up"
+        className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden border border-[#829296] bg-[#edf1ee] shadow-2xl shadow-black/60 animate-slide-up"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 flex items-center justify-between px-6 py-4 bg-night-900 border-b border-night-800">
+        <div className="sticky top-0 flex items-center justify-between border-b border-[#9ca9ad] bg-gradient-to-r from-[#d1d9db] via-white to-[#eaf2d9] px-6 py-4">
           <div className="flex items-center gap-2">
-            <Settings size={18} className="text-volt-400" />
-            <h3 className="font-display text-2xl text-white tracking-wide">
+            <Settings size={18} className="text-[#6e9423]" />
+            <h3 className="-skew-x-6 font-display text-2xl italic tracking-wide text-[#273237]">
               CONTROLS &amp; HELP
             </h3>
           </div>
           <button
             onClick={onClose}
             aria-label="Close settings"
-            className="text-night-300 hover:text-white transition-colors"
+            className="text-[#607078] transition-colors hover:text-[#273237]"
           >
             <X size={22} />
           </button>
         </div>
 
-        <div className="overflow-y-auto px-6 py-4">
+        <div className="overflow-y-auto bg-[#182126] px-6 py-4">
           <div className="mb-5 rounded-xl border border-volt-500/25 bg-volt-500/5 px-4 py-3 font-body text-sm leading-relaxed text-night-200">
             <b className="text-white">You opened the correct VIFA screen.</b>{' '}
             This is part of the game webpage—it is not a computer-settings
@@ -1504,7 +1511,7 @@ function SettingsModal({
             </div>
             <ol className="mt-3 grid gap-2 font-body text-sm leading-relaxed text-night-200 sm:grid-cols-2">
               <li><b className="text-white">1. Choose the game normally.</b> Tap Play Match or Practice, then pick your team, squad, and formation.</li>
-              <li><b className="text-white">2. Rotate at kickoff.</b> Turn the phone sideways when the match begins. If it stays upright, open iPhone Control Center and turn off Orientation Lock.</li>
+              <li><b className="text-white">2. Rotate at kickoff.</b> The match stays paused until the phone is sideways. If it stays upright, open iPhone Control Center and turn off Orientation Lock.</li>
               <li><b className="text-white">3. Left thumb moves.</b> Drag anywhere inside the circular joystick. Diagonal movement works too.</li>
               <li><b className="text-white">4. Right thumb acts.</b> Hold Sprint, passes, or Shoot to charge them; lift your thumb to release the kick.</li>
             </ol>
@@ -1721,18 +1728,18 @@ function SettingsModal({
           </section>
         </div>
 
-        <div className="sticky bottom-0 flex items-center justify-between px-6 py-4 bg-night-900 border-t border-night-800">
+        <div className="sticky bottom-0 flex items-center justify-between border-t border-[#9ca9ad] bg-gradient-to-r from-[#d1d9db] via-white to-[#eaf2d9] px-6 py-4">
           <button
             onClick={onReset}
             disabled={isDefault}
-            className="flex items-center gap-2 font-heading uppercase text-xs tracking-wider text-night-300 hover:text-volt-400 transition-colors disabled:opacity-40 disabled:hover:text-night-300"
+            className="flex items-center gap-2 font-heading text-xs uppercase tracking-wider text-[#56676e] transition-colors hover:text-[#668c20] disabled:opacity-40 disabled:hover:text-[#56676e]"
           >
             <RotateCcw size={14} />
             Reset keyboard defaults
           </button>
           <button
             onClick={onClose}
-            className="rounded-md bg-volt-500 px-5 py-2 font-heading uppercase text-xs tracking-wider text-night-950 hover:bg-volt-400 transition-colors"
+            className="border border-[#5d781d] bg-gradient-to-r from-[#90b936] to-[#b8df62] px-5 py-2 font-heading text-xs uppercase tracking-wider text-[#26310d] shadow-sm transition-colors hover:brightness-105"
           >
             Done
           </button>
@@ -1829,7 +1836,7 @@ function TeamCrest({
     <div className="flex min-w-0 flex-col items-center gap-2 sm:gap-3">
       <span
         className={`font-heading uppercase tracking-[0.3em] text-sm ${
-          active ? 'text-volt-400' : 'text-night-300'
+          active ? 'text-[#6f9623]' : 'text-[#66777e]'
         }`}
       >
         {tag}
@@ -1840,7 +1847,7 @@ function TeamCrest({
           id={`${tag}-era`}
           value={year}
           onChange={(event) => onYearChange(Number(event.target.value))}
-          className="min-w-0 rounded-md border border-night-700 bg-night-900 px-2 py-1.5 font-heading text-xs text-white outline-none focus:border-volt-500"
+          className="min-w-0 border border-[#9ba8ac] bg-white/85 px-2 py-1.5 font-heading text-xs text-[#273237] outline-none focus:border-[#7da32b]"
         >
           {years.map((availableYear) => (
             <option key={availableYear} value={availableYear}>{availableYear}</option>
@@ -1851,7 +1858,7 @@ function TeamCrest({
           id={`${tag}-team`}
           value={selectionId}
           onChange={(event) => onTeamChange(event.target.value)}
-          className="min-w-0 rounded-md border border-night-700 bg-night-900 px-2 py-1.5 font-body text-xs text-white outline-none focus:border-volt-500"
+          className="min-w-0 border border-[#9ba8ac] bg-white/85 px-2 py-1.5 font-body text-xs text-[#273237] outline-none focus:border-[#7da32b]"
         >
           {yearOptions.map((option) => (
             <option key={option.id} value={option.id}>{option.team.name}</option>
@@ -1864,7 +1871,7 @@ function TeamCrest({
           onClick={onPrevious}
           aria-label={`Previous ${year} team`}
           className={`hidden shrink-0 transition-opacity sm:block ${
-            active ? 'text-volt-500 animate-pulse' : 'pointer-events-none text-transparent'
+            active ? 'text-[#759d23] animate-pulse' : 'pointer-events-none text-transparent'
           }`}
         >
           <ChevronLeft size={32} />
@@ -1872,17 +1879,17 @@ function TeamCrest({
         <div
           className={`relative flex h-32 w-28 flex-col items-center justify-center overflow-hidden rounded-2xl transition-all sm:h-44 sm:w-40 ${
             active
-              ? 'ring-4 ring-volt-500 scale-105 shadow-xl shadow-black/40'
+              ? 'ring-4 ring-[#8bb33a] scale-105 shadow-xl shadow-[#526169]/30'
               : locked
-                ? 'ring-2 ring-volt-700/60 opacity-90'
-                : 'ring-1 ring-night-700 opacity-70'
+                ? 'ring-2 ring-[#78982e]/60 opacity-90'
+                : 'ring-1 ring-[#9eaaae] opacity-75'
           }`}
           style={{
-            backgroundImage: `radial-gradient(circle at 50% 38%, ${team.color}33, rgba(10,12,18,0.96) 72%), linear-gradient(160deg, #1b2030, #0c0f17)`,
+            backgroundImage: `radial-gradient(circle at 50% 38%, ${team.color}38, rgba(255,255,255,0.94) 70%), linear-gradient(160deg, #f8faf8, #cbd4d5)`,
           }}
         >
           {locked && (
-            <span className="absolute top-2 right-2 bg-volt-500 text-night-950 rounded-full p-1 z-10">
+            <span className="absolute right-2 top-2 z-10 rounded-full bg-[#91bc38] p-1 text-[#26310d]">
               <Check size={18} strokeWidth={3} />
             </span>
           )}
@@ -1893,16 +1900,16 @@ function TeamCrest({
           onClick={onNext}
           aria-label={`Next ${year} team`}
           className={`hidden shrink-0 transition-opacity sm:block ${
-            active ? 'text-volt-500 animate-pulse' : 'pointer-events-none text-transparent'
+            active ? 'text-[#759d23] animate-pulse' : 'pointer-events-none text-transparent'
           }`}
         >
           <ChevronRight size={32} />
         </button>
       </div>
-      <span className="font-heading text-center text-lg uppercase leading-tight tracking-wider text-white sm:text-2xl">
+      <span className="font-heading text-center text-lg uppercase leading-tight tracking-wider text-[#273237] sm:text-2xl">
         {team.name}
       </span>
-      <span className="font-heading text-[10px] uppercase tracking-[0.22em] text-volt-400 sm:text-xs">
+      <span className="font-heading text-[10px] uppercase tracking-[0.22em] text-[#6f9623] sm:text-xs">
         World Cup {year}
       </span>
     </div>

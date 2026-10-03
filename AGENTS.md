@@ -532,6 +532,13 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - the main menu and `Controls & Help` now explain exactly when the mobile
     overlay appears and what each thumb does
   - added deterministic tests for touch dead zones, diagonals, and action edges
+- Followed up on mobile kickoff and menu cohesion:
+  - portrait mode now pauses the actual engine before the match clock or player
+    movement advances, and only resumes after landscape controls are available
+  - removed the `VIFA 2000` wording in favor of the standalone `VIFA` identity
+  - carried the silver/white, green, teal, speed-line, and beveled early-console
+    football aesthetic through team selection, squad/formation building, and
+    the frame around `Controls & Help`
 
 Future Codex sessions should update this file when they make meaningful feature, architecture, deployment, or gameplay-balance changes.
 
