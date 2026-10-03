@@ -9,6 +9,7 @@ import {
   Gamepad2,
   Keyboard,
   Settings,
+  Smartphone,
   X,
 } from 'lucide-react';
 import {
@@ -63,6 +64,8 @@ import {
   type ControllerBindings,
 } from '@/lib/vifa/game/gamepad';
 import { PLAYER_TWO_BINDINGS, VIFA_MODS } from '@/lib/vifa/mods';
+import { INPUT_BITS } from '@/lib/vifa/game/determinism';
+import { TOUCH_MOVE_MASK, touchDirectionBits } from '@/lib/vifa/game/touch';
 
 type Phase = 'intro' | 'select' | 'squad' | 'playing';
 type Mode = 'match' | 'local' | 'practice';
@@ -99,6 +102,32 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     () => loadControllerBindings(),
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const touchHeldRef = useRef(0);
+  const [touchEnvironment, setTouchEnvironment] = useState({
+    capable: false,
+    landscape: false,
+  });
+
+  useEffect(() => {
+    const updateTouchEnvironment = () => {
+      const previewTouch = new URLSearchParams(window.location.search).has(
+        'touch-preview',
+      );
+      setTouchEnvironment({
+        capable: previewTouch ||
+          navigator.maxTouchPoints > 0 ||
+          window.matchMedia('(pointer: coarse)').matches,
+        landscape: window.innerWidth > window.innerHeight,
+      });
+    };
+    updateTouchEnvironment();
+    window.addEventListener('resize', updateTouchEnvironment);
+    window.addEventListener('orientationchange', updateTouchEnvironment);
+    return () => {
+      window.removeEventListener('resize', updateTouchEnvironment);
+      window.removeEventListener('orientationchange', updateTouchEnvironment);
+    };
+  }, []);
 
   // Default the team picker to the next/live World Cup 2026 fixture so the
   // matchup feels topical the moment you open the game.
@@ -313,8 +342,11 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
       });
     }
     gameRef.current = game;
+    game.setTouchInput(touchHeldRef.current);
     game.start();
     return () => {
+      touchHeldRef.current = 0;
+      game.setTouchInput(0);
       game.stop();
       gameRef.current = null;
     };
@@ -384,6 +416,8 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
   };
 
   const handleRestart = () => {
+    touchHeldRef.current = 0;
+    gameRef.current?.setTouchInput(0);
     setPhase('intro');
     setActiveSide('home');
     setActiveSquadSide('home');
@@ -395,6 +429,8 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
   };
 
   const openSettings = () => {
+    touchHeldRef.current = 0;
+    gameRef.current?.setTouchInput(0);
     gameRef.current?.setPaused(true);
     setSettingsOpen(true);
   };
@@ -414,10 +450,41 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     gameRef.current?.setControllerBindings(next);
   };
 
+  const setTouchMovement = useCallback((movementBits: number) => {
+    const next =
+      (touchHeldRef.current & ~TOUCH_MOVE_MASK) |
+      (movementBits & TOUCH_MOVE_MASK);
+    touchHeldRef.current = next;
+    gameRef.current?.setTouchInput(next);
+  }, []);
+
+  const setTouchAction = useCallback((bit: number, down: boolean) => {
+    const next = down
+      ? touchHeldRef.current | bit
+      : touchHeldRef.current & ~bit;
+    touchHeldRef.current = next;
+    gameRef.current?.setTouchInput(next);
+  }, []);
+
+  const touchLandscapePlaying =
+    phase === 'playing' && touchEnvironment.capable && touchEnvironment.landscape;
+  const touchPortraitPlaying =
+    phase === 'playing' && touchEnvironment.capable && !touchEnvironment.landscape;
+
+  useEffect(() => {
+    if (touchLandscapePlaying) return;
+    touchHeldRef.current = 0;
+    gameRef.current?.setTouchInput(0);
+  }, [touchLandscapePlaying]);
+
   return (
-    <div className="min-h-full flex flex-col bg-night-950">
+    <div className={`min-h-full flex flex-col bg-night-950 ${
+      touchLandscapePlaying ? 'fixed inset-0 z-40 min-h-0 overflow-hidden' : ''
+    }`}>
       {/* Brand bar — slim so the pitch gets the screen */}
-      <header className="w-full flex items-center justify-between px-4 py-2 animate-fade-in">
+      <header className={`w-full items-center justify-between px-4 py-2 animate-fade-in ${
+        touchLandscapePlaying ? 'hidden' : 'flex'
+      }`}>
         <div className="flex items-baseline gap-3">
           <span className="font-display text-2xl sm:text-3xl leading-none tracking-wide text-volt-500">
             VIFA <span className="text-white">LAB</span>
@@ -456,19 +523,33 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
       </header>
 
       {/* Pitch — full-bleed width, height-capped so it stays on one screen */}
-      <div className="relative mx-auto w-fit max-w-full overflow-hidden border-y border-night-800 shadow-2xl animate-slide-up">
+      <div
+        className={`relative mx-auto overflow-hidden shadow-2xl animate-slide-up ${
+          touchLandscapePlaying
+            ? 'w-auto max-w-full border-0'
+            : 'w-fit max-w-full border-y border-night-800'
+        }`}
+        style={touchLandscapePlaying ? {
+          width: `min(100vw, calc(100dvh * ${CANVAS_W / CANVAS_H}))`,
+          aspectRatio: `${CANVAS_W} / ${CANVAS_H}`,
+        } : undefined}
+      >
         <canvas
           ref={canvasRef}
           width={CANVAS_W}
           height={CANVAS_H}
-          className={`block max-w-full ${
-            phase === 'playing'
+          className={`block ${
+            touchLandscapePlaying
+              ? 'h-full w-full max-w-none'
+              : phase === 'playing'
               ? 'h-auto w-auto'
               : 'h-[620px] w-screen sm:h-auto sm:w-auto'
           }`}
           style={{
             aspectRatio: `${CANVAS_W} / ${CANVAS_H}`,
-            maxHeight: 'calc(100vh - 168px)',
+            maxHeight: touchLandscapePlaying
+              ? '100dvh'
+              : 'calc(100vh - 168px)',
           }}
         />
         <canvas
@@ -634,6 +715,14 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                     </span>
                     <span className="font-display text-xl text-[#a9dc49]" aria-hidden="true">▶</span>
                   </button>
+
+                  <div className="mt-2 flex items-center gap-2 border border-[#8fa0a4] bg-white/75 px-3 py-2 text-[#344248]">
+                    <Smartphone size={19} className="shrink-0 text-[#168f99]" />
+                    <p className="font-body text-[11px] leading-snug sm:text-xs">
+                      <b className="font-heading uppercase tracking-wider">Playing on iPhone?</b>{' '}
+                      Choose a mode normally. At kickoff, turn the phone sideways and touch controls appear automatically.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -752,10 +841,38 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
               : 'Lock squad · Kick off'}
           />
         )}
+
+        {touchLandscapePlaying && !settingsOpen && (
+          <TouchControls
+            onMovement={setTouchMovement}
+            onAction={setTouchAction}
+            onMenu={handleRestart}
+            onSettings={openSettings}
+          />
+        )}
       </div>
 
+      {touchPortraitPlaying && !settingsOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-night-950/95 px-8 text-center backdrop-blur-sm">
+          <Smartphone size={52} className="mb-4 rotate-90 text-volt-400" />
+          <h2 className="font-display text-3xl uppercase tracking-wide text-white">
+            Turn your phone sideways
+          </h2>
+          <p className="mt-3 max-w-sm font-body text-sm leading-relaxed text-night-200">
+            VIFA&apos;s joystick and action buttons appear automatically in landscape mode. Keep this webpage open and rotate your phone now. If the screen will not rotate, turn off Orientation Lock in iPhone Control Center.
+          </p>
+          <button
+            type="button"
+            onClick={handleRestart}
+            className="mt-6 rounded-lg border border-night-600 px-5 py-2 font-heading text-xs uppercase tracking-wider text-night-200"
+          >
+            Return to menu
+          </button>
+        </div>
+      )}
+
       {/* Controls legend */}
-      <div className="w-full px-4 mt-2 grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2 animate-fade-in">
+      <div className={`${touchLandscapePlaying ? 'hidden' : 'grid'} w-full px-4 mt-2 grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2 animate-fade-in`}>
         {controlsLegend(bindings).map((c) => (
           <div
             key={c.label}
@@ -771,7 +888,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
         ))}
       </div>
 
-      {mode === 'local' && phase === 'playing' && (
+      {mode === 'local' && phase === 'playing' && !touchLandscapePlaying && (
         <div className="mx-4 mt-2 grid grid-cols-2 gap-2 rounded-xl border border-orange-400/25 bg-orange-400/10 p-3 text-center font-heading text-sm text-orange-100 sm:grid-cols-8">
           <span><b>I J K L</b> Move</span>
           <span><b>Right Shift</b> Sprint</span>
@@ -784,7 +901,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
         </div>
       )}
 
-      <p className="mt-2 mb-3 px-4 text-xs text-night-300 font-body text-center max-w-3xl mx-auto">
+      <p className={`${touchLandscapePlaying ? 'hidden' : 'block'} mt-2 mb-3 px-4 text-xs text-night-300 font-body text-center max-w-3xl mx-auto`}>
         Tip: hold a pass/shot key to charge the power gauge, release to kick —
         a quick tap plays it soft. Defending: tap{' '}
         <span className="text-volt-400">{codeLabel(bindings.shot)}</span> for a
@@ -796,9 +913,9 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
         to jump to the hinted ▽ player.
       </p>
 
-      <p className="mb-4 px-4 text-center text-xs text-night-400 font-body">
-        Current build: CPU, practice, controller support, and local two-player
-        play. Source
+      <p className={`${touchLandscapePlaying ? 'hidden' : 'block'} mb-4 px-4 text-center text-xs text-night-400 font-body`}>
+        Current build: CPU, practice, mobile touch controls, controller support,
+        and local two-player play. Source
         adapted from{' '}
         <a
           href="https://github.com/modelence/open-soccer"
@@ -825,6 +942,195 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
         />
       )}
     </div>
+  );
+}
+
+function TouchControls({
+  onMovement,
+  onAction,
+  onMenu,
+  onSettings,
+}: {
+  onMovement: (bits: number) => void;
+  onAction: (bit: number, down: boolean) => void;
+  onMenu: () => void;
+  onSettings: () => void;
+}) {
+  const stickPointer = useRef<number | null>(null);
+  const [stick, setStick] = useState({ x: 0, y: 0 });
+
+  useEffect(() => () => onMovement(0), [onMovement]);
+
+  const updateStick = (element: HTMLDivElement, clientX: number, clientY: number) => {
+    const rect = element.getBoundingClientRect();
+    const radius = rect.width / 2;
+    const rawX = (clientX - (rect.left + radius)) / radius;
+    const rawY = (clientY - (rect.top + radius)) / radius;
+    const magnitude = Math.hypot(rawX, rawY);
+    const scale = magnitude > 1 ? 1 / magnitude : 1;
+    const x = rawX * scale;
+    const y = rawY * scale;
+    setStick({ x, y });
+    onMovement(touchDirectionBits(x, y));
+  };
+
+  const releaseStick = (pointerId: number) => {
+    if (stickPointer.current !== pointerId) return;
+    stickPointer.current = null;
+    setStick({ x: 0, y: 0 });
+    onMovement(0);
+  };
+
+  return (
+    <div
+      className="pointer-events-none fixed inset-0 z-[60] select-none overflow-hidden touch-none"
+      aria-label="Mobile match controls"
+    >
+      <div className="pointer-events-auto absolute left-1/2 top-2 -translate-x-1/2 rounded-full border border-white/20 bg-night-950/75 px-3 py-1 font-heading text-[9px] uppercase tracking-[0.16em] text-white shadow-lg backdrop-blur-sm">
+        Left thumb moves · Right thumb plays
+      </div>
+
+      <div
+        className="pointer-events-auto absolute left-2 top-2 flex gap-1"
+        style={{ paddingLeft: 'env(safe-area-inset-left)' }}
+      >
+        <button
+          type="button"
+          onClick={onMenu}
+          className="rounded-md border border-white/20 bg-night-950/75 px-3 py-2 font-heading text-[9px] uppercase tracking-wider text-white backdrop-blur-sm"
+        >
+          Menu
+        </button>
+        <button
+          type="button"
+          onClick={onSettings}
+          className="flex items-center rounded-md border border-white/20 bg-night-950/75 px-2.5 py-2 text-white backdrop-blur-sm"
+          aria-label="Open controls and help"
+        >
+          <Settings size={14} />
+        </button>
+      </div>
+
+      <div
+        className="absolute bottom-3 left-3"
+        style={{ paddingLeft: 'env(safe-area-inset-left)' }}
+      >
+        <div
+          role="application"
+          aria-label="Movement joystick"
+          className="pointer-events-auto relative h-[116px] w-[116px] touch-none rounded-full border-2 border-white/30 bg-night-950/45 shadow-[0_4px_18px_rgba(0,0,0,0.45)] backdrop-blur-[2px]"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            stickPointer.current = event.pointerId;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            updateStick(event.currentTarget, event.clientX, event.clientY);
+          }}
+          onPointerMove={(event) => {
+            if (stickPointer.current !== event.pointerId) return;
+            event.preventDefault();
+            updateStick(event.currentTarget, event.clientX, event.clientY);
+          }}
+          onPointerUp={(event) => releaseStick(event.pointerId)}
+          onPointerCancel={(event) => releaseStick(event.pointerId)}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <span className="pointer-events-none absolute inset-4 rounded-full border border-white/15" />
+          <span
+            className="pointer-events-none absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/50 bg-white/25 shadow-lg"
+            style={{
+              marginLeft: stick.x * 30,
+              marginTop: stick.y * 30,
+            }}
+          >
+            <span className="text-lg text-white/80">●</span>
+          </span>
+        </div>
+        <div className="mt-1 text-center font-heading text-[9px] uppercase tracking-[0.18em] text-white/85">
+          Move
+        </div>
+      </div>
+
+      <div
+        className="absolute bottom-2 right-2 flex items-end gap-2"
+        style={{ paddingRight: 'env(safe-area-inset-right)' }}
+      >
+        <div className="flex flex-col gap-2 pb-1">
+          <TouchActionButton label="Switch" bit={INPUT_BITS.switchPlayer} onAction={onAction} compact />
+          <TouchActionButton label="Sprint" bit={INPUT_BITS.sprint} onAction={onAction} compact accent="lime" />
+          <TouchActionButton label="Contain" bit={INPUT_BITS.contain} onAction={onAction} compact />
+        </div>
+        <div className="relative h-[148px] w-[174px]">
+          <div className="absolute left-1/2 top-0 -translate-x-1/2">
+            <TouchActionButton label="Through / GK" bit={INPUT_BITS.throughPass} onAction={onAction} />
+          </div>
+          <div className="absolute left-0 top-1/2 -translate-y-1/2">
+            <TouchActionButton label="Long / Slide" bit={INPUT_BITS.longPass} onAction={onAction} />
+          </div>
+          <div className="absolute right-0 top-1/2 -translate-y-1/2">
+            <TouchActionButton label="Shoot / Tackle" bit={INPUT_BITS.shot} onAction={onAction} accent="orange" />
+          </div>
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
+            <TouchActionButton label="Pass" bit={INPUT_BITS.shortPass} onAction={onAction} accent="lime" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TouchActionButton({
+  label,
+  bit,
+  onAction,
+  compact = false,
+  accent = 'plain',
+}: {
+  label: string;
+  bit: number;
+  onAction: (bit: number, down: boolean) => void;
+  compact?: boolean;
+  accent?: 'plain' | 'lime' | 'orange';
+}) {
+  const pointer = useRef<number | null>(null);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => () => onAction(bit, false), [bit, onAction]);
+
+  const release = (pointerId: number) => {
+    if (pointer.current !== pointerId) return;
+    pointer.current = null;
+    setActive(false);
+    onAction(bit, false);
+  };
+
+  const color = accent === 'lime'
+    ? 'border-volt-300/70 bg-volt-500/65 text-night-950'
+    : accent === 'orange'
+      ? 'border-orange-200/70 bg-orange-500/70 text-white'
+      : 'border-white/35 bg-night-950/65 text-white';
+
+  return (
+    <button
+      type="button"
+      className={`pointer-events-auto flex touch-none items-center justify-center border font-heading uppercase leading-tight shadow-[0_4px_14px_rgba(0,0,0,0.4)] backdrop-blur-[2px] ${
+        compact
+          ? 'h-9 min-w-[72px] rounded-full px-3 text-[9px] tracking-wider'
+          : 'h-[58px] w-[58px] rounded-full px-1 text-[8px] tracking-wide'
+      } ${color} ${active ? 'scale-90 brightness-125' : 'opacity-90'}`}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        pointer.current = event.pointerId;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setActive(true);
+        onAction(bit, true);
+      }}
+      onPointerUp={(event) => release(event.pointerId)}
+      onPointerCancel={(event) => release(event.pointerId)}
+      onContextMenu={(event) => event.preventDefault()}
+      aria-label={label}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -1184,9 +1490,28 @@ function SettingsModal({
             This is part of the game webpage—it is not a computer-settings
             window. This screen changes on-pitch controls only.{' '}
             Use your mouse, trackpad, or keyboard to choose teams and build the
-            squad. During the match, you can use a controller, keyboard, or both.
+            squad. During the match, you can use touchscreen controls, a
+            controller, keyboard, or a combination of them.
             Scroll through this page to see every action before you play.
           </div>
+
+          <section className="mb-7 rounded-xl border border-[#16a6b3]/30 bg-[#16a6b3]/5 p-4">
+            <div className="flex items-center gap-2">
+              <Smartphone size={18} className="text-sky-300" />
+              <h4 className="font-heading text-sm uppercase tracking-[0.22em] text-white">
+                iPhone &amp; touchscreen
+              </h4>
+            </div>
+            <ol className="mt-3 grid gap-2 font-body text-sm leading-relaxed text-night-200 sm:grid-cols-2">
+              <li><b className="text-white">1. Choose the game normally.</b> Tap Play Match or Practice, then pick your team, squad, and formation.</li>
+              <li><b className="text-white">2. Rotate at kickoff.</b> Turn the phone sideways when the match begins. If it stays upright, open iPhone Control Center and turn off Orientation Lock.</li>
+              <li><b className="text-white">3. Left thumb moves.</b> Drag anywhere inside the circular joystick. Diagonal movement works too.</li>
+              <li><b className="text-white">4. Right thumb acts.</b> Hold Sprint, passes, or Shoot to charge them; lift your thumb to release the kick.</li>
+            </ol>
+            <p className="mt-3 border-t border-sky-300/15 pt-3 font-body text-xs leading-relaxed text-night-300">
+              The same buttons change jobs while defending: Shoot becomes Tackle, Long becomes Slide, Through becomes goalkeeper rush, and Contain helps you stay goal-side.
+            </p>
+          </section>
 
           <section className="mb-7">
             <div className="mb-3 flex items-center justify-between gap-3">

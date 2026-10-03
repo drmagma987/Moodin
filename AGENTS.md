@@ -521,6 +521,17 @@ Use this section for intermittent progress notes between chat windows. Prefer da
     the VIFA main-menu modes
   - renamed the footer action to `Controller setup & help` and explicitly says
     both on the menu and inside the guide that setup happens on the VIFA webpage
+- Added first-class mobile match controls for touch devices:
+  - portrait gameplay pauses behind an explicit rotate-to-landscape screen with
+    iPhone Orientation Lock guidance
+  - landscape gameplay becomes a pitch-filling view with a draggable left
+    joystick and right-side buttons for every offensive and defensive action
+  - touch held/press/release states feed the same deterministic input frames as
+    keyboard and gamepad controls, including charged kicks and simultaneous
+    movement/action input
+  - the main menu and `Controls & Help` now explain exactly when the mobile
+    overlay appears and what each thumb does
+  - added deterministic tests for touch dead zones, diagonals, and action edges
 
 Future Codex sessions should update this file when they make meaningful feature, architecture, deployment, or gameplay-balance changes.
 

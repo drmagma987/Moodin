@@ -20,6 +20,7 @@ import {
   type ControllerBindings,
   type GamepadSnapshot,
 } from './gamepad';
+import { touchInputTransition } from './touch';
 import {
   FIELD_W,
   FIELD_H,
@@ -158,6 +159,9 @@ export class PitchKickGame {
   };
   private controllerButtons = new Set<number>();
   private awayControllerButtons = new Set<number>();
+  private touchHeld = 0;
+  private touchPressed = 0;
+  private touchReleased = 0;
   /** Kick key currently charging (FIFA: press charges, release kicks). */
   private chargeKey: string | null = null;
   private chargeTime = 0;
@@ -448,6 +452,9 @@ export class PitchKickGame {
       this.awayKeyboardJustReleased.length = 0;
       this.controllerButtons.clear();
       this.awayControllerButtons.clear();
+      this.touchHeld = 0;
+      this.touchPressed = 0;
+      this.touchReleased = 0;
       this.chargeKey = null;
       this.chargeTime = 0;
       this.awayChargeKey = null;
@@ -473,6 +480,16 @@ export class PitchKickGame {
     this.awayControllerBindings = { ...bindings };
     this.controllerButtons.clear();
     this.awayControllerButtons.clear();
+  }
+
+  /** Update Player 1's on-screen mobile controls. Touch joins keyboard and
+   * gamepad input before the deterministic frame is recorded. */
+  setTouchInput(nextHeld: number) {
+    if (this.paused) return;
+    const transition = touchInputTransition(this.touchHeld, nextHeld);
+    this.touchHeld = transition.held;
+    this.touchPressed |= transition.pressed;
+    this.touchReleased |= transition.released;
   }
 
   private setAwayBindings(bindings: KeyBindings) {
@@ -539,9 +556,9 @@ export class PitchKickGame {
     const frame = {
       tick: this.tick + 1,
       home: {
-        held: codesToBits(this.keyboardKeys) | homeController.command.held,
-        pressed: codesToBits(this.keyboardJustPressed) | homeController.command.pressed,
-        released: codesToBits(this.keyboardJustReleased) | homeController.command.released,
+        held: codesToBits(this.keyboardKeys) | homeController.command.held | this.touchHeld,
+        pressed: codesToBits(this.keyboardJustPressed) | homeController.command.pressed | this.touchPressed,
+        released: codesToBits(this.keyboardJustReleased) | homeController.command.released | this.touchReleased,
       },
       away: {
         held: codesToBits(this.awayKeyboardKeys) | awayController.command.held,
@@ -553,6 +570,8 @@ export class PitchKickGame {
     this.keyboardJustReleased = [];
     this.awayKeyboardJustPressed = [];
     this.awayKeyboardJustReleased = [];
+    this.touchPressed = 0;
+    this.touchReleased = 0;
     return frame;
   }
 

@@ -17,6 +17,10 @@ import {
   gamepadToCommand,
   type GamepadSnapshot,
 } from '@/lib/vifa/game/gamepad';
+import {
+  touchDirectionBits,
+  touchInputTransition,
+} from '@/lib/vifa/game/touch';
 
 const fakeCanvas = {
   getContext: () => ({}),
@@ -219,4 +223,29 @@ test('controller rebinding swaps collisions and preserves every action', () => {
   assert.equal(rebound.shot, DEFAULT_CONTROLLER_BINDINGS.shortPass);
   assert.equal(rebound.shortPass, DEFAULT_CONTROLLER_BINDINGS.shot);
   assert.equal(new Set(Object.values(rebound)).size, Object.values(rebound).length);
+});
+
+test('touch joystick maps dead zone, cardinals, and diagonals', () => {
+  assert.equal(touchDirectionBits(0.1, -0.1), 0);
+  assert.equal(touchDirectionBits(-0.8, 0), INPUT_BITS.moveLeft);
+  assert.equal(touchDirectionBits(0, 0.8), INPUT_BITS.moveDown);
+  assert.equal(
+    touchDirectionBits(0.7, -0.7),
+    INPUT_BITS.moveRight | INPUT_BITS.moveUp,
+  );
+});
+
+test('touch actions preserve held, pressed, and released edges', () => {
+  const pressed = touchInputTransition(0, INPUT_BITS.shortPass | INPUT_BITS.sprint);
+  assert.equal(pressed.held, INPUT_BITS.shortPass | INPUT_BITS.sprint);
+  assert.equal(pressed.pressed, INPUT_BITS.shortPass | INPUT_BITS.sprint);
+  assert.equal(pressed.released, 0);
+
+  const released = touchInputTransition(
+    pressed.held,
+    INPUT_BITS.sprint,
+  );
+  assert.equal(released.held, INPUT_BITS.sprint);
+  assert.equal(released.pressed, 0);
+  assert.equal(released.released, INPUT_BITS.shortPass);
 });
