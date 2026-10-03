@@ -21,6 +21,16 @@ import {
   touchDirectionBits,
   touchInputTransition,
 } from '@/lib/vifa/game/touch';
+import {
+  CURATED_WORLD_CUP_APPEARANCES,
+  getCuratedWorldCupAppearance,
+} from '@/lib/vifa/data/world-cup-appearances';
+import {
+  CURATED_WORLD_CUP_KITS,
+  getWorldCupKitArchive,
+} from '@/lib/vifa/data/world-cup-kits';
+import { buildPlayableEraTeamOptions } from '@/lib/vifa/data/playable-era-teams';
+import { buildSevenASideTeam, pickBalancedSeven } from '@/lib/vifa/game/seven-a-side';
 
 const fakeCanvas = {
   getContext: () => ({}),
@@ -248,4 +258,107 @@ test('touch actions preserve held, pressed, and released edges', () => {
   assert.equal(released.held, INPUT_BITS.sprint);
   assert.equal(released.pressed, 0);
   assert.equal(released.released, INPUT_BITS.shortPass);
+});
+
+test('curated player appearances are locked to an exact World Cup edition', () => {
+  const messi2010 = getCuratedWorldCupAppearance(2010, 'ARG', 'P-14758');
+  const messi2014 = getCuratedWorldCupAppearance(2014, 'ARG', 'P-14758');
+  const messi2018 = getCuratedWorldCupAppearance(2018, 'ARG', 'P-14758');
+  const beckham2006 = getCuratedWorldCupAppearance(2006, 'ENG', 'P-81049');
+
+  assert.equal(messi2010?.appearance.hairStyle, 'long-loose');
+  assert.equal(messi2014?.appearance.hairStyle, 'short');
+  assert.equal(messi2018?.appearance.facialHair, 'beard');
+  assert.equal(beckham2006?.appearance.hairStyle, 'spiked');
+  assert.equal(getCuratedWorldCupAppearance(2012, 'ARG', 'P-14758'), undefined);
+  assert.equal(getCuratedWorldCupAppearance(2010, 'ENG', 'P-81049'), undefined);
+
+  const keys = CURATED_WORLD_CUP_APPEARANCES.map(
+    ({ year, teamCode, playerId }) => `${year}:${teamCode}:${playerId}`,
+  );
+  assert.equal(new Set(keys).size, keys.length);
+  assert.ok(CURATED_WORLD_CUP_APPEARANCES.every(({ evidenceUrl }) => (
+    evidenceUrl.startsWith('https://www.fifa.com/')
+      || evidenceUrl.startsWith('https://inside.fifa.com/')
+  )));
+});
+
+test('era appearances and featured cosmetics reach the match lineup without changing ratings', () => {
+  const options = buildPlayableEraTeamOptions();
+  const argentina2010 = options.find((option) => option.id === '2010-ARG');
+  assert.ok(argentina2010);
+  const messi = argentina2010.squad.find((player) => player.name === 'Lionel Messi');
+  assert.ok(messi);
+  assert.equal(messi.appearance?.hairStyle, 'long-loose');
+
+  const lineupIds = pickBalancedSeven(argentina2010.squad);
+  const baseRating = messi.overallRating;
+  const team = buildSevenASideTeam(
+    argentina2010.team,
+    argentina2010.squad,
+    lineupIds,
+    '2-2-2',
+    {
+      playerId: messi.id,
+      accent: '#22d3ee',
+      marker: 'diamond',
+    },
+  );
+  const matchMessi = team.players.find((player) => player.name === 'Lionel Messi');
+  assert.ok(matchMessi);
+  assert.equal(matchMessi.overallRating, baseRating);
+  assert.equal(matchMessi.appearance?.bootColor, '#22d3ee');
+  assert.equal(matchMessi.appearance?.featuredMarker, 'diamond');
+  assert.equal(matchMessi.appearance?.hairStyle, 'long-loose');
+});
+
+test('World Cup kit archives include only explicitly recorded third kits', () => {
+  const franceOptions = buildPlayableEraTeamOptions().filter(
+    (option) => option.team.abbr === 'FRA',
+  );
+  const archive = getWorldCupKitArchive(
+    'FRA',
+    franceOptions.map((option) => ({
+      year: option.year,
+      home: option.team.kit,
+      away: option.team.awayKit,
+    })),
+  );
+
+  assert.ok(archive.some((option) => option.id === 'FRA-2002-home'));
+  assert.ok(archive.some((option) => option.id === 'FRA-1978-third'));
+  assert.equal(
+    archive.filter((option) => option.variant === 'third').length,
+    1,
+  );
+  assert.equal(new Set(archive.map((option) => option.id)).size, archive.length);
+  assert.equal(
+    new Set(CURATED_WORLD_CUP_KITS.map((option) => option.id)).size,
+    CURATED_WORLD_CUP_KITS.length,
+  );
+});
+
+test('a cross-era jersey changes presentation without changing the selected squad', () => {
+  const france2018 = buildPlayableEraTeamOptions().find(
+    (option) => option.id === '2018-FRA',
+  );
+  assert.ok(france2018);
+  const france2002Home = getWorldCupKitArchive('FRA', []).find(
+    (option) => option.id === 'FRA-2002-home',
+  );
+  assert.ok(france2002Home);
+
+  const lineupIds = pickBalancedSeven(france2018.squad);
+  const team = buildSevenASideTeam(
+    { ...france2018.team, kit: france2002Home.kit },
+    france2018.squad,
+    lineupIds,
+  );
+
+  assert.deepEqual(team.kit, france2002Home.kit);
+  assert.deepEqual(
+    team.players.map(({ name, r }) => ({ name, r })),
+    buildSevenASideTeam(france2018.team, france2018.squad, lineupIds).players
+      .map(({ name, r }) => ({ name, r })),
+  );
 });

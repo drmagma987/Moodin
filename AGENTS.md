@@ -1414,3 +1414,44 @@ If checks cannot be run, say so clearly.
 - Verified with `npm run lint` (existing bachelor-party font warning only),
   `npx tsc --noEmit`, `npm run vifa:test`, `npm run vifa:ratings:test`, and
   `npm run build`.
+- Made VIFA squad selection unmistakable after team choice: the team flow now
+  says it continues to the starting-seven builder, selected player cards carry
+  explicit add/remove actions, and the screen explains how to swap the balanced
+  auto-pick. Practice now enters the same team and squad-selection flow instead
+  of jumping directly into the default training lineup.
+- Verified the updated match flow in the local browser plus `npm run lint` and
+  `npx tsc --noEmit`.
+- Rebuilt VIFA squad management as a formation-aware `Starting VII` board:
+  starters render on a marked 7-a-side pitch, substitutes remain in an
+  attribute-rich bench list, and two-tap starter/bench swaps preserve the
+  one-goalkeeper roster rule. Added live formation-fit feedback plus `Best VII`
+  and full reset actions.
+- Verified with `npm run lint`, `npx tsc --noEmit`, `npm run vifa:test`, and
+  `npm run build`; the production build still reports the existing
+  `metadataBase` warning.
+- Added tournament-locked visual identities for VIFA players, with 35 curated
+  profiles across 19 World Cup icons and six editions. Hair shape/colour,
+  facial hair, headbands, tied hair, and Son Heung-min's Qatar mask are keyed by
+  exact year, nation, and player ID so looks cannot leak across eras; archive
+  profiles include Ronaldo 2002 and Beckham, Zidane, and Henry 2006.
+- Added a user-selectable Featured Player to the Starting VII builder. Players
+  can cycle six bright boot/marker colours and ring, diamond, or burst ground
+  shapes; the Canvas renderer displays those cosmetics without feeding them
+  into ratings or physics.
+- Added deterministic coverage for edition isolation and appearance propagation
+  into match lineups. Verified with `npm run lint`, `npx tsc --noEmit`,
+  `npm run vifa:test` (12/12), and `npm run build`; the existing `metadataBase`
+  build warning remains.
+- Decoupled VIFA jersey choice from squad year. Team setup now offers a
+  nation-specific World Cup kit archive for each side, so a historical roster
+  can wear another edition's home, away, or documented third kit (including
+  the motivating France 2018 squad / France 2002 home combination).
+- Added logo-free shirt-pattern metadata and previews for shoulder stripes,
+  chest bands, pinstripes, hoops, sashes, checks, and split designs, and carried
+  the chosen treatment into the deterministic Canvas match renderer. France has
+  a deep 1978-2022 archive, including its documented 1978 makeshift third kit;
+  other nations receive all playable-era fallbacks plus an initial set of
+  curated iconic designs.
+- Added tests proving kit selection leaves squad identity and ratings unchanged
+  and that third kits are never synthesized. Verified with `npm run lint`,
+  `npx tsc --noEmit`, and `npm run vifa:test` (14/14).

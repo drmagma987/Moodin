@@ -8,6 +8,7 @@ import {
   computeOverallRating,
   makeIndividualStats,
   type RatingTuple,
+  type PlayerAppearance,
   type SquadRole,
   type TeamData,
 } from './teams/types';
@@ -19,6 +20,9 @@ export interface SelectableSquadPlayer {
   role: SquadRole;
   ratings: RatingTuple;
   overallRating: number;
+  appearance?: PlayerAppearance;
+  /** Tournament-specific curation rank used only to suggest a featured player. */
+  iconicPriority?: number;
 }
 
 export type SevenRole = SquadRole;
@@ -198,6 +202,11 @@ export function buildSevenASideTeam(
   squad: SelectableSquadPlayer[],
   requestedIds: string[],
   formationId: SevenFormationId = '2-2-2',
+  featured?: {
+    playerId: string | null;
+    accent: string;
+    marker: PlayerAppearance['featuredMarker'];
+  },
 ): TeamData {
   const selectedIds = isCompleteSeven(squad, requestedIds)
     ? requestedIds
@@ -220,6 +229,16 @@ export function buildSevenASideTeam(
         name: player.name,
         r: player.ratings,
         role: targetRole,
+        appearance: {
+          ...player.appearance,
+          ...(featured?.playerId === player.id
+            ? {
+                bootColor: featured.accent,
+                featuredAccent: featured.accent,
+                featuredMarker: featured.marker,
+              }
+            : {}),
+        },
       })),
     ),
   };

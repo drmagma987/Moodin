@@ -1,7 +1,7 @@
 // Core engine-domain types shared across the simulation and renderer.
 // (Team data types — TeamData, Kit — live in ./teams/types.)
 
-import type { IndividualStats } from './teams/types';
+import type { IndividualStats, PlayerAppearance } from './teams/types';
 
 export type Vec = { x: number; y: number };
 export type Team = 'home' | 'away';
@@ -65,6 +65,8 @@ export interface Player extends PlayerPhysicsScalars {
   kickTimer: number;
   hair: string;
   skin: string;
+  /** Renderer-only identity and featured-player cosmetics. */
+  appearance: PlayerAppearance;
   isGK: boolean;
   role: Role;
   /** Shirt number, shown on the back of the jersey. */

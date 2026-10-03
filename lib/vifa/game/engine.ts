@@ -391,8 +391,11 @@ export class PitchKickGame {
       facing: { x: team === 'home' ? 1 : -1, y: 0 },
       animPhase: this.rng.next() * Math.PI * 2,
       kickTimer: 0,
-      hair: HAIR_COLORS[(i + (team === 'away' ? 2 : 0)) % HAIR_COLORS.length],
-      skin: SKIN_TONES[(i + (team === 'away' ? 1 : 0)) % SKIN_TONES.length],
+      hair: squad.appearance?.hairColor
+        ?? HAIR_COLORS[(i + (team === 'away' ? 2 : 0)) % HAIR_COLORS.length],
+      skin: squad.appearance?.skinTone
+        ?? SKIN_TONES[(i + (team === 'away' ? 1 : 0)) % SKIN_TONES.length],
+      appearance: { ...squad.appearance },
       isGK: i === 0,
       role: squad.role,
       num: squad.num,

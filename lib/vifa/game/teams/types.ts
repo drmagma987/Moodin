@@ -13,6 +13,10 @@ export interface Kit {
   outline: string;
   /** Shorts colour (real home-kit shorts). Falls back to `sleeve` if omitted. */
   shorts?: string;
+  /** Optional original approximation of a historic shirt motif. */
+  pattern?: 'solid' | 'shoulder-stripes' | 'chest-band' | 'pinstripes' | 'hoops' | 'sash' | 'checker' | 'split';
+  accent?: string;
+  secondaryAccent?: string;
 }
 
 /** FIFA / EA FC-style face attributes. Values are normalized to integer 1-99
@@ -31,6 +35,36 @@ export interface IndividualStats {
 export type RatingTuple = [number, number, number, number, number, number];
 
 export type SquadRole = 'GK' | 'DF' | 'MF' | 'ST';
+
+export type PlayerHairStyle =
+  | 'shaved'
+  | 'buzz'
+  | 'short'
+  | 'spiked'
+  | 'curly-short'
+  | 'curly-volume'
+  | 'front-tuft'
+  | 'mohawk'
+  | 'long-loose'
+  | 'long-tied';
+
+export type PlayerFacialHair = 'none' | 'stubble' | 'goatee' | 'beard';
+
+export type FeaturedMarkerShape = 'ring' | 'diamond' | 'burst';
+
+/** Purely visual player identity. Tournament-era base traits are immutable;
+ * featured fields are user-selected match cosmetics and never affect physics. */
+export interface PlayerAppearance {
+  skinTone?: string;
+  hairColor?: string;
+  hairStyle?: PlayerHairStyle;
+  facialHair?: PlayerFacialHair;
+  headbandColor?: string;
+  faceMaskColor?: string;
+  bootColor?: string;
+  featuredAccent?: string;
+  featuredMarker?: FeaturedMarkerShape;
+}
 
 /** Role from squad index: 0 = GK, 1-4 = DF, 5-8 = MF, 9-10 = ST. */
 export function roleForIndex(i: number): SquadRole {
@@ -118,6 +152,8 @@ export interface SquadPlayer {
   individualStats: IndividualStats;
   /** Role-weighted display value; gameplay uses the six attributes directly. */
   overallRating: number;
+  /** Optional era-specific visual identity and user cosmetic accents. */
+  appearance?: PlayerAppearance;
 }
 
 export interface TeamData {
@@ -147,7 +183,7 @@ export interface TeamData {
  *  FIFA-style ratings; omitted players fall back to a role baseline. */
 export function buildSquad(
   formation: Vec[],
-  roster: { num: number; name: string; r?: RatingTuple; role?: SquadRole }[],
+  roster: { num: number; name: string; r?: RatingTuple; role?: SquadRole; appearance?: PlayerAppearance }[],
 ): SquadPlayer[] {
   if (formation.length < roster.length) {
     throw new Error('Formation does not contain a position for every player');
@@ -163,6 +199,7 @@ export function buildSquad(
       role,
       individualStats,
       overallRating: computeOverallRating(role, individualStats),
+      appearance: entry.appearance,
     };
   });
 }

@@ -683,6 +683,46 @@ function drawHumanoid(
   // Ground decorations (not scaled by ctx transform — drawn in screen px).
   const gs = s * PLAYER_SCALE;
 
+  // A user-selected featured player keeps a subtle, shape-coded ground mark.
+  // It is intentionally independent from the control chevron and remains
+  // readable for colour-blind players through silhouette as well as colour.
+  const featuredAccent = p.appearance.featuredAccent;
+  const featuredMarker = p.appearance.featuredMarker;
+  if (featuredAccent && featuredMarker) {
+    ctx.save();
+    ctx.strokeStyle = featuredAccent;
+    ctx.fillStyle = `${featuredAccent}2e`;
+    ctx.lineWidth = Math.max(2, 1.8 * gs);
+    if (featuredMarker === 'diamond') {
+      ctx.beginPath();
+      ctx.moveTo(q.x, q.y - 8 * gs);
+      ctx.lineTo(q.x + 15 * gs, q.y + 1.5 * gs);
+      ctx.lineTo(q.x, q.y + 8 * gs);
+      ctx.lineTo(q.x - 15 * gs, q.y + 1.5 * gs);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (featuredMarker === 'burst') {
+      ctx.beginPath();
+      for (let ray = 0; ray < 8; ray++) {
+        const angle = (ray / 8) * Math.PI * 2;
+        const innerX = q.x + Math.cos(angle) * 10 * gs;
+        const innerY = q.y + Math.sin(angle) * 4 * gs;
+        const outerX = q.x + Math.cos(angle) * 17 * gs;
+        const outerY = q.y + Math.sin(angle) * 7 * gs;
+        ctx.moveTo(innerX, innerY);
+        ctx.lineTo(outerX, outerY);
+      }
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(q.x, q.y + 1.5 * gs, 16 * gs, 6.5 * gs, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // Shadow (fades and spreads as a diving keeper leaves the ground; a slide
   // stays grounded so the shadow just stretches along the slide direction).
   ctx.fillStyle = `rgba(0,0,0,${0.28 - diveAirborne * 0.18})`;
@@ -858,7 +898,8 @@ function drawHumanoid(
     ctx.save();
     ctx.translate(fX + forward * 1.2, fY - 0.6);
     ctx.rotate(bootAng * 0.25);
-    ctx.fillStyle = far ? '#0a0c0f' : '#121419';
+    const bootColor = p.appearance.bootColor ?? '#121419';
+    ctx.fillStyle = far ? shade(bootColor, 0.72) : bootColor;
     ctx.beginPath();
     ctx.ellipse(forward * 1.4, 0, 3.5, 1.4, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -947,6 +988,51 @@ function drawHumanoid(
   ctx.strokeStyle = kit.outline;
   ctx.lineWidth = 1;
   ctx.stroke();
+  if (kit.pattern && kit.pattern !== 'solid') {
+    const accent = kit.accent ?? kit.outline;
+    const secondary = kit.secondaryAccent ?? '#ffffff';
+    ctx.save();
+    ctx.clip();
+    ctx.globalAlpha = 0.9;
+    if (kit.pattern === 'chest-band') {
+      ctx.fillStyle = accent;
+      ctx.fillRect(-6, shoulderY + bob + 8, 12, 5);
+      ctx.fillStyle = secondary;
+      ctx.fillRect(-6, shoulderY + bob + 10.2, 12, 1.5);
+    } else if (kit.pattern === 'pinstripes') {
+      for (let stripe = -4; stripe <= 4; stripe += 2) {
+        ctx.strokeStyle = stripe % 4 === 0 ? accent : secondary;
+        ctx.lineWidth = 0.65;
+        ctx.beginPath();
+        ctx.moveTo(stripe, shoulderY + bob);
+        ctx.lineTo(stripe, hipY + bob - 2);
+        ctx.stroke();
+      }
+    } else if (kit.pattern === 'hoops') {
+      ctx.fillStyle = accent;
+      for (let stripe = 0; stripe < 3; stripe++) {
+        ctx.fillRect(-6, shoulderY + bob + 5 + stripe * 7, 12, 2.5);
+      }
+    } else if (kit.pattern === 'sash') {
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 3.1;
+      ctx.beginPath();
+      ctx.moveTo(-5, shoulderY + bob);
+      ctx.lineTo(5, hipY + bob - 1);
+      ctx.stroke();
+    } else if (kit.pattern === 'checker') {
+      for (let row = 0; row < 3; row++) {
+        for (let column = 0; column < 2; column++) {
+          ctx.fillStyle = (row + column) % 2 ? accent : secondary;
+          ctx.fillRect(-5 + column * 5, shoulderY + bob + row * 6, 5, 6);
+        }
+      }
+    } else if (kit.pattern === 'split') {
+      ctx.fillStyle = accent;
+      ctx.fillRect(0, shoulderY + bob - 2, 7, hipY - shoulderY + 4);
+    }
+    ctx.restore();
+  }
   // Side seam stripe.
   ctx.strokeStyle = kit.sleeve;
   ctx.lineWidth = 2;
@@ -999,22 +1085,128 @@ function drawHumanoid(
   ctx.beginPath();
   ctx.arc(headX, headY + bob, HR, 0, Math.PI * 2);
   ctx.fill();
-  // Hair: cap on top; covers more of the face when running away from
-  // camera (toward < 0 = facing up/away → we see the back of the head).
+  // Era-specific hair silhouettes. These intentionally use broad original
+  // shapes—enough to recognise a player at match scale without attempting a
+  // portrait or copying a licensed likeness.
+  const hairStyle = p.appearance.hairStyle ?? 'short';
   ctx.fillStyle = p.hair;
-  const hairBias = toward < -0.3 ? 1 : 0.45; // away → full back of head
-  ctx.beginPath();
-  ctx.arc(headX, headY + bob, HR, Math.PI + 0.2, -0.2);
-  ctx.fill();
-  if (toward < -0.3) {
+  if (hairStyle === 'front-tuft') {
+    ctx.globalAlpha = 0.26;
     ctx.beginPath();
-    ctx.arc(headX, headY + bob + HR * 0.22, HR * 0.88 * hairBias, 0, Math.PI * 2);
+    ctx.arc(headX, headY + bob, HR * 0.97, Math.PI + 0.24, -0.24);
     ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.ellipse(
+      headX + side * HR * 0.38,
+      headY + bob - HR * 0.87,
+      HR * 0.62,
+      HR * 0.32,
+      side * -0.18,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  } else if (hairStyle === 'shaved') {
+    ctx.globalAlpha = 0.42;
+    ctx.beginPath();
+    ctx.arc(headX, headY + bob, HR * 0.97, Math.PI + 0.24, -0.24);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  } else if (hairStyle === 'buzz') {
+    ctx.beginPath();
+    ctx.arc(headX, headY + bob - 0.15, HR * 1.01, Math.PI + 0.18, -0.18);
+    ctx.fill();
+  } else if (hairStyle === 'spiked' || hairStyle === 'mohawk') {
+    const spikeCount = hairStyle === 'mohawk' ? 3 : 5;
+    const width = hairStyle === 'mohawk' ? HR * 0.9 : HR * 1.7;
+    const startX = headX - width / 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, headY + bob - HR * 0.45);
+    for (let spike = 0; spike < spikeCount; spike++) {
+      const x = startX + (width * (spike + 0.5)) / spikeCount;
+      ctx.lineTo(x, headY + bob - HR * (hairStyle === 'mohawk' ? 1.65 : 1.35));
+      ctx.lineTo(startX + (width * (spike + 1)) / spikeCount, headY + bob - HR * 0.42);
+    }
+    ctx.lineTo(headX + HR * 0.78, headY + bob + 0.15);
+    ctx.lineTo(headX - HR * 0.78, headY + bob + 0.15);
+    ctx.closePath();
+    ctx.fill();
+  } else if (hairStyle === 'curly-short' || hairStyle === 'curly-volume') {
+    const volume = hairStyle === 'curly-volume' ? 1.42 : 1.13;
+    for (let curl = -2; curl <= 2; curl++) {
+      ctx.beginPath();
+      ctx.arc(
+        headX + curl * HR * 0.37,
+        headY + bob - HR * (0.78 + (Math.abs(curl) % 2) * 0.1),
+        HR * 0.48 * volume,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+    }
   } else {
-    // Profile/front: small sideburn toward the back of the head.
     ctx.beginPath();
-    ctx.arc(headX - side * HR * 0.5, headY + bob + 0.5, HR * 0.45, 0, Math.PI * 2);
+    ctx.arc(headX, headY + bob, HR, Math.PI + 0.2, -0.2);
     ctx.fill();
+    if (hairStyle === 'long-loose' || hairStyle === 'long-tied') {
+      ctx.beginPath();
+      ctx.roundRect(
+        headX - HR * 0.92,
+        headY + bob - HR * 0.2,
+        HR * 1.84,
+        HR * (hairStyle === 'long-loose' ? 1.65 : 1.15),
+        HR * 0.5,
+      );
+      ctx.fill();
+      if (hairStyle === 'long-tied') {
+        ctx.beginPath();
+        ctx.arc(headX - side * HR * 1.05, headY + bob + HR * 0.15, HR * 0.52, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (toward < -0.3) {
+      ctx.beginPath();
+      ctx.arc(headX, headY + bob + HR * 0.22, HR * 0.88, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(headX - side * HR * 0.5, headY + bob + 0.5, HR * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  if (p.appearance.headbandColor) {
+    ctx.strokeStyle = p.appearance.headbandColor;
+    ctx.lineWidth = 0.85;
+    ctx.beginPath();
+    ctx.arc(headX, headY + bob - HR * 0.16, HR * 1.02, Math.PI + 0.1, -0.1);
+    ctx.stroke();
+  }
+
+  if (p.appearance.faceMaskColor) {
+    ctx.strokeStyle = p.appearance.faceMaskColor;
+    ctx.lineWidth = 1.05;
+    ctx.beginPath();
+    ctx.moveTo(headX - HR * 0.78, headY + bob - HR * 0.15);
+    ctx.lineTo(headX + HR * 0.78, headY + bob - HR * 0.15);
+    ctx.stroke();
+  }
+
+  const facialHair = p.appearance.facialHair ?? 'none';
+  if (facialHair !== 'none') {
+    ctx.strokeStyle = shade(p.hair, facialHair === 'stubble' ? 1.25 : 0.92);
+    ctx.globalAlpha = facialHair === 'stubble' ? 0.48 : 0.9;
+    ctx.lineWidth = facialHair === 'beard' ? 1.35 : 0.8;
+    ctx.beginPath();
+    ctx.arc(
+      headX + side * HR * 0.08,
+      headY + bob + HR * 0.18,
+      HR * (facialHair === 'goatee' ? 0.42 : 0.72),
+      facialHair === 'goatee' ? 0.35 * Math.PI : 0.18 * Math.PI,
+      facialHair === 'goatee' ? 0.65 * Math.PI : 0.82 * Math.PI,
+    );
+    ctx.stroke();
+    ctx.globalAlpha = 1;
   }
 
   ctx.restore();

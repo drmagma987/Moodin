@@ -1,4 +1,5 @@
 import { VIFA_WORLD_CUP_DATABASE } from './world-cup-database';
+import { getCuratedWorldCupAppearance } from './world-cup-appearances';
 import { TEAMS } from '../game/teams';
 import type { Kit, TeamData } from '../game/teams/types';
 import {
@@ -93,13 +94,22 @@ export function buildPlayableEraTeamOptions(): VifaEraTeamOption[] {
       .map((team) => {
         const squad = team.squad
           .filter((player) => player.ratings)
-          .map((player) => makeSelectableSquadPlayer({
-            id: player.playerId,
-            num: player.shirtNumber,
-            name: player.name,
-            role: player.position === 'FW' ? 'ST' : player.position,
-            ratings: player.ratings!,
-          }));
+          .map((player) => {
+            const curated = getCuratedWorldCupAppearance(
+              tournament.year,
+              team.code,
+              player.playerId,
+            );
+            return makeSelectableSquadPlayer({
+              id: player.playerId,
+              num: player.shirtNumber,
+              name: player.name,
+              role: player.position === 'FW' ? 'ST' : player.position,
+              ratings: player.ratings!,
+              appearance: curated?.appearance,
+              iconicPriority: curated?.priority,
+            });
+          });
         const style = teamStyle(team.name);
         const shell = {
           name: team.name,
