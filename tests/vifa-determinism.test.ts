@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   INPUT_BITS,
+  bitsToCodes,
+  codesToBits,
   emptyInputFrame,
   snapshotDigest,
   type InputFrame,
@@ -237,12 +239,31 @@ test('controller rebinding swaps collisions and preserves every action', () => {
 
 test('touch joystick maps dead zone, cardinals, and diagonals', () => {
   assert.equal(touchDirectionBits(0.1, -0.1), 0);
-  assert.equal(touchDirectionBits(-0.8, 0), INPUT_BITS.moveLeft);
-  assert.equal(touchDirectionBits(0, 0.8), INPUT_BITS.moveDown);
+  assert.equal(touchDirectionBits(-0.7, 0), INPUT_BITS.moveLeft);
+  assert.equal(touchDirectionBits(0, 0.7), INPUT_BITS.moveDown);
   assert.equal(
-    touchDirectionBits(0.7, -0.7),
+    touchDirectionBits(0.5, -0.5),
     INPUT_BITS.moveRight | INPUT_BITS.moveUp,
   );
+});
+
+test('touch joystick adds sprint only in the outer quarter', () => {
+  assert.equal(touchDirectionBits(0.74, 0), INPUT_BITS.moveRight);
+  assert.equal(
+    touchDirectionBits(0.75, 0),
+    INPUT_BITS.moveRight | INPUT_BITS.sprint,
+  );
+  assert.equal(
+    touchDirectionBits(0.6, -0.6),
+    INPUT_BITS.moveRight | INPUT_BITS.moveUp | INPUT_BITS.sprint,
+  );
+});
+
+test('touch pass assistance survives deterministic input serialization', () => {
+  const bits = INPUT_BITS.moveRight
+    | INPUT_BITS.moveUp
+    | INPUT_BITS.touchPassAssist;
+  assert.equal(codesToBits(bitsToCodes(bits)), bits);
 });
 
 test('touch actions preserve held, pressed, and released edges', () => {
@@ -357,8 +378,18 @@ test('a cross-era jersey changes presentation without changing the selected squa
 
   assert.deepEqual(team.kit, france2002Home.kit);
   assert.deepEqual(
-    team.players.map(({ name, r }) => ({ name, r })),
+    team.players.map(({ name, role, individualStats, overallRating }) => ({
+      name,
+      role,
+      individualStats,
+      overallRating,
+    })),
     buildSevenASideTeam(france2018.team, france2018.squad, lineupIds).players
-      .map(({ name, r }) => ({ name, r })),
+      .map(({ name, role, individualStats, overallRating }) => ({
+        name,
+        role,
+        individualStats,
+        overallRating,
+      })),
   );
 });

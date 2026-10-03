@@ -13,6 +13,8 @@ export const INPUT_BITS = {
   throughPass: 1 << 8,
   switchPlayer: 1 << 9,
   contain: 1 << 10,
+  /** Touch-only marker: strengthen receiver selection toward stick direction. */
+  touchPassAssist: 1 << 11,
 } as const;
 
 export interface PlayerInputCommand {
@@ -82,6 +84,7 @@ const CODE_BITS: ReadonlyArray<readonly [string, number]> = [
   ['KeyW', INPUT_BITS.throughPass],
   ['KeyQ', INPUT_BITS.switchPlayer],
   ['KeyC', INPUT_BITS.contain],
+  ['TouchPassAssist', INPUT_BITS.touchPassAssist],
 ];
 
 export function codesToBits(codes: Iterable<string>): number {

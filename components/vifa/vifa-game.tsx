@@ -71,7 +71,13 @@ import {
 } from '@/lib/vifa/game/gamepad';
 import { PLAYER_TWO_BINDINGS, VIFA_MODS } from '@/lib/vifa/mods';
 import { INPUT_BITS } from '@/lib/vifa/game/determinism';
-import { TOUCH_MOVE_MASK, touchDirectionBits } from '@/lib/vifa/game/touch';
+import {
+  TOUCH_JOYSTICK_MASK,
+  TOUCH_MOVE_MASK,
+  TOUCH_SPRINT_THRESHOLD,
+  TOUCH_STICK_INPUT_MASK,
+  touchDirectionBits,
+} from '@/lib/vifa/game/touch';
 
 type Phase = 'intro' | 'select' | 'squad' | 'playing';
 type Mode = 'match' | 'local' | 'practice';
@@ -119,7 +125,69 @@ function selectionSeed(value: string): number {
   return hash >>> 0;
 }
 
+type MenuDirection = 'left' | 'right' | 'up' | 'down';
+
+const MENU_FOCUSABLE = 'button:not(:disabled), select:not(:disabled)';
+
+function controllerMenuSurface(root: HTMLElement): HTMLElement {
+  return root.querySelector<HTMLElement>('[data-controller-surface]') ?? root;
+}
+
+function focusControllerDefault(root: HTMLElement): HTMLElement | null {
+  const surface = controllerMenuSurface(root);
+  const target = surface.querySelector<HTMLElement>('[data-controller-default="true"]')
+    ?? surface.querySelector<HTMLElement>(MENU_FOCUSABLE);
+  target?.focus({ preventScroll: true });
+  target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  return target;
+}
+
+function cycleControllerSelect(select: HTMLSelectElement, direction: number) {
+  const nextIndex = wrap(select.selectedIndex + direction, select.options.length);
+  select.selectedIndex = nextIndex;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function moveControllerFocus(root: HTMLElement, direction: MenuDirection) {
+  const surface = controllerMenuSurface(root);
+  const active = document.activeElement instanceof HTMLElement
+    && surface.contains(document.activeElement)
+    ? document.activeElement
+    : focusControllerDefault(root);
+  if (!active) return;
+
+  const current = active.getBoundingClientRect();
+  const cx = current.left + current.width / 2;
+  const cy = current.top + current.height / 2;
+  let best: HTMLElement | null = null;
+  let bestScore = Infinity;
+
+  for (const candidate of surface.querySelectorAll<HTMLElement>(MENU_FOCUSABLE)) {
+    if (candidate === active || candidate.offsetParent === null) continue;
+    const rect = candidate.getBoundingClientRect();
+    const dx = rect.left + rect.width / 2 - cx;
+    const dy = rect.top + rect.height / 2 - cy;
+    const primary = direction === 'left' ? -dx
+      : direction === 'right' ? dx
+        : direction === 'up' ? -dy : dy;
+    if (primary <= 4) continue;
+    const secondary = direction === 'left' || direction === 'right'
+      ? Math.abs(dy)
+      : Math.abs(dx);
+    const score = primary + secondary * 0.45;
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  if (!best) return;
+  best.focus({ preventScroll: true });
+  best.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+}
+
 export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const enhancementCanvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<PitchKickGame | null>(null);
@@ -320,25 +388,15 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
       setAwayFeaturedPlayerId(suggestedFeaturedPlayerId(next.squad, ids));
     }
   }, [awayFormationId, awayOption, homeFormationId, homeOption, optionsForYear]);
-  const cycleSelection = useCallback((side: 'home' | 'away', direction: number) => {
-    const current = side === 'home' ? homeOption : awayOption;
-    const yearOptions = optionsForYear(current.year);
-    const index = Math.max(0, yearOptions.findIndex((option) => option.id === current.id));
-    const next = yearOptions[wrap(index + direction, yearOptions.length)];
-    if (side === 'home') {
-      const ids = pickBalancedSeven(next.squad, homeFormationId);
-      setHomeSelectionId(next.id);
-      setHomeKitId(`${next.team.abbr}-${next.year}-home`);
-      setHomeLineupIds(ids);
-      setHomeFeaturedPlayerId(suggestedFeaturedPlayerId(next.squad, ids));
-    } else {
-      const ids = pickBalancedSeven(next.squad, awayFormationId);
-      setAwaySelectionId(next.id);
-      setAwayKitId(`${next.team.abbr}-${next.year}-away`);
-      setAwayLineupIds(ids);
-      setAwayFeaturedPlayerId(suggestedFeaturedPlayerId(next.squad, ids));
-    }
-  }, [awayFormationId, awayOption, homeFormationId, homeOption, optionsForYear]);
+  const cycleKitSelection = useCallback((side: 'home' | 'away', direction: number) => {
+    const options = side === 'home' ? homeKitOptions : awayKitOptions;
+    const currentId = side === 'home' ? homeKitOption.id : awayKitOption.id;
+    const index = Math.max(0, options.findIndex((option) => option.id === currentId));
+    const next = options[wrap(index + direction, options.length)];
+    if (!next) return;
+    if (side === 'home') setHomeKitId(next.id);
+    else setAwayKitId(next.id);
+  }, [awayKitOption.id, awayKitOptions, homeKitOption.id, homeKitOptions]);
   const confirmActiveSelection = useCallback(() => {
     if (activeSide === 'home') setActiveSide('away');
     else {
@@ -420,6 +478,12 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     charge: null,
     awayCharge: null,
   });
+  const lastSettledPossession = useRef<'home' | 'away'>('home');
+  if (hud.possession !== 'none') lastSettledPossession.current = hud.possession;
+  const homeIsAttacking = mode === 'practice'
+    || (hud.possession === 'none'
+      ? lastSettledPossession.current === 'home'
+      : hud.possession === 'home');
 
   // Boot the canvas game once the match phase begins.
   useEffect(() => {
@@ -472,7 +536,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, gameKey]);
 
-  // FIFA-style keyboard navigation on the team-select screen.
+  // Keyboard arrows mirror the visible jersey arrows on the team-select screen.
   useEffect(() => {
     if (phase !== 'select' || settingsOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -489,14 +553,14 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
       }
       if (k === 'ArrowLeft' || k === 'ArrowRight') {
         const dir = k === 'ArrowLeft' ? -1 : 1;
-        cycleSelection(activeSide, dir);
+        cycleKitSelection(activeSide, dir);
       } else if (k === 'Enter' || k === 'KeyS' || k === 'KeyD') {
         confirmActiveSelection();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, activeSide, settingsOpen, cycleSelection, confirmActiveSelection]);
+  }, [phase, activeSide, settingsOpen, cycleKitSelection, confirmActiveSelection]);
 
   // Intro menu keyboard navigation (← → to choose, Enter to confirm).
   useEffect(() => {
@@ -564,10 +628,139 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
     gameRef.current?.setControllerBindings(next);
   };
 
+  // Controller-first menu navigation. The configured pass button confirms,
+  // the configured shot button goes back, and either stick/D-pad moves focus.
+  // Select fields use left/right to cycle without opening a native popup.
+  useEffect(() => {
+    if (phase === 'playing' || settingsOpen) return;
+    let frame = 0;
+    let initialized = false;
+    let previousButtons = new Set<number>();
+    let previousAxisX = 0;
+    let previousAxisY = 0;
+    let editingSelect: HTMLSelectElement | null = null;
+
+    const axisState = (value: number, previous: number) => {
+      if (value <= -0.65) return -1;
+      if (value >= 0.65) return 1;
+      if (Math.abs(value) <= 0.35) return 0;
+      return previous;
+    };
+
+    const goBack = () => {
+      if (phase === 'select') {
+        if (activeSide === 'away') setActiveSide('home');
+        else setPhase('intro');
+      } else if (phase === 'squad') {
+        if (mode === 'local' && activeSquadSide === 'away') {
+          setActiveSquadSide('home');
+        } else {
+          setPhase('select');
+          setActiveSide('away');
+        }
+      }
+    };
+
+    const poll = () => {
+      const root = rootRef.current;
+      const pad = connectedGamepads()[0];
+      if (root && pad) {
+        const menuButton = (configured: number, fallback: number) => (
+          configured >= 12 && configured <= 15 ? fallback : configured
+        );
+        const acceptButton = menuButton(controllerBindings.shortPass, 0);
+        const backButton = menuButton(controllerBindings.shot, 1);
+        const buttons = new Set(pressedButtonIndexes(pad));
+        const axisX = axisState(pad.axes[0] ?? 0, previousAxisX);
+        const axisY = axisState(pad.axes[1] ?? 0, previousAxisY);
+
+        if (initialized) {
+          if (editingSelect && document.activeElement !== editingSelect) {
+            editingSelect.removeAttribute('data-controller-editing');
+            editingSelect = null;
+          }
+          const justPressed = (button: number) => (
+            buttons.has(button) && !previousButtons.has(button)
+          );
+          let horizontal = 0;
+          let vertical = 0;
+          if (justPressed(14)) horizontal = -1;
+          else if (justPressed(15)) horizontal = 1;
+          else if (axisX !== 0 && axisX !== previousAxisX) horizontal = axisX;
+          if (justPressed(12)) vertical = -1;
+          else if (justPressed(13)) vertical = 1;
+          else if (axisY !== 0 && axisY !== previousAxisY) vertical = axisY;
+
+          if (editingSelect && document.activeElement === editingSelect) {
+            const change = horizontal !== 0 ? horizontal : vertical;
+            if (change !== 0) cycleControllerSelect(editingSelect, change);
+          } else if (horizontal !== 0) {
+            moveControllerFocus(root, horizontal < 0 ? 'left' : 'right');
+          } else if (vertical !== 0) {
+            moveControllerFocus(root, vertical < 0 ? 'up' : 'down');
+          }
+
+          if (justPressed(acceptButton)) {
+            const surface = controllerMenuSurface(root);
+            const active = document.activeElement instanceof HTMLElement
+              && surface.contains(document.activeElement)
+              ? document.activeElement
+              : focusControllerDefault(root);
+            if (active instanceof HTMLSelectElement) {
+              if (editingSelect === active) {
+                active.removeAttribute('data-controller-editing');
+                editingSelect = null;
+              } else {
+                editingSelect?.removeAttribute('data-controller-editing');
+                editingSelect = active;
+                active.setAttribute('data-controller-editing', 'true');
+              }
+            } else if (active instanceof HTMLButtonElement) active.click();
+          } else if (justPressed(backButton)) {
+            if (editingSelect) {
+              editingSelect.removeAttribute('data-controller-editing');
+              editingSelect = null;
+            } else {
+              goBack();
+            }
+          }
+        } else {
+          initialized = true;
+        }
+
+        previousButtons = buttons;
+        previousAxisX = axisX;
+        previousAxisY = axisY;
+      } else {
+        initialized = false;
+        previousButtons = new Set();
+        previousAxisX = 0;
+        previousAxisY = 0;
+      }
+      frame = requestAnimationFrame(poll);
+    };
+
+    frame = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(frame);
+  }, [
+    activeSide,
+    activeSquadSide,
+    controllerBindings.shortPass,
+    controllerBindings.shot,
+    mode,
+    phase,
+    settingsOpen,
+  ]);
+
   const setTouchMovement = useCallback((movementBits: number) => {
+    const stickBits = movementBits & TOUCH_JOYSTICK_MASK;
+    const passAssist = (stickBits & TOUCH_MOVE_MASK) !== 0
+      ? INPUT_BITS.touchPassAssist
+      : 0;
     const next =
-      (touchHeldRef.current & ~TOUCH_MOVE_MASK) |
-      (movementBits & TOUCH_MOVE_MASK);
+      (touchHeldRef.current & ~TOUCH_STICK_INPUT_MASK) |
+      stickBits |
+      passAssist;
     touchHeldRef.current = next;
     gameRef.current?.setTouchInput(next);
   }, []);
@@ -596,7 +789,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
   }, [gameKey, settingsOpen, touchPortraitPlaying]);
 
   return (
-    <div className={`min-h-full flex flex-col bg-night-950 ${
+    <div ref={rootRef} className={`min-h-full flex flex-col bg-night-950 [&_button:focus-visible]:outline [&_button:focus-visible]:outline-4 [&_button:focus-visible]:outline-offset-2 [&_button:focus-visible]:outline-volt-300 [&_select:focus-visible]:outline [&_select:focus-visible]:outline-4 [&_select:focus-visible]:outline-offset-2 [&_select:focus-visible]:outline-volt-300 [&_select[data-controller-editing='true']]:outline-orange-400 ${
       touchLandscapePlaying ? 'fixed inset-0 z-40 min-h-0 overflow-hidden' : ''
     }`}>
       {/* Brand bar — slim so the pitch gets the screen */}
@@ -753,7 +946,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
 
         {/* Intro / mode-select overlay */}
         {phase === 'intro' && (
-          <div className="absolute inset-0 overflow-hidden bg-[#edf1ee] text-[#20282d] animate-fade-in">
+          <div data-controller-surface className="absolute inset-0 overflow-hidden bg-[#edf1ee] text-[#20282d] animate-fade-in">
             <div className="pointer-events-none absolute inset-0 opacity-70 [background:repeating-linear-gradient(165deg,transparent_0,transparent_16px,rgba(77,95,106,0.08)_17px,transparent_19px)]" />
             <div className="pointer-events-none absolute -left-20 top-[38%] h-52 w-[70%] -rotate-6 rounded-[50%] border-[18px] border-[#91d83e]/45" />
             <div className="pointer-events-none absolute -left-28 top-[43%] h-48 w-[75%] -rotate-6 rounded-[50%] border-[5px] border-[#15a9b4]/45" />
@@ -869,7 +1062,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
 
         {/* Team-select overlay */}
         {phase === 'select' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-start overflow-y-auto bg-[#edf1ee] px-4 py-4 text-[#273237] animate-fade-in sm:justify-center [background-image:radial-gradient(circle_at_10%_70%,rgba(145,216,62,0.22),transparent_30%),radial-gradient(circle_at_90%_20%,rgba(21,169,180,0.14),transparent_28%),repeating-linear-gradient(165deg,transparent_0,transparent_16px,rgba(77,95,106,0.07)_17px,transparent_19px)]">
+          <div data-controller-surface className="absolute inset-0 flex flex-col items-center justify-start overflow-y-auto bg-[#edf1ee] px-4 py-4 text-[#273237] animate-fade-in sm:justify-center [background-image:radial-gradient(circle_at_10%_70%,rgba(145,216,62,0.22),transparent_30%),radial-gradient(circle_at_90%_20%,rgba(21,169,180,0.14),transparent_28%),repeating-linear-gradient(165deg,transparent_0,transparent_16px,rgba(77,95,106,0.07)_17px,transparent_19px)]">
             <div className="mb-2 border border-[#789c2a] bg-[#e3f1b5] px-3 py-1 font-heading text-[10px] uppercase tracking-[0.22em] text-[#4f6818] sm:text-xs">
               Step 1 of 2 · Teams &amp; jerseys
             </div>
@@ -900,9 +1093,8 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                 locked={activeSide === 'away'}
                 onYearChange={(year) => setSelectionYear('home', year)}
                 onTeamChange={(id) => setTeamSelection('home', id)}
-                onKitChange={setHomeKitId}
-                onPrevious={() => cycleSelection('home', -1)}
-                onNext={() => cycleSelection('home', 1)}
+                onKitPrevious={() => cycleKitSelection('home', -1)}
+                onKitNext={() => cycleKitSelection('home', 1)}
               />
               <div className="flex items-center font-display text-2xl text-[#829096] sm:text-5xl">
                 VS
@@ -920,9 +1112,8 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
                 locked={false}
                 onYearChange={(year) => setSelectionYear('away', year)}
                 onTeamChange={(id) => setTeamSelection('away', id)}
-                onKitChange={setAwayKitId}
-                onPrevious={() => cycleSelection('away', -1)}
-                onNext={() => cycleSelection('away', 1)}
+                onKitPrevious={() => cycleKitSelection('away', -1)}
+                onKitNext={() => cycleKitSelection('away', 1)}
               />
             </div>
             <button
@@ -1018,6 +1209,7 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
 
         {touchLandscapePlaying && !settingsOpen && (
           <TouchControls
+            attacking={homeIsAttacking}
             onMovement={setTouchMovement}
             onAction={setTouchAction}
             onMenu={handleRestart}
@@ -1120,11 +1312,13 @@ export function VifaGame({ eraTeams }: { eraTeams: VifaEraTeamOption[] }) {
 }
 
 function TouchControls({
+  attacking,
   onMovement,
   onAction,
   onMenu,
   onSettings,
 }: {
+  attacking: boolean;
   onMovement: (bits: number) => void;
   onAction: (bit: number, down: boolean) => void;
   onMenu: () => void;
@@ -1161,7 +1355,7 @@ function TouchControls({
       aria-label="Mobile match controls"
     >
       <div className="pointer-events-auto absolute left-1/2 top-2 -translate-x-1/2 rounded-full border border-white/20 bg-night-950/75 px-3 py-1 font-heading text-[9px] uppercase tracking-[0.16em] text-white shadow-lg backdrop-blur-sm">
-        Left thumb moves · Right thumb plays
+        Left thumb moves + sprints · Right thumb plays
       </div>
 
       <div
@@ -1208,9 +1402,13 @@ function TouchControls({
           onPointerCancel={(event) => releaseStick(event.pointerId)}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <span className="pointer-events-none absolute inset-4 rounded-full border border-white/15" />
+          <span className="pointer-events-none absolute inset-[14px] rounded-full border border-volt-300/45" />
           <span
-            className="pointer-events-none absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/50 bg-white/25 shadow-lg"
+            className={`pointer-events-none absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-lg transition-colors ${
+              Math.hypot(stick.x, stick.y) >= TOUCH_SPRINT_THRESHOLD
+                ? 'border-volt-200 bg-volt-500/70'
+                : 'border-white/50 bg-white/25'
+            }`}
             style={{
               marginLeft: stick.x * 30,
               marginTop: stick.y * 30,
@@ -1220,7 +1418,7 @@ function TouchControls({
           </span>
         </div>
         <div className="mt-1 text-center font-heading text-[9px] uppercase tracking-[0.18em] text-white/85">
-          Move
+          Move · outer ring sprints
         </div>
       </div>
 
@@ -1230,18 +1428,31 @@ function TouchControls({
       >
         <div className="flex flex-col gap-2 pb-1">
           <TouchActionButton label="Switch" bit={INPUT_BITS.switchPlayer} onAction={onAction} compact />
-          <TouchActionButton label="Sprint" bit={INPUT_BITS.sprint} onAction={onAction} compact accent="lime" />
           <TouchActionButton label="Contain" bit={INPUT_BITS.contain} onAction={onAction} compact />
         </div>
         <div className="relative h-[148px] w-[174px]">
           <div className="absolute left-1/2 top-0 -translate-x-1/2">
-            <TouchActionButton label="Through / GK" bit={INPUT_BITS.throughPass} onAction={onAction} />
+            <TouchActionButton
+              label={attacking ? 'Through' : 'GK Rush'}
+              bit={INPUT_BITS.throughPass}
+              onAction={onAction}
+            />
           </div>
           <div className="absolute left-0 top-1/2 -translate-y-1/2">
-            <TouchActionButton label="Long / Slide" bit={INPUT_BITS.longPass} onAction={onAction} />
+            <TouchActionButton
+              label={attacking ? 'Long' : 'Slide'}
+              bit={INPUT_BITS.longPass}
+              onAction={onAction}
+              accent={attacking ? 'plain' : 'orange'}
+            />
           </div>
           <div className="absolute right-0 top-1/2 -translate-y-1/2">
-            <TouchActionButton label="Shoot / Tackle" bit={INPUT_BITS.shot} onAction={onAction} accent="orange" />
+            <TouchActionButton
+              label={attacking ? 'Shoot' : 'Tackle'}
+              bit={INPUT_BITS.shot}
+              onAction={onAction}
+              accent="orange"
+            />
           </div>
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
             <TouchActionButton label="Pass" bit={INPUT_BITS.shortPass} onAction={onAction} accent="lime" />
@@ -1403,7 +1614,7 @@ function SquadBuilder({
   );
 
   return (
-    <div className="absolute inset-0 overflow-y-auto bg-[#edf1ee] text-[#273237] animate-fade-in [background-image:radial-gradient(circle_at_5%_30%,rgba(145,216,62,0.18),transparent_26%),radial-gradient(circle_at_95%_15%,rgba(21,169,180,0.12),transparent_24%),repeating-linear-gradient(165deg,transparent_0,transparent_17px,rgba(77,95,106,0.055)_18px,transparent_20px)]">
+    <div data-controller-surface className="absolute inset-0 overflow-y-auto bg-[#edf1ee] text-[#273237] animate-fade-in [background-image:radial-gradient(circle_at_5%_30%,rgba(145,216,62,0.18),transparent_26%),radial-gradient(circle_at_95%_15%,rgba(21,169,180,0.12),transparent_24%),repeating-linear-gradient(165deg,transparent_0,transparent_17px,rgba(77,95,106,0.055)_18px,transparent_20px)]">
       <div className="mx-auto flex min-h-full w-full max-w-5xl flex-col px-3 py-3 sm:px-6 sm:py-5">
         <div className="sticky top-0 z-20 -mx-3 -mt-3 mb-3 border-b border-[#aab5b9] bg-white/90 px-3 py-3 shadow-[0_4px_12px_rgba(60,75,80,0.12)] backdrop-blur sm:-mx-6 sm:-mt-5 sm:px-6 sm:py-4">
           <div className="flex items-start justify-between gap-3">
@@ -1824,10 +2035,14 @@ function SettingsModal({
           <div className="mb-5 rounded-xl border border-volt-500/25 bg-volt-500/5 px-4 py-3 font-body text-sm leading-relaxed text-night-200">
             <b className="text-white">You opened the correct VIFA screen.</b>{' '}
             This is part of the game webpage—it is not a computer-settings
-            window. This screen changes on-pitch controls only.{' '}
-            Use your mouse, trackpad, or keyboard to choose teams and build the
-            squad. During the match, you can use touchscreen controls, a
-            controller, keyboard, or a combination of them.
+            window. This screen changes VIFA controls only.{' '}
+            You can use a controller from the main menu through team, kit,
+            squad, and formation selection. Use the stick or D-pad to move and
+            your configured Short Pass button to choose. On a team or year
+            field, press Short Pass once, move to change the value, then press
+            it again to lock that choice. Your configured Shot button goes
+            back. During the match, touchscreen, controller, and keyboard input
+            can still be combined.
             Scroll through this page to see every action before you play.
           </div>
 
@@ -1841,8 +2056,8 @@ function SettingsModal({
             <ol className="mt-3 grid gap-2 font-body text-sm leading-relaxed text-night-200 sm:grid-cols-2">
               <li><b className="text-white">1. Choose the game normally.</b> Tap Play Match or Practice, then pick your team, squad, and formation.</li>
               <li><b className="text-white">2. Rotate at kickoff.</b> The match stays paused until the phone is sideways. If it stays upright, open iPhone Control Center and turn off Orientation Lock.</li>
-              <li><b className="text-white">3. Left thumb moves.</b> Drag anywhere inside the circular joystick. Diagonal movement works too.</li>
-              <li><b className="text-white">4. Right thumb acts.</b> Hold Sprint, passes, or Shoot to charge them; lift your thumb to release the kick.</li>
+              <li><b className="text-white">3. Left thumb moves and sprints.</b> Drag inside the circular joystick; push into the glowing outer ring to sprint automatically. Ease inward to slow back down.</li>
+              <li><b className="text-white">4. Right thumb acts.</b> Hold passes or Shoot to charge them; lift your thumb to release the kick.</li>
             </ol>
             <p className="mt-3 border-t border-sky-300/15 pt-3 font-body text-xs leading-relaxed text-night-300">
               The same buttons change jobs while defending: Shoot becomes Tackle, Long becomes Slide, Through becomes goalkeeper rush, and Contain helps you stay goal-side.
@@ -2095,6 +2310,7 @@ function ModeCard({
 }) {
   return (
     <button
+      data-controller-default={active ? 'true' : undefined}
       onMouseEnter={onHover}
       onFocus={onHover}
       onClick={onClick}
@@ -2145,9 +2361,8 @@ function TeamCrest({
   locked,
   onYearChange,
   onTeamChange,
-  onKitChange,
-  onPrevious,
-  onNext,
+  onKitPrevious,
+  onKitNext,
 }: {
   team: TeamData;
   selectionId: string;
@@ -2161,9 +2376,8 @@ function TeamCrest({
   locked: boolean;
   onYearChange: (year: number) => void;
   onTeamChange: (id: string) => void;
-  onKitChange: (id: string) => void;
-  onPrevious: () => void;
-  onNext: () => void;
+  onKitPrevious: () => void;
+  onKitNext: () => void;
 }) {
   const selectedKit = kitOptions.find((option) => option.id === kitId) ?? kitOptions[0];
   return (
@@ -2178,6 +2392,7 @@ function TeamCrest({
       <div className="grid w-full grid-cols-1 gap-1.5 sm:grid-cols-[88px_1fr]">
         <label className="sr-only" htmlFor={`${tag}-era`}>{tag} era</label>
         <select
+          data-controller-default={active ? 'true' : undefined}
           id={`${tag}-era`}
           value={year}
           onChange={(event) => onYearChange(Number(event.target.value))}
@@ -2199,31 +2414,22 @@ function TeamCrest({
           ))}
         </select>
       </div>
-      <label className="w-full">
-        <span className="mb-1 block text-center font-heading text-[9px] uppercase tracking-[0.18em] text-[#60737a] sm:text-[10px]">
-          World Cup jersey · any era
-        </span>
-        <select
-          value={selectedKit.id}
-          onChange={(event) => onKitChange(event.target.value)}
-          className="w-full min-w-0 border border-[#789c2a] bg-[#f5f8ee] px-2 py-1.5 font-heading text-[10px] uppercase tracking-wider text-[#273237] outline-none focus:border-[#168f99] sm:text-xs"
-          aria-label={`${tag} World Cup jersey`}
-        >
-          {kitOptions.map((option) => (
-            <option key={option.id} value={option.id}>{option.label}</option>
-          ))}
-        </select>
-      </label>
+      <span className="text-center font-heading text-[9px] uppercase tracking-[0.18em] text-[#60737a] sm:text-[10px]">
+        World Cup kit · any era
+      </span>
       <div className="flex items-center gap-2 sm:gap-3">
         <button
           type="button"
-          onClick={onPrevious}
-          aria-label={`Previous ${year} team`}
-          className={`hidden shrink-0 transition-opacity sm:block ${
-            active ? 'text-[#759d23] animate-pulse' : 'pointer-events-none text-transparent'
+          onClick={onKitPrevious}
+          aria-label={`Previous ${team.name} kit`}
+          disabled={!active}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all sm:h-12 sm:w-12 ${
+            active
+              ? 'border-[#789c2a] bg-white/80 text-[#759d23] shadow-sm hover:bg-[#e7f2c7]'
+              : 'border-[#aeb9bb] bg-white/40 text-[#a0abad] opacity-50'
           }`}
         >
-          <ChevronLeft size={32} />
+          <ChevronLeft size={30} />
         </button>
         <div
           className={`relative flex h-32 w-28 flex-col items-center justify-center overflow-hidden rounded-2xl transition-all sm:h-44 sm:w-40 ${
@@ -2246,20 +2452,26 @@ function TeamCrest({
         </div>
         <button
           type="button"
-          onClick={onNext}
-          aria-label={`Next ${year} team`}
-          className={`hidden shrink-0 transition-opacity sm:block ${
-            active ? 'text-[#759d23] animate-pulse' : 'pointer-events-none text-transparent'
+          onClick={onKitNext}
+          aria-label={`Next ${team.name} kit`}
+          disabled={!active}
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-all sm:h-12 sm:w-12 ${
+            active
+              ? 'border-[#789c2a] bg-white/80 text-[#759d23] shadow-sm hover:bg-[#e7f2c7]'
+              : 'border-[#aeb9bb] bg-white/40 text-[#a0abad] opacity-50'
           }`}
         >
-          <ChevronRight size={32} />
+          <ChevronRight size={30} />
         </button>
       </div>
+      <span className="-mt-1 font-body text-center text-xs capitalize text-[#52646b] sm:text-sm">
+        {selectedKit.year} {selectedKit.variant} kit
+      </span>
       <span className="font-heading text-center text-lg uppercase leading-tight tracking-wider text-[#273237] sm:text-2xl">
         {team.name}
       </span>
       <span className="font-heading text-[10px] uppercase tracking-[0.22em] text-[#6f9623] sm:text-xs">
-        Squad {year} · Kit {selectedKit.year} {selectedKit.variant}
+        Squad {year}
       </span>
     </div>
   );

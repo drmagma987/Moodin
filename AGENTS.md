@@ -512,8 +512,7 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - added a four-step first-controller walkthrough, live detection guidance,
     location-based button names, per-action gameplay explanations, local-2P
     assignment details, safe rebinding/swap behavior, and reset reassurance
-  - clarified that controller mapping affects on-pitch actions, while menus and
-    squad setup currently use mouse, trackpad, or keyboard
+  - clarified controller mappings and the available keyboard/touch fallbacks
   - kept the recommended layout visible and editable even before a controller
     is detected
 - Made controller setup impossible to confuse with operating-system settings:
@@ -539,6 +538,28 @@ Use this section for intermittent progress notes between chat windows. Prefer da
   - carried the silver/white, green, teal, speed-line, and beveled early-console
     football aesthetic through team selection, squad/formation building, and
     the frame around `Controls & Help`
+
+### 2026-10-03
+
+- Removed the global background-audio control while audio is deferred.
+- Reworked VIFA kit selection around left/right controls beside the live shirt
+  preview, with a plain-language year/variant caption beneath each kit.
+- Rebuilt VIFA dead-ball staging so offsides, throw-ins, corners, and goal kicks
+  pause clearly and reset both teams into formation-aware restart positions.
+- Verified the kit picker in the local browser plus `npm run lint`,
+  `npx tsc --noEmit`, `npm run vifa:test`, and `npm run vifa:ratings:test`;
+  lint retains the existing bachelor-party font warning.
+- Simplified mobile VIFA movement for two-thumb play: pushing the joystick at
+  least 75% outward now activates sprint automatically, easing inward releases
+  it, and the separate on-screen Sprint button was removed.
+- Added end-to-end controller navigation for the VIFA main menu, team and kit
+  selection, and squad/formation builder. Stick/D-pad moves focus, the mapped
+  Short Pass button confirms, and the mapped Shot button goes back.
+- Made mobile action buttons possession-aware (`Shoot`/`Tackle`, `Long`/`Slide`,
+  and `Through`/`GK Rush`) and strengthened deterministic touch-pass receiver
+  selection toward the joystick lane.
+- Verified with `npm run lint`, `npx tsc --noEmit`, and `npm run vifa:test`;
+  lint retains the existing bachelor-party font warning.
 
 Future Codex sessions should update this file when they make meaningful feature, architecture, deployment, or gameplay-balance changes.
 

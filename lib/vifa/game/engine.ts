@@ -2004,6 +2004,7 @@ export class PitchKickGame {
     inputKeys: ReadonlySet<string> = this.keys,
   ): PlayerEntity | null {
     const aim = this.heldDir(kicker, inputKeys);
+    const touchAimAssist = inputKeys.has('TouchPassAssist');
     const mates = (
       kicker.team === 'home' ? this.homePlayers : this.awayPlayers
     ).filter((p) => p !== kicker && !(opts.through && p.isGK));
@@ -2019,7 +2020,10 @@ export class PitchKickGame {
       const align = (dx / d) * aim.x + (dy / d) * aim.y;
 
       // Alignment with the aimed direction dominates everything else.
-      let score = align * 260;
+      // Touch has only eight digital aim sectors after the virtual stick enters
+      // the deterministic input frame. Weight its direction a little more than
+      // distance so the receiver closest to the thumb's intended lane wins.
+      let score = align * (touchAimAssist ? 330 : 260);
       // Teammates behind / far outside the aim cone are a last resort.
       if (align < 0.1) score -= 400;
 
@@ -2226,22 +2230,7 @@ export class PitchKickGame {
     this.ball.z = 0;
     this.ball.vx = this.ball.vy = this.ball.vz = 0;
 
-    // Reposition for the restart like a real free kick: everyone KEEPS their
-    // current spot (play just stopped where it was) — we only clear momentum
-    // and turn them upfield. The one exception is the OFFENDING attacking
-    // team: any of their players standing ahead of the ball is pulled BACK
-    // onside (to the own-half side of the spot) so they're clearly behind the
-    // restart and out of the kicker's way. The defending team holds its shape.
-    const atkDir = atkTeam === 'home' ? 1 : -1; // attackers' attacking axis
     for (const p of this.allPlayers) {
-      if (p.team === atkTeam && !p.isGK) {
-        // Distance the player is AHEAD of the ball along the attack axis.
-        const ahead = (p.x - spotX) * atkDir;
-        if (ahead > -20) {
-          // Drop them back behind the ball, keeping their vertical lane.
-          p.x = clamp(spotX - atkDir * (28 + ahead), p.r, FIELD_W - p.r);
-        }
-      }
       p.vx = p.vy = 0;
       p.kickTimer = 0;
       p.facing = { x: p.team === 'home' ? 1 : -1, y: 0 };
@@ -2259,18 +2248,22 @@ export class PitchKickGame {
     taker.vx = taker.vy = 0;
     taker.facing = { x: defAtk, y: 0 };
 
-    // Attackers retreat the compact-pitch restart distance.
+    // Re-form both teams around the foul instead of leaving the other twelve
+    // players wherever the live phase happened to end. The taking side gets
+    // short and forward outlets; the offending side drops into a compact block.
+    this.stageRestartShape(defTeam, { x: spotX, y: spotY }, taker);
     this.pushOpponentsFromSpot(defTeam, { x: spotX, y: spotY }, RESTART_DISTANCE);
 
     this.owner = taker;
     this.controlled =
       defTeam === 'home' ? taker : this.homePlayers[this.homeTeam.kickoffFwd];
+    if (this.localMultiplayer && defTeam === 'away') this.awayControlled = taker;
 
     // Pan the camera to the restart and hold play for a beat.
     this.camX = clamp(spotX, CAM_MIN, CAM_MAX);
     this.camY = clamp(spotY, CAM_Y_MIN, CAM_Y_MAX);
-    this.setMessage('OFFSIDE', 1.6);
-    this.freeze = 1.1;
+    this.setMessage('OFFSIDE · INDIRECT FREE KICK', 2.0);
+    this.freeze = 1.5;
 
     // Clear all transient ball/possession state so play restarts cleanly.
     this.offsideFlags.clear();
@@ -2286,12 +2279,24 @@ export class PitchKickGame {
     this.jostle = 0;
     this.tackleTimer = 0;
     this.tackleCooldown = 0;
+    this.slideCooldown = 0;
+    this.awayTackleTimer = 0;
+    this.awayTackleCooldown = 0;
+    this.awaySlideCooldown = 0;
+    this.gkRush = 0;
+    this.awayGkRush = 0;
     this.chargeKey = null;
     this.chargeTime = 0;
     this.awayChargeKey = null;
     this.awayChargeTime = 0;
+    this.awayBufferTimer = 0;
+    this.awayKickPending = false;
     this.bufferTimer = 0;
     this.kickPending = false;
+    this.passReceiver = null;
+    this.aerialReceiver = null;
+    this.throwInTaker = null;
+    for (const p of this.allPlayers) p.slideTimer = 0;
   }
 
   // ---- teammates AI (home, non-controlled) --------------------------------
@@ -4274,6 +4279,12 @@ export class PitchKickGame {
     taker.vx = taker.vy = 0;
     taker.facing = { x: atkDir, y: 0 };
 
+    // Build a believable dead-ball shape before the restart is exposed to
+    // input. This is deliberately a full-team reset around the spot: without
+    // it, a throw-in/corner/goal kick resumed with players stranded in the
+    // positions from the previous phase of play.
+    this.stageRestartShape(team, { x: spotX, y: spotY }, taker);
+
     // A throw-in is taken with the HANDS: arm the taker so he holds the ball
     // overhead and releases a hand throw (see dribble + executeThrowIn).
     this.throwInTaker = isThrowIn ? taker : null;
@@ -4293,7 +4304,7 @@ export class PitchKickGame {
     this.camX = clamp(spotX, CAM_MIN, CAM_MAX);
     this.camY = clamp(spotY, CAM_Y_MIN, CAM_Y_MAX);
     if (label) this.setMessage(label, 1.6);
-    this.freeze = 0.9;
+    this.freeze = 1.25;
 
     // Clear transient ball/possession state so play restarts cleanly.
     this.lastKicker = null;
@@ -4310,14 +4321,87 @@ export class PitchKickGame {
     this.jostle = 0;
     this.tackleTimer = 0;
     this.tackleCooldown = 0;
+    this.slideCooldown = 0;
+    this.awayTackleTimer = 0;
+    this.awayTackleCooldown = 0;
+    this.awaySlideCooldown = 0;
     this.gkRush = 0;
+    this.awayGkRush = 0;
     this.chargeKey = null;
     this.chargeTime = 0;
     this.awayChargeKey = null;
     this.awayChargeTime = 0;
+    this.awayBufferTimer = 0;
+    this.awayKickPending = false;
     this.bufferTimer = 0;
     this.kickPending = false;
     this.passReceiver = null;
+    this.aerialReceiver = null;
+    for (const p of this.allPlayers) p.slideTimer = 0;
+  }
+
+  /** Arrange both teams into a compact, formation-aware dead-ball shape.
+   *  Formation anchors preserve each player's lane and depth ordering while
+   *  the restart spot determines where the two blocks sit on the pitch. */
+  private stageRestartShape(team: Team, spot: Vec, taker: PlayerEntity) {
+    const atkDir = team === 'home' ? 1 : -1;
+    const distanceToAttackingGoal = team === 'home'
+      ? FIELD_W - spot.x
+      : spot.x;
+    const isCornerShape = distanceToAttackingGoal < M(2);
+    const isTopTouchline = spot.y < M(1);
+    const isBottomTouchline = spot.y > FIELD_H - M(1);
+
+    for (const p of this.allPlayers) {
+      if (p === taker) continue;
+
+      // Keep goalkeepers in a recognisable home position unless one is taking
+      // the restart (goal kicks are handled by the taker placement above).
+      if (p.isGK) {
+        p.x = p.anchor.x;
+        p.y = p.anchor.y;
+        continue;
+      }
+
+      const ownProgress = p.team === 'home'
+        ? p.anchor.x / FIELD_W
+        : (FIELD_W - p.anchor.x) / FIELD_W;
+      let alongAttack: number;
+
+      if (isCornerShape && p.team === team) {
+        // At a corner there is no pitch ahead of the ball. Put the forwards in
+        // the box, with midfielders and defenders progressively farther back.
+        alongAttack = -(
+          M(3) + Math.max(0, 0.62 - ownProgress) * FIELD_W * 0.28
+        );
+      } else if (isCornerShape) {
+        // The defending back line protects the goalmouth while its higher-role
+        // players remain available farther out for a clearance.
+        alongAttack = -(
+          M(2) + Math.max(0, ownProgress - 0.18) * FIELD_W * 0.28
+        );
+      } else if (p.team === team) {
+        // Preserve formation depth: defenders offer behind the ball, midfield
+        // stays nearby, and forwards give the taker options further upfield.
+        alongAttack = (ownProgress - 0.38) * FIELD_W * 0.55;
+      } else {
+        // The opposition reforms goal-side. Their forwards are the first line
+        // outside the required distance; defenders sit progressively deeper.
+        alongAttack = RESTART_DISTANCE
+          + Math.max(0, 0.62 - ownProgress) * FIELD_W * 0.34;
+      }
+
+      p.x = clamp(spot.x + atkDir * alongAttack, p.r + M(1), FIELD_W - p.r - M(1));
+      const laneFraction = p.anchor.y / FIELD_H;
+      const stagedY = isTopTouchline
+        ? M(2) + laneFraction * FIELD_H * 0.68
+        : isBottomTouchline
+          ? FIELD_H - M(2) - (1 - laneFraction) * FIELD_H * 0.68
+          : spot.y + (p.anchor.y - FIELD_H / 2) * 0.72;
+      p.y = clamp(stagedY, p.r + M(1), FIELD_H - p.r - M(1));
+    }
+
+    this.separatePlayers();
   }
 
   /** Push every player NOT on `keepTeam` to at least `minDist` from `spot`, so
