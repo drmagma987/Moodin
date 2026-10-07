@@ -1,4 +1,4 @@
-const VERSION = "brgym-v3";
+const VERSION = "brgym-v4";
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const APP_ROUTES = [
@@ -9,6 +9,7 @@ const APP_ROUTES = [
   "/brgym/templates",
   "/brgym/equipment",
   "/brgym/settings",
+  "/brgym/more",
 ];
 const CORE_ASSETS = [
   "/brgym/manifest.webmanifest",
@@ -133,4 +134,18 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(staleWhileRevalidate(request));
   }
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const existing = clients.find((client) => client.url.includes("/brgym/"));
+      if (existing) {
+        existing.focus();
+        return existing;
+      }
+      return self.clients.openWindow("/brgym/plan");
+    }),
+  );
 });

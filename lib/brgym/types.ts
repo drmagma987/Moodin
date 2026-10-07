@@ -155,6 +155,14 @@ export interface RunLog {
   notes: string;
 }
 
+export interface RunIntervalStep {
+  id: string;
+  label: string;
+  seconds: number;
+  effort: "easy" | "fast" | "steady" | "recovery";
+  cue?: string;
+}
+
 export interface TrainingPlanEntry {
   id: string;
   date: string;
@@ -164,6 +172,7 @@ export interface TrainingPlanEntry {
   templateId?: string | null;
   optional?: boolean;
   runLog?: RunLog | null;
+  timedSections?: RunIntervalStep[];
 }
 
 export interface TrainingPlan {

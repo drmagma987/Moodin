@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { MoonStar, Pause, Play, RotateCcw, SkipForward, TimerReset } from "lucide-react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { Pause, Play, RotateCcw, SkipForward, TimerReset } from "lucide-react";
 
 import { useBRGym } from "@/components/brgym/provider";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ function playDing() {
   };
 }
 
-export function RestTimer() {
+export function RestTimer({ children }: { children?: ReactNode }) {
   const {
     data,
     timer,
@@ -112,48 +112,34 @@ export function RestTimer() {
   }, [timer.isRunning]);
 
   return (
-    <Card className="border-cyan-400/25 bg-slate-900/80 shadow-[0_18px_50px_rgba(0,0,0,0.35)]">
+    <Card className="sticky top-3 z-10 border-cyan-400/30 bg-slate-950/95 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur">
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-cyan-300/80">Rest timer</p>
-            <p className="text-4xl font-semibold tracking-tight text-white">{formatSeconds(timer.secondsLeft)}</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-cyan-300/80">{timer.isRunning ? "Resting" : "Next set"}</p>
+            <p className="text-3xl font-semibold tracking-tight text-white tabular-nums">{formatSeconds(timer.secondsLeft)}</p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <Badge variant={timer.isRunning ? "cyan" : "default"}>
-              {timer.isRunning ? "Running" : "Ready"}
-            </Badge>
-            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right text-xs text-slate-300">
-              <p>Auto-starts on</p>
-              <p className="font-semibold text-white">Log Set</p>
-            </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={timer.isRunning ? "cyan" : "default"}>{timer.isRunning ? "Running" : "Ready"}</Badge>
+            <Button onClick={timer.isRunning ? pauseTimer : resumeTimer} size="sm" variant="secondary">
+              {timer.isRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              <span className="sr-only">{timer.isRunning ? "Pause" : "Resume"}</span>
+            </Button>
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2 text-sm">
-          <Button onClick={pauseTimer} size="lg" variant="secondary">
-            <Pause className="mr-2 h-4 w-4" />
-            Pause
+        {children ? <div className="mt-4 border-t border-white/10 pt-4">{children}</div> : null}
+
+        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+          <Button className="px-2" onClick={() => adjustTimer(30)} size="sm" variant="secondary">
+            <TimerReset className="mr-1 h-4 w-4" /> +30s
           </Button>
-          <Button onClick={resumeTimer} size="lg">
-            <Play className="mr-2 h-4 w-4" />
-            Resume
-          </Button>
-          <Button onClick={resetTimer} size="lg" variant="secondary">
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Reset
-          </Button>
-          <Button className="px-2" onClick={skipTimer} size="lg" variant="secondary">
+          <Button className="px-2" onClick={skipTimer} size="sm" variant="secondary">
             <SkipForward className="mr-2 h-4 w-4" />
             Skip
           </Button>
-          <Button className="px-2" onClick={() => adjustTimer(30)} size="lg" variant="secondary">
-            <TimerReset className="mr-2 h-4 w-4" />
-            +30s
-          </Button>
-          <Button className="px-2" onClick={() => adjustTimer(-30)} size="lg" variant="secondary">
-            <MoonStar className="mr-2 h-4 w-4" />
-            -30s
+          <Button className="px-2" onClick={resetTimer} size="sm" variant="secondary">
+            <RotateCcw className="mr-1 h-4 w-4" /> Reset
           </Button>
         </div>
       </CardContent>

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Check, ChevronDown, Dumbbell, Flag, Footprints } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, Dumbbell, Flag, Footprints, Timer } from "lucide-react";
 import { toast } from "sonner";
 
 import { useBRGym } from "@/components/brgym/provider";
@@ -36,6 +36,7 @@ export default function BRGymPlanPage() {
   const router = useRouter();
   const { data, hydrated, clearRunLog, saveRunLog, startWorkout } = useBRGym();
   const [editingRunId, setEditingRunId] = useState<string | null>(null);
+  const [showFullPlan, setShowFullPlan] = useState(false);
   const [runDraft, setRunDraft] = useState({
     distanceMiles: "",
     totalMinutes: "",
@@ -70,6 +71,9 @@ export default function BRGymPlanPage() {
   const completedCount = plan.entries.filter(
     (entry) => Boolean(entry.runLog) || isLiftComplete(entry, completedLiftIds),
   ).length;
+  const visibleEntries = showFullPlan
+    ? plan.entries
+    : plan.entries.filter((entry) => entry.date >= today).slice(0, 8);
 
   function openRunLog(entry: TrainingPlanEntry) {
     setEditingRunId(entry.id);
@@ -136,7 +140,7 @@ export default function BRGymPlanPage() {
       </Card>
 
       <div className="space-y-3">
-        {plan.entries.map((entry) => {
+        {visibleEntries.map((entry) => {
           const liftComplete = isLiftComplete(entry, completedLiftIds);
           const complete = liftComplete || Boolean(entry.runLog);
           const isToday = entry.date === today;
@@ -216,9 +220,16 @@ export default function BRGymPlanPage() {
                         {entry.runLog.intervalPaces ? <p className="mt-1">Splits: {entry.runLog.intervalPaces}</p> : null}
                       </div>
                     ) : null}
-                    <Button className="w-full" onClick={() => openRunLog(entry)} variant={entry.runLog ? "secondary" : "default"}>
-                      {entry.runLog ? "Edit run log" : "Log this run"}
-                    </Button>
+                    <div className={entry.timedSections?.length ? "grid grid-cols-2 gap-2" : ""}>
+                      {entry.timedSections?.length ? (
+                        <Button className="w-full" onClick={() => router.push(`/brgym/run/${entry.id}`)}>
+                          <Timer className="mr-2 h-4 w-4" /> Start timer
+                        </Button>
+                      ) : null}
+                      <Button className="w-full" onClick={() => openRunLog(entry)} variant="secondary">
+                        {entry.runLog ? "Edit log" : "Log run"}
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
 
@@ -271,6 +282,10 @@ export default function BRGymPlanPage() {
           );
         })}
       </div>
+
+      <Button className="w-full" onClick={() => setShowFullPlan((current) => !current)} variant="secondary">
+        {showFullPlan ? "Show upcoming only" : `Show full plan (${plan.entries.length} sessions)`}
+      </Button>
 
       <div className="flex items-center justify-center gap-2 py-3 text-xs text-slate-500">
         <ChevronDown className="h-4 w-4" /> Race day is Friday, November 27

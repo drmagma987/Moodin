@@ -1,4 +1,50 @@
-import type { TrainingPlan, TrainingPlanEntry } from "@/lib/brgym/types";
+import type { RunIntervalStep, TrainingPlan, TrainingPlanEntry } from "@/lib/brgym/types";
+
+function timedRepeats(
+  repeatCount: number,
+  workSeconds: number,
+  recoverySeconds: number,
+  workLabel: string,
+  workCue: string,
+): RunIntervalStep[] {
+  const steps: RunIntervalStep[] = [
+    {
+      id: "warm-up",
+      label: "Easy warm-up",
+      seconds: 10 * 60,
+      effort: "easy",
+      cue: "Relaxed, conversational effort",
+    },
+  ];
+
+  for (let repeat = 1; repeat <= repeatCount; repeat += 1) {
+    steps.push({
+      id: `work-${repeat}`,
+      label: `${workLabel} ${repeat} of ${repeatCount}`,
+      seconds: workSeconds,
+      effort: "fast",
+      cue: workCue,
+    });
+    if (repeat < repeatCount) {
+      steps.push({
+        id: `recovery-${repeat}`,
+        label: `Easy recovery ${repeat} of ${repeatCount - 1}`,
+        seconds: recoverySeconds,
+        effort: "recovery",
+        cue: "Back off and get ready for the next rep",
+      });
+    }
+  }
+
+  steps.push({
+    id: "cooldown",
+    label: "Easy cooldown",
+    seconds: 5 * 60,
+    effort: "easy",
+    cue: "Let your breathing settle",
+  });
+  return steps;
+}
 
 const weeklyRuns = [
   {
@@ -58,13 +104,27 @@ function lift(id: string, date: string, title: string, templateId: string, detai
   return { id, date, kind: "lift", title, templateId, details };
 }
 
-function run(id: string, date: string, title: string, details: string, optional = false): TrainingPlanEntry {
-  return { id, date, kind: "run", title, details, optional, runLog: null };
+function run(
+  id: string,
+  date: string,
+  title: string,
+  details: string,
+  optional = false,
+  timedSections?: RunIntervalStep[],
+): TrainingPlanEntry {
+  return { id, date, kind: "run", title, details, optional, runLog: null, timedSections };
 }
 
 export function createBossEightWeekPlan(): TrainingPlan {
   const entries: TrainingPlanEntry[] = [
-    run("run-quality-2026-10-07", "2026-10-07", "Quality run", weeklyRuns[0].quality),
+    run(
+      "run-quality-2026-10-07",
+      "2026-10-07",
+      "Quality run",
+      weeklyRuns[0].quality,
+      false,
+      timedRepeats(6, 60, 90, "Fast", "Quick and controlled — about 7/10 effort"),
+    ),
     lift("lift-pull-2026-10-10", "2026-10-10", "Pull", "pull-default", "3 sets of 8-10 reps per exercise. Keep every rep controlled."),
     run("run-endurance-2026-10-11", "2026-10-11", "Endurance run", weeklyRuns[0].endurance),
   ];
@@ -79,7 +139,24 @@ export function createBossEightWeekPlan(): TrainingPlan {
 
     entries.push(
       lift(`lift-push-${monday}`, monday, "Push", "push-default", "3 sets of 8-10 reps per exercise."),
-      run(`run-quality-${week.qualityDate}`, week.qualityDate, "Quality run", week.quality),
+      run(
+        `run-quality-${week.qualityDate}`,
+        week.qualityDate,
+        "Quality run",
+        week.quality,
+        false,
+        week.qualityDate === "2026-10-13"
+          ? timedRepeats(5, 120, 120, "Fast", "Controlled fast effort")
+          : week.qualityDate === "2026-10-20"
+            ? timedRepeats(4, 180, 120, "Fast", "Controlled fast effort")
+            : week.qualityDate === "2026-10-27"
+              ? timedRepeats(3, 300, 180, "Controlled hard", "Strong but repeatable")
+              : week.qualityDate === "2026-11-03"
+                ? timedRepeats(5, 180, 120, "5K effort", "Settle near 5K effort")
+                : week.qualityDate === "2026-11-10"
+                  ? timedRepeats(2, 480, 240, "5K effort", "Strong, even, and controlled")
+                  : undefined,
+      ),
       lift(
         `lift-legs-${toDate(thursday)}`,
         toDate(thursday),

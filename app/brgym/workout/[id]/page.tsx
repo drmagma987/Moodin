@@ -171,6 +171,8 @@ export default function BRGymWorkoutLoggerPage() {
     );
   }
 
+  const currentProfile = profile;
+
   const selectedExerciseId =
     selectedExerciseIdOverride &&
     activeWorkout.exercises.some((exercise) => exercise.id === selectedExerciseIdOverride)
@@ -198,6 +200,7 @@ export default function BRGymWorkoutLoggerPage() {
         )
       : null;
   const unsupported = !isExerciseSupported(selectedExercise, profile);
+  const isAssistedPullUp = selectedExercise.name.toLowerCase().includes("pull-up");
   const extraSetCount = extraSetCounts[selectedExercise.id] ?? 0;
   const visibleSetCount = Math.max(
     selectedExercise.targetSets + extraSetCount,
@@ -205,6 +208,46 @@ export default function BRGymWorkoutLoggerPage() {
   );
   const visibleSetNumbers = Array.from({ length: visibleSetCount }, (_, index) => index + 1);
   const completedExerciseCount = activeWorkout.exercises.filter((exercise) => exercise.completedSets.length > 0).length;
+  const nextSetNumber = visibleSetNumbers.find((setNumber) => !getCompletedSet(selectedExercise, setNumber));
+  const nextSetInput = nextSetNumber
+    ? getSetDraftValue(draftInputs, selectedExercise, nextSetNumber)
+    : null;
+  const nextPreviousSet = nextSetNumber ? getLastTimeSet(previousLog, nextSetNumber) : null;
+
+  function updateSetInput(setNumber: number, partial: Partial<SetDraftInput>) {
+    const currentValue = getSetDraftValue(draftInputs, selectedExercise, setNumber);
+    setDraftInputs((current) => ({
+      ...current,
+      [selectedExercise.id]: {
+        ...(current[selectedExercise.id] ?? {}),
+        [setNumber]: { ...currentValue, ...partial },
+      },
+    }));
+  }
+
+  function submitSet(setNumber: number) {
+    const setInput = getSetDraftValue(draftInputs, selectedExercise, setNumber);
+    const reps = Number(setInput.reps);
+    const weight = Number(setInput.weight || "0");
+    if (!Number.isFinite(reps) || reps <= 0) {
+      toast.error(`Enter reps for Set ${setNumber}`);
+      return;
+    }
+    const normalized = normalizeWeight(weight, currentProfile.primaryUnit);
+    const setLog: SetLog = {
+      setNumber,
+      reps,
+      enteredWeight: weight,
+      enteredUnit: currentProfile.primaryUnit,
+      normalizedWeightLb: normalized.lb,
+      normalizedWeightKg: normalized.kg,
+      bandResistance:
+        isAssistedPullUp ? setInput.band || null : null,
+    };
+    logSet(selectedExercise.id, setLog);
+    updateSetInput(setNumber, { weight: `${weight}`, reps: `${reps}` });
+    toast.success(`${selectedExercise.name} • Set ${setNumber} logged`);
+  }
 
   return (
     <div className="space-y-4">
@@ -248,284 +291,149 @@ export default function BRGymWorkoutLoggerPage() {
         </CardContent>
       </Card>
 
-      <RestTimer />
-
-      <Card className="sticky top-3 z-10 border-cyan-400/20 bg-slate-950/92 backdrop-blur">
-        <CardContent className="space-y-4">
+      <RestTimer>
+        <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Current lift</p>
-              <h3 className="mt-1 text-xl font-semibold text-white">{selectedExercise.name}</h3>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-semibold text-white">{selectedExercise.name}</p>
+              <p className="text-xs text-slate-400">
+                {nextSetNumber ? `Set ${nextSetNumber} • target ${selectedExercise.repMin}-${selectedExercise.repMax} reps` : "All planned sets logged"}
+              </p>
             </div>
-            <Link className="text-sm text-cyan-300" href={`/brgym/exercises/${selectedExercise.id}`}>
-              History
-            </Link>
-          </div>
-
-          <label className="block">
-            <span className="mb-2 block text-xs uppercase tracking-[0.18em] text-slate-400">Choose lift</span>
-            <div className="relative">
+            <label className="relative max-w-[9rem]">
               <Select
-                className="h-14 appearance-none pr-10 text-base"
+                aria-label="Choose lift"
+                className="h-10 appearance-none truncate pr-8 text-xs"
                 onChange={(event) => setSelectedExerciseIdOverride(event.target.value)}
                 value={selectedExercise.id}
               >
                 {activeWorkout.exercises.map((exercise, index) => (
-                  <option key={exercise.id} value={exercise.id}>
-                    {index + 1}. {exercise.name}
-                  </option>
+                  <option key={exercise.id} value={exercise.id}>{index + 1}. {exercise.name}</option>
                 ))}
               </Select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-            </div>
-          </label>
-
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Rep target</p>
-              <p className="mt-1 font-medium text-white">
-                {selectedExercise.repMin}-{selectedExercise.repMax} reps
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Sets on screen</p>
-              <p className="mt-1 font-medium text-white">{visibleSetCount}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="space-y-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Previous relevant performance</p>
-              <p className="mt-2 text-sm text-slate-200">{describePerformance(previousLog)}</p>
-            </div>
-            {selectedExercise.selectedReplacementName ? (
-              <Badge variant="warning">Swap: {selectedExercise.selectedReplacementName}</Badge>
-            ) : null}
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </label>
           </div>
 
-          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 text-sm">
-            <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Suggested today</p>
-            <p className="mt-2 text-slate-100">{suggestion.recommendation}</p>
-            {suggestion.suggestedWeight ? (
-              <p className="mt-2 font-medium text-white">
-                Start near{" "}
-                {formatWeight(
-                  suggestion.suggestedWeight,
-                  suggestion.suggestedUnit ?? profile.primaryUnit,
-                  profile,
-                )}
-              </p>
-            ) : null}
-            {suggestion.explanation ? <p className="mt-2 text-cyan-100/90">{suggestion.explanation}</p> : null}
-          </div>
-
-          {unsupported ? (
-            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
-              <p className="text-sm font-medium text-amber-100">Equipment missing for this setup.</p>
-              <p className="mt-1 text-sm text-amber-50/90">Pick a swap before you log this lift.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(selectedExercise.replacementOptions ?? []).map((option) => (
-                  <Button
-                    key={option}
-                    onClick={() => replaceExercise(selectedExercise.id, option)}
-                    size="sm"
-                    variant="secondary"
-                  >
-                    Use {option}
-                  </Button>
-                ))}
+          {nextSetNumber && nextSetInput ? (
+            <>
+              <div className={`grid gap-2 ${isAssistedPullUp ? "grid-cols-1" : "grid-cols-2"}`}>
+                {!isAssistedPullUp ? <label className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                    Weight ({profile.primaryUnit})
+                  </span>
+                  <Input
+                    className="mt-1 border-none bg-transparent px-0 text-2xl font-semibold shadow-none"
+                    inputMode="decimal"
+                    onChange={(event) => updateSetInput(nextSetNumber, { weight: event.target.value })}
+                    placeholder={suggestion.suggestedWeight ? `${suggestion.suggestedWeight}` : "0"}
+                    value={nextSetInput.weight}
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    {suggestion.suggestedWeight ? `Suggested ${formatWeight(suggestion.suggestedWeight, suggestion.suggestedUnit ?? profile.primaryUnit, profile)}` : nextPreviousSet ? `Last ${formatWeight(nextPreviousSet.enteredWeight, nextPreviousSet.enteredUnit, profile)}` : "Choose a clean starting weight"}
+                  </p>
+                </label> : null}
+                <label className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-slate-400">Reps</span>
+                  <Input
+                    className="mt-1 border-none bg-transparent px-0 text-2xl font-semibold shadow-none"
+                    inputMode="numeric"
+                    onChange={(event) => updateSetInput(nextSetNumber, { reps: event.target.value })}
+                    placeholder={`${selectedExercise.repMin}-${selectedExercise.repMax}`}
+                    value={nextSetInput.reps}
+                  />
+                  <p className="text-[11px] text-slate-400">{nextPreviousSet ? `Last ${nextPreviousSet.reps}` : `Target ${selectedExercise.repMin}-${selectedExercise.repMax}`}</p>
+                </label>
               </div>
+              {isAssistedPullUp ? (
+                <Select onChange={(event) => updateSetInput(nextSetNumber, { band: event.target.value })} value={nextSetInput.band}>
+                  <option value="">No band</option>
+                  {BAND_ASSISTANCE_OPTIONS.map((option) => <option key={option} value={option}>{option} assistance</option>)}
+                </Select>
+              ) : null}
+              <Button className="w-full" onClick={() => submitSet(nextSetNumber)} size="lg">Log Set {nextSetNumber}</Button>
+            </>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => setExtraSetCounts((current) => ({ ...current, [selectedExercise.id]: (current[selectedExercise.id] ?? 0) + 1 }))} variant="secondary">
+                <Plus className="mr-2 h-4 w-4" /> Add set
+              </Button>
+              <Button
+                onClick={() => {
+                  const currentIndex = activeWorkout.exercises.findIndex((exercise) => exercise.id === selectedExercise.id);
+                  const nextExercise = activeWorkout.exercises.slice(currentIndex + 1).find((exercise) => exercise.completedSets.length < exercise.targetSets);
+                  if (nextExercise) setSelectedExerciseIdOverride(nextExercise.id);
+                }}
+                disabled={!activeWorkout.exercises.some((exercise) => exercise.id !== selectedExercise.id && exercise.completedSets.length < exercise.targetSets)}
+              >Next lift</Button>
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <section className="space-y-3">
-        {visibleSetNumbers.map((setNumber) => {
-          const completedSet = getCompletedSet(selectedExercise, setNumber);
-          const previousSet = getLastTimeSet(previousLog, setNumber);
-          const setInput = getSetDraftValue(
-            draftInputs,
-            selectedExercise,
-            setNumber,
-          );
-
-          return (
-            <Card key={`${selectedExercise.id}-${setNumber}`}>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-semibold text-white">
-                      Set {setNumber}
-                      {setNumber > selectedExercise.targetSets ? " • Extra" : ""}
-                    </p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-400">
-                      Last time:{" "}
-                      {previousSet
-                        ? selectedExercise.name === "Pull-up / assisted pull-up"
-                          ? `${previousSet.reps} reps${previousSet.bandResistance ? `, ${previousSet.bandResistance}` : ""}`
-                          : `${formatWeight(previousSet.enteredWeight, previousSet.enteredUnit, profile)} x ${previousSet.reps}`
-                        : "No set logged"}
-                    </p>
-                  </div>
-                  {completedSet ? <Badge variant="success">Logged</Badge> : <Badge>Open</Badge>}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <span className="text-xs uppercase tracking-[0.18em] text-slate-400">
-                      {profile.primaryUnit === "kg" ? "Weight (kg)" : "Weight (lb)"}
-                    </span>
-                    <Input
-                      className="mt-2 border-none bg-transparent px-0 text-2xl font-semibold shadow-none focus:border-none"
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        setDraftInputs((current) => ({
-                          ...current,
-                          [selectedExercise.id]: {
-                            ...(current[selectedExercise.id] ?? {}),
-                            [setNumber]: { ...setInput, weight: event.target.value },
-                          },
-                        }))
-                      }
-                      placeholder={suggestion.suggestedWeight ? `${suggestion.suggestedWeight}` : "0"}
-                      value={setInput.weight}
-                    />
-                    <p className="mt-2 text-xs text-slate-400">
-                      Last:{" "}
-                      <span className="font-medium text-slate-200">
-                        {previousSet
-                          ? selectedExercise.name === "Pull-up / assisted pull-up"
-                            ? previousSet.bandResistance ?? "Bodyweight"
-                            : formatWeight(previousSet.enteredWeight, previousSet.enteredUnit, profile)
-                          : "No log"}
-                      </span>
-                    </p>
-                  </label>
-                  <label className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Reps</span>
-                    <Input
-                      className="mt-2 border-none bg-transparent px-0 text-2xl font-semibold shadow-none focus:border-none"
-                      inputMode="numeric"
-                      onChange={(event) =>
-                        setDraftInputs((current) => ({
-                          ...current,
-                          [selectedExercise.id]: {
-                            ...(current[selectedExercise.id] ?? {}),
-                            [setNumber]: { ...setInput, reps: event.target.value },
-                          },
-                        }))
-                      }
-                      placeholder={`${selectedExercise.repMin}`}
-                      value={setInput.reps}
-                    />
-                    <p className="mt-2 text-xs text-slate-400">
-                      Last:{" "}
-                      <span className="font-medium text-slate-200">
-                        {previousSet ? `${previousSet.reps} reps` : "No log"}
-                      </span>
-                    </p>
-                  </label>
-                </div>
-
-                {selectedExercise.name === "Pull-up / assisted pull-up" ? (
-                  <label className="block rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Band assistance</span>
-                    <Select
-                      className="mt-2"
-                      onChange={(event) =>
-                        setDraftInputs((current) => ({
-                          ...current,
-                          [selectedExercise.id]: {
-                            ...(current[selectedExercise.id] ?? {}),
-                            [setNumber]: { ...setInput, band: event.target.value },
-                          },
-                        }))
-                      }
-                      value={setInput.band}
-                    >
-                      <option value="">No band</option>
-                      {BAND_ASSISTANCE_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                ) : null}
-
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    const reps = Number(setInput.reps);
-                    const weight = Number(setInput.weight || "0");
-                    if (!Number.isFinite(reps) || reps <= 0) {
-                      toast.error(`Enter reps for Set ${setNumber}`);
-                      return;
-                    }
-                    const normalized = normalizeWeight(weight, profile.primaryUnit);
-                    const setLog: SetLog = {
-                      setNumber,
-                      reps,
-                      enteredWeight: weight,
-                      enteredUnit: profile.primaryUnit,
-                      normalizedWeightLb: normalized.lb,
-                      normalizedWeightKg: normalized.kg,
-                      bandResistance:
-                        selectedExercise.name === "Pull-up / assisted pull-up" ? setInput.band || null : null,
-                    };
-                    logSet(selectedExercise.id, setLog);
-                    setDraftInputs((current) => ({
-                      ...current,
-                      [selectedExercise.id]: {
-                        ...(current[selectedExercise.id] ?? {}),
-                        [setNumber]: {
-                          ...setInput,
-                          weight: `${weight}`,
-                          reps: `${reps}`,
-                        },
-                      },
-                    }));
-                    toast.success(`Set ${setNumber} logged for ${selectedExercise.name}`);
-                  }}
-                  size="lg"
-                >
-                  {completedSet ? `Update Set ${setNumber}` : `Log Set ${setNumber}`}
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-
-        <Button
-          className="w-full"
-          onClick={() =>
-            setExtraSetCounts((current) => ({
-              ...current,
-              [selectedExercise.id]: (current[selectedExercise.id] ?? 0) + 1,
-            }))
-          }
-          size="lg"
-          variant="secondary"
-        >
-          <Plus className="mr-2 h-5 w-5" />
-          Add Set
-        </Button>
-      </section>
+          )}
+        </div>
+      </RestTimer>
 
       <Card>
         <CardContent className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Struggle rating</p>
-            <div className="mt-3 grid grid-cols-1 gap-2">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Set progress</p>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {visibleSetNumbers.map((setNumber) => {
+                const completedSet = getCompletedSet(selectedExercise, setNumber);
+                return (
+                  <div key={setNumber} className={`rounded-2xl border p-3 text-center text-sm ${completedSet ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-100" : "border-white/10 bg-white/5 text-slate-400"}`}>
+                    <p className="text-xs">Set {setNumber}</p>
+                    <p className="mt-1 font-semibold">{completedSet ? `${completedSet.enteredWeight || "BW"} × ${completedSet.reps}` : "Open"}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <details className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-white">Guidance, history, and set edits</summary>
+            <div className="mt-4 space-y-4 text-sm">
+              <p className="text-slate-300">Last time: {describePerformance(previousLog)}</p>
+              <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-50">
+                <p>{suggestion.recommendation}</p>
+                {suggestion.explanation ? <p className="mt-2 text-xs text-cyan-100/80">{suggestion.explanation}</p> : null}
+              </div>
+              {unsupported ? (
+                <div className="rounded-2xl bg-amber-400/10 p-3 text-amber-50">
+                  <p>Equipment missing. Choose a swap:</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(selectedExercise.replacementOptions ?? []).map((option) => <Button key={option} onClick={() => replaceExercise(selectedExercise.id, option)} size="sm" variant="secondary">{option}</Button>)}
+                  </div>
+                </div>
+              ) : null}
+              {visibleSetNumbers.map((setNumber) => {
+                const setInput = getSetDraftValue(draftInputs, selectedExercise, setNumber);
+                return (
+                  <div key={setNumber} className="grid grid-cols-[auto_1fr_1fr_auto] items-end gap-2">
+                    <span className="pb-3 text-slate-400">{setNumber}</span>
+                    <Input aria-label={`Set ${setNumber} weight`} inputMode="decimal" onChange={(event) => updateSetInput(setNumber, { weight: event.target.value })} placeholder="Weight" value={setInput.weight} />
+                    <Input aria-label={`Set ${setNumber} reps`} inputMode="numeric" onChange={(event) => updateSetInput(setNumber, { reps: event.target.value })} placeholder="Reps" value={setInput.reps} />
+                    <Button onClick={() => submitSet(setNumber)} size="sm">Save</Button>
+                  </div>
+                );
+              })}
+              <div className="flex gap-2">
+                <Button onClick={() => setExtraSetCounts((current) => ({ ...current, [selectedExercise.id]: (current[selectedExercise.id] ?? 0) + 1 }))} size="sm" variant="secondary"><Plus className="mr-1 h-4 w-4" /> Add set</Button>
+                <Link className="rounded-xl bg-white/8 px-3 py-2 text-xs text-cyan-200" href={`/brgym/exercises/${selectedExercise.id}`}>Exercise history</Link>
+              </div>
+            </div>
+          </details>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">How hard was this lift?</p>
+            <div className="mt-3 grid grid-cols-5 gap-2">
               {([1, 2, 3, 4, 5] as const).map((rating) => (
                 <button
                   key={rating}
-                  className={`rounded-2xl border px-3 py-3 text-left text-sm ${
+                  aria-label={STRUGGLE_LABELS[rating]}
+                  className={`rounded-2xl border px-2 py-3 text-center text-sm ${
                     selectedExercise.struggleRating === rating
                       ? "border-cyan-400 bg-cyan-400/12 text-white"
                       : "border-white/10 bg-white/5 text-slate-300"
@@ -533,21 +441,12 @@ export default function BRGymWorkoutLoggerPage() {
                   onClick={() => setExerciseStruggle(selectedExercise.id, rating)}
                   type="button"
                 >
-                  {rating} • {STRUGGLE_LABELS[rating]}
+                  <span className="block text-lg font-semibold">{rating}</span>
+                  <span className="mt-1 block truncate text-[10px] text-slate-400">{rating === 1 ? "Easy" : rating === 3 ? "Clean" : rating === 5 ? "Failed" : rating === 2 ? "Solid" : "Hard"}</span>
                 </button>
               ))}
             </div>
           </div>
-
-          <label className="block rounded-2xl border border-white/10 bg-white/5 p-3">
-            <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Lift notes</span>
-            <Textarea
-              className="mt-2 border-none bg-transparent px-0 py-0 shadow-none focus:border-none"
-              onChange={(event) => setExerciseNotes(selectedExercise.id, event.target.value)}
-              placeholder="Optional notes for this lift"
-              value={selectedExercise.notes}
-            />
-          </label>
 
           {postRecommendation ? (
             <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm">
@@ -555,18 +454,16 @@ export default function BRGymWorkoutLoggerPage() {
               <p className="mt-2 text-white">{postRecommendation.recommendation}</p>
             </div>
           ) : null}
+
+          <details className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <summary className="cursor-pointer text-sm text-slate-200">Add optional notes</summary>
+            <div className="mt-3 space-y-3">
+              <Textarea onChange={(event) => setExerciseNotes(selectedExercise.id, event.target.value)} placeholder="Notes for this lift" value={selectedExercise.notes} />
+              <Textarea onChange={(event) => setWorkoutNotes(event.target.value)} placeholder="Notes for the whole workout" value={activeWorkout.notes} />
+            </div>
+          </details>
         </CardContent>
       </Card>
-
-      <label className="block rounded-[28px] border border-white/10 bg-white/5 p-5">
-        <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Session notes</span>
-        <Textarea
-          className="mt-2 border-none bg-transparent px-0 py-0 shadow-none focus:border-none"
-          onChange={(event) => setWorkoutNotes(event.target.value)}
-          placeholder="Optional full workout notes"
-          value={activeWorkout.notes}
-        />
-      </label>
     </div>
   );
 }

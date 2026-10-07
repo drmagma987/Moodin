@@ -133,7 +133,7 @@ export function describePerformance(log: ExerciseLog | undefined): string {
   if (!log) {
     return "No prior log yet.";
   }
-  if (log.exerciseName === "Pull-up / assisted pull-up") {
+  if (log.exerciseName.toLowerCase().includes("pull-up")) {
     const setSummary = log.sets.map((set) => `${set.reps}`).join("/");
     const assistance = log.sets[0]?.bandResistance ? ` with ${log.sets[0].bandResistance} assistance` : "";
     return `${new Date(log.date).toLocaleDateString()}: ${setSummary} reps${assistance}, ${STRUGGLE_LABELS[log.struggleRating]}.`;
@@ -230,7 +230,7 @@ function buildWeightedRecommendation(
   let recommendation = `Stay near ${formatWeight(baseWeight, "lb", profile)} next time.`;
   const explanation = "Based on your most recent log.";
 
-  if (lastLog.exerciseName === "Pull-up / assisted pull-up") {
+  if (lastLog.exerciseName.toLowerCase().includes("pull-up")) {
     if (struggle <= 3 && maxRep > minRep) {
       return {
         recommendation: "Reps moved well. Next time either add reps or use a little less assistance.",

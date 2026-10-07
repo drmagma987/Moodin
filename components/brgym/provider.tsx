@@ -24,6 +24,26 @@ import type {
   WorkoutTemplate,
 } from "@/lib/brgym/types";
 
+function mergeTrainingPlan(
+  current: BRGymData["trainingPlan"],
+  saved: BRGymData["trainingPlan"] | undefined,
+): BRGymData["trainingPlan"] {
+  if (!current) {
+    return saved ?? null;
+  }
+  if (!saved || saved.id !== current.id) {
+    return current;
+  }
+  const savedEntries = new Map(saved.entries.map((entry) => [entry.id, entry]));
+  return {
+    ...current,
+    entries: current.entries.map((entry) => ({
+      ...entry,
+      runLog: savedEntries.get(entry.id)?.runLog ?? entry.runLog ?? null,
+    })),
+  };
+}
+
 interface StartWorkoutInput {
   templateId: string;
   equipmentProfileId: string;
@@ -518,7 +538,7 @@ const useBRGymStore = create<BRGymStore>()(
           ...saved,
           templates: [...defaultTemplates, ...customTemplates],
           settings: { ...current.settings, ...(saved.settings ?? {}) },
-          trainingPlan: saved.trainingPlan ?? current.trainingPlan,
+          trainingPlan: mergeTrainingPlan(current.trainingPlan, saved.trainingPlan),
           timer: {
             secondsLeft,
             isRunning: Boolean(savedTimer?.isRunning && secondsLeft > 0),
