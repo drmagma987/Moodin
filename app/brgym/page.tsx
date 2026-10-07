@@ -18,23 +18,37 @@ export default function BRGymHomePage() {
   const activeProfile = data.equipmentProfiles.find(
     (profile) => profile.id === data.settings.activeEquipmentProfileId,
   );
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`;
+  const nextPlanEntry = data.trainingPlan?.entries.find((entry) => {
+    const liftDone = entry.kind === "lift" && data.sessions.some((session) => session.planEntryId === entry.id);
+    return entry.date >= todayKey && !entry.runLog && !liftDone;
+  });
 
   return (
     <div className="space-y-4">
       <section className="rounded-[28px] border border-white/10 bg-white/6 p-5">
-        <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Next likely day</p>
+        <p className="text-xs uppercase tracking-[0.22em] text-slate-400">
+          {nextPlanEntry ? "Next on your plan" : "Next likely day"}
+        </p>
         <div className="mt-2 flex items-end justify-between gap-3">
           <div>
-            <h2 className="text-3xl font-semibold text-white">{nextCategory}</h2>
+            <h2 className="text-3xl font-semibold text-white">{nextPlanEntry?.title ?? nextCategory}</h2>
             <p className="mt-2 text-sm text-slate-300">
-              Active setup: <span className="font-medium text-white">{activeProfile?.name}</span>
+              {nextPlanEntry
+                ? new Date(`${nextPlanEntry.date}T12:00:00`).toLocaleDateString(undefined, {
+                    weekday: "long",
+                    month: "short",
+                    day: "numeric",
+                  })
+                : <>Active setup: <span className="font-medium text-white">{activeProfile?.name}</span></>}
             </p>
           </div>
           <Link
             className="rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-slate-950"
-            href={activeWorkout ? `/brgym/workout/${activeWorkout.id}` : "/brgym/workout"}
+            href={activeWorkout ? `/brgym/workout/${activeWorkout.id}` : nextPlanEntry ? "/brgym/plan" : "/brgym/workout"}
           >
-            {activeWorkout ? "Resume" : "Start"}
+            {activeWorkout ? "Resume" : nextPlanEntry ? "Open plan" : "Start"}
           </Link>
         </div>
       </section>
@@ -61,14 +75,14 @@ export default function BRGymHomePage() {
           <Link className="rounded-2xl bg-white/8 px-4 py-4 text-sm text-slate-100" href="/brgym/workout">
             Start workout
           </Link>
+          <Link className="rounded-2xl bg-white/8 px-4 py-4 text-sm text-slate-100" href="/brgym/plan">
+            Training plan
+          </Link>
           <Link className="rounded-2xl bg-white/8 px-4 py-4 text-sm text-slate-100" href="/brgym/history">
             View history
           </Link>
           <Link className="rounded-2xl bg-white/8 px-4 py-4 text-sm text-slate-100" href="/brgym/templates">
             Edit templates
-          </Link>
-          <Link className="rounded-2xl bg-white/8 px-4 py-4 text-sm text-slate-100" href="/brgym/equipment">
-            Gym setups
           </Link>
         </div>
       </section>

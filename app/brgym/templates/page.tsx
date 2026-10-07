@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useBRGym } from "@/components/brgym/provider";
 import { EXERCISE_LIBRARY } from "@/lib/brgym/defaults";
 import { createId } from "@/lib/brgym/logic";
-import type { WorkoutCategory, WorkoutTemplate } from "@/lib/brgym/types";
+import type { ExerciseTemplate, WorkoutCategory, WorkoutTemplate } from "@/lib/brgym/types";
 
 const categoryOptions: WorkoutCategory[] = [
   "Push",
@@ -22,6 +22,11 @@ export default function BRGymTemplatesPage() {
   const [category, setCategory] = useState<WorkoutCategory>("Custom");
   const [selectedExerciseNames, setSelectedExerciseNames] = useState<string[]>(["Push-ups"]);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [customExercises, setCustomExercises] = useState<ExerciseTemplate[]>([]);
+  const [customExerciseName, setCustomExerciseName] = useState("");
+  const [customSets, setCustomSets] = useState("3");
+  const [customRepMin, setCustomRepMin] = useState("8");
+  const [customRepMax, setCustomRepMax] = useState("10");
 
   const exerciseOptions = useMemo(() => Object.keys(EXERCISE_LIBRARY).sort(), []);
 
@@ -29,7 +34,10 @@ export default function BRGymTemplatesPage() {
     setEditingTemplateId(template.id);
     setName(template.name);
     setCategory(template.category);
-    setSelectedExerciseNames(template.exercises.map((exercise) => exercise.name));
+    setSelectedExerciseNames(
+      template.exercises.filter((exercise) => EXERCISE_LIBRARY[exercise.name]).map((exercise) => exercise.name),
+    );
+    setCustomExercises(template.exercises.filter((exercise) => !EXERCISE_LIBRARY[exercise.name]));
   }
 
   if (!hydrated) {
@@ -54,6 +62,69 @@ export default function BRGymTemplatesPage() {
             value={name}
           />
         </label>
+
+        <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Add your own exercise</p>
+          <input
+            className="mt-3 w-full rounded-xl bg-slate-950/70 px-3 py-3 text-white outline-none"
+            onChange={(event) => setCustomExerciseName(event.target.value)}
+            placeholder="Exercise name"
+            value={customExerciseName}
+          />
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <label className="text-xs text-slate-400">
+              Sets
+              <input className="mt-1 w-full rounded-xl bg-slate-950/70 px-3 py-3 text-white outline-none" inputMode="numeric" onChange={(event) => setCustomSets(event.target.value)} value={customSets} />
+            </label>
+            <label className="text-xs text-slate-400">
+              Min reps
+              <input className="mt-1 w-full rounded-xl bg-slate-950/70 px-3 py-3 text-white outline-none" inputMode="numeric" onChange={(event) => setCustomRepMin(event.target.value)} value={customRepMin} />
+            </label>
+            <label className="text-xs text-slate-400">
+              Max reps
+              <input className="mt-1 w-full rounded-xl bg-slate-950/70 px-3 py-3 text-white outline-none" inputMode="numeric" onChange={(event) => setCustomRepMax(event.target.value)} value={customRepMax} />
+            </label>
+          </div>
+          <button
+            className="mt-3 w-full rounded-2xl bg-white/10 px-4 py-3 text-sm font-medium text-white disabled:opacity-40"
+            disabled={!customExerciseName.trim()}
+            onClick={() => {
+              const targetSets = Math.max(Number(customSets) || 3, 1);
+              const repMin = Math.max(Number(customRepMin) || 1, 1);
+              const repMax = Math.max(Number(customRepMax) || repMin, repMin);
+              setCustomExercises((current) => [
+                ...current,
+                {
+                  id: createId("exercise"),
+                  name: customExerciseName.trim(),
+                  targetSets,
+                  repMin,
+                  repMax,
+                  equipment: ["bodyweight"],
+                  movementPattern: "custom",
+                  progressionIncrement: 0,
+                  notes: "Custom exercise",
+                  sensitivityFlags: { knee: false, lowerBack: false, shoulder: false },
+                  exerciseType: "mixed",
+                },
+              ]);
+              setCustomExerciseName("");
+            }}
+            type="button"
+          >
+            Add exercise to split
+          </button>
+          {customExercises.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {customExercises.map((exercise) => (
+                <div key={exercise.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-950/50 px-3 py-3 text-sm">
+                  <span className="text-slate-100">{exercise.name} • {exercise.targetSets} × {exercise.repMin}-{exercise.repMax}</span>
+                  <button className="text-rose-300" onClick={() => setCustomExercises((current) => current.filter((candidate) => candidate.id !== exercise.id))} type="button">Remove</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
 
         <label className="mt-3 block rounded-2xl border border-white/10 bg-white/5 p-3">
           <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Category</span>
@@ -99,7 +170,7 @@ export default function BRGymTemplatesPage() {
               exercises: selectedExerciseNames.map((exerciseName) => ({
                 ...EXERCISE_LIBRARY[exerciseName],
                 sensitivityFlags: { ...EXERCISE_LIBRARY[exerciseName].sensitivityFlags },
-              })),
+              })).concat(customExercises),
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
               isDefault: false,
@@ -109,6 +180,7 @@ export default function BRGymTemplatesPage() {
             setName("");
             setCategory("Custom");
             setSelectedExerciseNames(["Push-ups"]);
+            setCustomExercises([]);
           }}
           type="button"
         >
@@ -122,6 +194,7 @@ export default function BRGymTemplatesPage() {
               setName("");
               setCategory("Custom");
               setSelectedExerciseNames(["Push-ups"]);
+              setCustomExercises([]);
             }}
             type="button"
           >

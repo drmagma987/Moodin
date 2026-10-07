@@ -4,12 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { BRGymPwaRegistration } from "@/components/brgym/pwa-registration";
+
 const navItems = [
   { href: "/brgym", label: "Home" },
+  { href: "/brgym/plan", label: "Plan" },
   { href: "/brgym/workout", label: "Workout" },
   { href: "/brgym/history", label: "History" },
   { href: "/brgym/templates", label: "Templates" },
-  { href: "/brgym/equipment", label: "Equipment" },
   { href: "/brgym/settings", label: "Settings" },
 ];
 
@@ -42,6 +44,7 @@ export function BRGymAppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+        <BRGymPwaRegistration />
         <main className="flex-1">{children}</main>
       </div>
 

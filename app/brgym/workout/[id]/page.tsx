@@ -218,6 +218,14 @@ export default function BRGymWorkoutLoggerPage() {
             </div>
             <Button
               onClick={() => {
+                const missingRating = activeWorkout.exercises.find(
+                  (exercise) => exercise.completedSets.length > 0 && !exercise.struggleRating,
+                );
+                if (missingRating) {
+                  setSelectedExerciseIdOverride(missingRating.id);
+                  toast.error(`Rate ${missingRating.name} before saving`);
+                  return;
+                }
                 const session = saveWorkout();
                 if (session) {
                   setSavedSessionId(session.id);

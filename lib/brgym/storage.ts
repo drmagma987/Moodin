@@ -5,6 +5,7 @@ import {
   DEFAULT_TEMPLATES,
 } from "@/lib/brgym/defaults";
 import type { BRGymData } from "@/lib/brgym/types";
+import { createBossEightWeekPlan } from "@/lib/brgym/program";
 
 export const STORAGE_KEY = "brgym-data-v1";
 
@@ -18,6 +19,7 @@ export function getDefaultData(): BRGymData {
     equipmentProfiles: DEFAULT_EQUIPMENT_PROFILES,
     settings: { ...DEFAULT_SETTINGS },
     activeWorkout: createEmptyWorkout(),
+    trainingPlan: createBossEightWeekPlan(),
   };
 }
 
@@ -38,6 +40,7 @@ export function loadData(): BRGymData {
       equipmentProfiles: parsed.equipmentProfiles ?? defaults.equipmentProfiles,
       settings: { ...defaults.settings, ...(parsed.settings ?? {}) },
       activeWorkout: parsed.activeWorkout ?? defaults.activeWorkout,
+      trainingPlan: parsed.trainingPlan ?? defaults.trainingPlan,
     };
   } catch {
     return getDefaultData();

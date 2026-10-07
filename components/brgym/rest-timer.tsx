@@ -64,6 +64,16 @@ export function RestTimer() {
   }, [tickTimer, timer.isRunning]);
 
   useEffect(() => {
+    function syncAfterBackground() {
+      if (document.visibilityState === "visible") {
+        tickTimer();
+      }
+    }
+    document.addEventListener("visibilitychange", syncAfterBackground);
+    return () => document.removeEventListener("visibilitychange", syncAfterBackground);
+  }, [tickTimer]);
+
+  useEffect(() => {
     if (previousSeconds.current > 0 && timer.secondsLeft === 0) {
       if (!data.settings.timerSoundMuted) {
         playDing();

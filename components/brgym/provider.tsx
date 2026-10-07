@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -17,6 +17,7 @@ import type {
   BRGymData,
   DifficultyRating,
   ExerciseTemplate,
+  RunLog,
   SensitivityFlags,
   SetLog,
   WorkoutSession,
@@ -28,6 +29,7 @@ interface StartWorkoutInput {
   equipmentProfileId: string;
   discomfortFlags: SensitivityFlags;
   categoryOverride?: WorkoutTemplate["category"];
+  planEntryId?: string;
 }
 
 interface BRGymContextValue {
@@ -36,12 +38,15 @@ interface BRGymContextValue {
   timer: {
     secondsLeft: number;
     isRunning: boolean;
+    endsAt: number | null;
   };
   startWorkout: (input: StartWorkoutInput) => string;
   logSet: (exerciseId: string, set: SetLog) => void;
   setExerciseStruggle: (exerciseId: string, value: DifficultyRating) => void;
   setExerciseNotes: (exerciseId: string, notes: string) => void;
   setWorkoutNotes: (notes: string) => void;
+  saveRunLog: (entryId: string, log: RunLog) => void;
+  clearRunLog: (entryId: string) => void;
   saveWorkout: () => WorkoutSession | null;
   discardWorkout: () => void;
   setActiveEquipmentProfile: (profileId: string) => void;
@@ -70,6 +75,7 @@ type BRGymStore = BRGymData & {
   timer: {
     secondsLeft: number;
     isRunning: boolean;
+    endsAt: number | null;
   };
   markHydrated: () => void;
 } & Omit<BRGymContextValue, "data" | "hydrated" | "timer">;
@@ -81,6 +87,7 @@ function toSerializableData(state: BRGymStore): BRGymData {
     equipmentProfiles: state.equipmentProfiles,
     settings: state.settings,
     activeWorkout: state.activeWorkout,
+    trainingPlan: state.trainingPlan,
   };
 }
 
@@ -94,6 +101,7 @@ const useBRGymStore = create<BRGymStore>()(
       timer: {
         secondsLeft: initialData.settings.defaultRestSeconds,
         isRunning: false,
+        endsAt: null,
       },
       markHydrated() {
         set({ hydrated: true });
@@ -113,6 +121,7 @@ const useBRGymStore = create<BRGymStore>()(
           equipmentProfileId: profile.id,
           discomfortFlags: input.discomfortFlags,
           notes: "",
+          planEntryId: input.planEntryId ?? null,
           exercises: template.exercises.map((exercise) => ({
             ...cloneTemplateExercise(exercise),
             completedSets: [],
@@ -128,6 +137,7 @@ const useBRGymStore = create<BRGymStore>()(
             ...current.timer,
             secondsLeft: current.settings.defaultRestSeconds,
             isRunning: false,
+            endsAt: null,
           },
         }));
         return nextWorkout.id;
@@ -154,6 +164,7 @@ const useBRGymStore = create<BRGymStore>()(
             timer: {
               secondsLeft: current.settings.defaultRestSeconds,
               isRunning: true,
+              endsAt: Date.now() + current.settings.defaultRestSeconds * 1000,
             },
           };
         });
@@ -195,6 +206,30 @@ const useBRGymStore = create<BRGymStore>()(
           activeWorkout: current.activeWorkout ? { ...current.activeWorkout, notes } : null,
         }));
       },
+      saveRunLog(entryId, log) {
+        set((current) => ({
+          trainingPlan: current.trainingPlan
+            ? {
+                ...current.trainingPlan,
+                entries: current.trainingPlan.entries.map((entry) =>
+                  entry.id === entryId ? { ...entry, runLog: log } : entry,
+                ),
+              }
+            : null,
+        }));
+      },
+      clearRunLog(entryId) {
+        set((current) => ({
+          trainingPlan: current.trainingPlan
+            ? {
+                ...current.trainingPlan,
+                entries: current.trainingPlan.entries.map((entry) =>
+                  entry.id === entryId ? { ...entry, runLog: null } : entry,
+                ),
+              }
+            : null,
+        }));
+      },
       saveWorkout() {
         const activeWorkout = get().activeWorkout;
         if (!activeWorkout) {
@@ -225,6 +260,9 @@ const useBRGymStore = create<BRGymStore>()(
               recommendation,
             };
           });
+        if (exerciseLogs.length === 0) {
+          return null;
+        }
         const session: WorkoutSession = {
           id: activeWorkout.id,
           templateId: activeWorkout.templateId,
@@ -237,6 +275,7 @@ const useBRGymStore = create<BRGymStore>()(
           exerciseLogs,
           recommendations: exerciseLogs.map((log) => `${log.exerciseName}: ${log.recommendation}`),
           notes: activeWorkout.notes,
+          planEntryId: activeWorkout.planEntryId ?? null,
         };
         set((current) => ({
           sessions: [session, ...current.sessions],
@@ -244,6 +283,7 @@ const useBRGymStore = create<BRGymStore>()(
           timer: {
             secondsLeft: current.settings.defaultRestSeconds,
             isRunning: false,
+            endsAt: null,
           },
         }));
         return session;
@@ -254,6 +294,7 @@ const useBRGymStore = create<BRGymStore>()(
           timer: {
             secondsLeft: current.settings.defaultRestSeconds,
             isRunning: false,
+            endsAt: null,
           },
         }));
       },
@@ -361,6 +402,7 @@ const useBRGymStore = create<BRGymStore>()(
             timer: {
               secondsLeft: parsed.settings.defaultRestSeconds,
               isRunning: false,
+              endsAt: null,
             },
           });
           return { ok: true, message: "Import complete." };
@@ -378,47 +420,76 @@ const useBRGymStore = create<BRGymStore>()(
           timer: {
             secondsLeft: initialData.settings.defaultRestSeconds,
             isRunning: false,
+            endsAt: null,
           },
         });
       },
       pauseTimer() {
-        set((current) => ({ timer: { ...current.timer, isRunning: false } }));
+        set((current) => ({
+          timer: {
+            secondsLeft: current.timer.endsAt
+              ? Math.max(Math.ceil((current.timer.endsAt - Date.now()) / 1000), 0)
+              : current.timer.secondsLeft,
+            isRunning: false,
+            endsAt: null,
+          },
+        }));
       },
       resumeTimer() {
-        set((current) => ({ timer: { ...current.timer, isRunning: true } }));
+        set((current) => ({
+          timer: {
+            ...current.timer,
+            isRunning: current.timer.secondsLeft > 0,
+            endsAt:
+              current.timer.secondsLeft > 0 ? Date.now() + current.timer.secondsLeft * 1000 : null,
+          },
+        }));
       },
       resetTimer() {
         set((current) => ({
           timer: {
             secondsLeft: current.settings.defaultRestSeconds,
             isRunning: false,
+            endsAt: null,
           },
         }));
       },
       skipTimer() {
-        set((current) => ({ timer: { ...current.timer, secondsLeft: 0, isRunning: false } }));
+        set({ timer: { secondsLeft: 0, isRunning: false, endsAt: null } });
       },
       adjustTimer(deltaSeconds) {
-        set((current) => ({
-          timer: {
-            ...current.timer,
-            secondsLeft: Math.max(current.timer.secondsLeft + deltaSeconds, 0),
-          },
-        }));
+        set((current) => {
+          const secondsLeft = Math.max(current.timer.secondsLeft + deltaSeconds, 0);
+          return {
+            timer: {
+              secondsLeft,
+              isRunning: current.timer.isRunning && secondsLeft > 0,
+              endsAt:
+                current.timer.isRunning && secondsLeft > 0
+                  ? (current.timer.endsAt ?? Date.now() + current.timer.secondsLeft * 1000) +
+                    deltaSeconds * 1000
+                  : null,
+            },
+          };
+        });
       },
       tickTimer() {
         const current = get();
         if (!current.timer.isRunning) {
           return;
         }
-        if (current.timer.secondsLeft <= 1) {
-          set({ timer: { secondsLeft: 0, isRunning: false } });
+        const secondsLeft = current.timer.endsAt
+          ? Math.max(Math.ceil((current.timer.endsAt - Date.now()) / 1000), 0)
+          : Math.max(current.timer.secondsLeft - 1, 0);
+        if (secondsLeft === 0) {
+          set({ timer: { secondsLeft: 0, isRunning: false, endsAt: null } });
           return;
         }
         set({
           timer: {
             ...current.timer,
-            secondsLeft: current.timer.secondsLeft - 1,
+            secondsLeft,
+            endsAt: current.timer.endsAt ?? Date.now() + secondsLeft * 1000,
           },
         });
       },
@@ -426,34 +497,66 @@ const useBRGymStore = create<BRGymStore>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => toSerializableData(state),
+      partialize: (state) => ({ ...toSerializableData(state), timer: state.timer }),
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<BRGymStore>;
+        const defaultTemplateIds = new Set(current.templates.map((template) => template.id));
+        const savedTemplates = saved.templates ?? [];
+        const customTemplates = (saved.templates ?? []).filter(
+          (template) => !defaultTemplateIds.has(template.id),
+        );
+        const defaultTemplates = current.templates.map((template) => {
+          const savedVersion = savedTemplates.find((candidate) => candidate.id === template.id);
+          return savedVersion && savedVersion.updatedAt > template.updatedAt ? savedVersion : template;
+        });
+        const savedTimer = saved.timer;
+        const secondsLeft = savedTimer?.endsAt
+          ? Math.max(Math.ceil((savedTimer.endsAt - Date.now()) / 1000), 0)
+          : savedTimer?.secondsLeft ?? current.settings.defaultRestSeconds;
+        return {
+          ...current,
+          ...saved,
+          templates: [...defaultTemplates, ...customTemplates],
+          settings: { ...current.settings, ...(saved.settings ?? {}) },
+          trainingPlan: saved.trainingPlan ?? current.trainingPlan,
+          timer: {
+            secondsLeft,
+            isRunning: Boolean(savedTimer?.isRunning && secondsLeft > 0),
+            endsAt: savedTimer?.isRunning && secondsLeft > 0 ? savedTimer.endsAt ?? null : null,
+          },
+        };
+      },
       onRehydrateStorage: () => (state) => {
         state?.markHydrated();
       },
+      skipHydration: true,
     },
   ),
 );
 
 export function BRGymProvider({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    void Promise.resolve(useBRGymStore.persist.rehydrate()).finally(() => {
+      useBRGymStore.getState().markHydrated();
+    });
+  }, []);
+
   return children;
 }
 
 export function useBRGym() {
-  const hydrated = useSyncExternalStore(
-    useBRGymStore.subscribe,
-    () => useBRGymStore.getState().hydrated,
-    () => false,
-  );
   const state = useBRGymStore();
   return {
     data: toSerializableData(state),
-    hydrated,
+    hydrated: state.hydrated,
     timer: state.timer,
     startWorkout: state.startWorkout,
     logSet: state.logSet,
     setExerciseStruggle: state.setExerciseStruggle,
     setExerciseNotes: state.setExerciseNotes,
     setWorkoutNotes: state.setWorkoutNotes,
+    saveRunLog: state.saveRunLog,
+    clearRunLog: state.clearRunLog,
     saveWorkout: state.saveWorkout,
     discardWorkout: state.discardWorkout,
     setActiveEquipmentProfile: state.setActiveEquipmentProfile,

@@ -18,6 +18,7 @@ export type EquipmentKind =
   | "pull-up bar"
   | "hex bar"
   | "battle ropes"
+  | "kettlebell"
   | "bodyweight"
   | "bands";
 
@@ -29,6 +30,7 @@ export type ExerciseType =
   | "banded"
   | "machine"
   | "hexbar"
+  | "kettlebell"
   | "mixed";
 
 export type WeightUnit = "lb" | "kg";
@@ -112,6 +114,7 @@ export interface WorkoutSession {
   exerciseLogs: ExerciseLog[];
   recommendations: string[];
   notes: string;
+  planEntryId?: string | null;
 }
 
 export interface UserSettings {
@@ -139,6 +142,36 @@ export interface ActiveWorkoutDraft {
   discomfortFlags: SensitivityFlags;
   exercises: ActiveExerciseDraft[];
   notes: string;
+  planEntryId?: string | null;
+}
+
+export interface RunLog {
+  completedAt: string;
+  distanceMiles: number;
+  totalMinutes: number;
+  intervalPaces: string;
+  averageHeartRate?: number | null;
+  difficulty: number;
+  notes: string;
+}
+
+export interface TrainingPlanEntry {
+  id: string;
+  date: string;
+  kind: "lift" | "run" | "race";
+  title: string;
+  details: string;
+  templateId?: string | null;
+  optional?: boolean;
+  runLog?: RunLog | null;
+}
+
+export interface TrainingPlan {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  entries: TrainingPlanEntry[];
 }
 
 export interface RecommendationResult {
@@ -154,4 +187,5 @@ export interface BRGymData {
   equipmentProfiles: EquipmentProfile[];
   settings: UserSettings;
   activeWorkout: ActiveWorkoutDraft | null;
+  trainingPlan: TrainingPlan | null;
 }
