@@ -15,6 +15,7 @@ import type {
   SetLog,
   WeightUnit,
   WorkoutCategory,
+  WorkoutProgressionPlan,
   WorkoutSession,
 } from "@/lib/brgym/types";
 
@@ -167,7 +168,7 @@ function roundToAvailableWeight(
       ? profile.cableWeights
       : exercise.exerciseType === "dumbbell" || exercise.exerciseType === "mixed"
         ? profile.dumbbellWeights
-        : profile.dumbbellWeights;
+        : undefined;
 
   if (!options || options.length === 0) {
     return {
@@ -202,6 +203,165 @@ function roundToAvailableWeight(
       unit === "kg"
         ? `Closest available ${profile.name} weight to ${roundToOneDecimal(targetWeightLb)} lb.`
         : `Closest available ${profile.name} weight in pounds.`,
+  };
+}
+
+function createTargetSet(
+  setNumber: number,
+  weight: number,
+  unit: WeightUnit,
+  reps: number,
+  bandResistance?: string | null,
+): SetLog {
+  const normalized = normalizeWeight(weight, unit);
+  return {
+    setNumber,
+    reps,
+    enteredWeight: weight,
+    enteredUnit: unit,
+    normalizedWeightLb: normalized.lb,
+    normalizedWeightKg: normalized.kg,
+    bandResistance: bandResistance ?? null,
+  };
+}
+
+function getPreviousSet(log: ExerciseLog, setNumber: number): SetLog | null {
+  return (
+    log.sets.find((set) => set.setNumber === setNumber) ??
+    log.sets[Math.min(setNumber - 1, log.sets.length - 1)] ??
+    null
+  );
+}
+
+function getProgressionWeight(
+  previousSet: SetLog,
+  exercise: ExerciseTemplate,
+  profile: EquipmentProfile,
+  direction: "up" | "down",
+): { value: number; unit: WeightUnit } {
+  const increment = Math.max(exercise.progressionIncrement, 0);
+  const previousLb = previousSet.normalizedWeightLb;
+  const targetLb = Math.max(
+    previousLb + (direction === "up" ? increment : -increment),
+    0,
+  );
+  const options = exercise.exerciseType === "cable"
+    ? profile.cableWeights
+    : exercise.exerciseType === "dumbbell" || exercise.exerciseType === "mixed"
+      ? profile.dumbbellWeights
+      : undefined;
+  if (options?.length) {
+    const previousInProfileUnit = profile.primaryUnit === "kg" ? previousSet.normalizedWeightKg : previousSet.normalizedWeightLb;
+    const targetInProfileUnit = profile.primaryUnit === "kg" ? lbToKg(targetLb) : targetLb;
+    const directional = direction === "up"
+      ? [...options].sort((a, b) => a - b).find((option) => option >= targetInProfileUnit && option > previousInProfileUnit)
+      : [...options].sort((a, b) => b - a).find((option) => option <= targetInProfileUnit && option < previousInProfileUnit);
+    if (directional !== undefined) {
+      return { value: directional, unit: profile.primaryUnit };
+    }
+  }
+  const rounded = roundToAvailableWeight(targetLb, exercise, profile, 3);
+  return {
+    value: rounded?.value ?? (profile.primaryUnit === "kg" ? lbToKg(targetLb) : targetLb),
+    unit: rounded?.unit ?? profile.primaryUnit,
+  };
+}
+
+export function buildNextWorkoutProgression(
+  sessions: WorkoutSession[],
+  exercise: ExerciseTemplate,
+  profile: EquipmentProfile,
+): WorkoutProgressionPlan {
+  const logs = sessions
+    .flatMap((session) => session.exerciseLogs)
+    .filter((log) => log.exerciseName === exercise.name)
+    .slice(0, 3);
+  const previous = logs[0];
+  const isWeighted = exercise.progressionIncrement > 0 && exercise.exerciseType !== "bodyweight";
+
+  if (!previous || previous.sets.length === 0) {
+    return {
+      kind: "first-session",
+      summary: `First session: start at ${exercise.repMin} reps and choose a clean working weight.`,
+      sets: Array.from({ length: exercise.targetSets }, (_, index) =>
+        createTargetSet(
+          index + 1,
+          0,
+          profile.primaryUnit,
+          exercise.repMin,
+          exercise.defaultBandAssistance ?? null,
+        ),
+      ),
+    };
+  }
+
+  const plannedPreviousSets = Array.from({ length: exercise.targetSets }, (_, index) =>
+    getPreviousSet(previous, index + 1),
+  ).filter((set): set is SetLog => Boolean(set));
+  const allAtCeiling =
+    previous.sets.length >= exercise.targetSets &&
+    plannedPreviousSets.length === exercise.targetSets &&
+    plannedPreviousSets.every((set) => set.reps >= exercise.repMax);
+  const weakestReps = Math.min(...plannedPreviousSets.map((set) => set.reps));
+  const repeatedHardSessions = logs.slice(0, 2).length === 2 && logs.slice(0, 2).every((log) => log.struggleRating >= 4);
+
+  if (repeatedHardSessions && isWeighted) {
+    return {
+      kind: "deload",
+      summary: `Two hard sessions in a row: step down one increment and rebuild from ${exercise.repMin} reps.`,
+      sets: plannedPreviousSets.map((set, index) => {
+        const target = getProgressionWeight(set, exercise, profile, "down");
+        return createTargetSet(index + 1, target.value, target.unit, exercise.repMin, set.bandResistance);
+      }),
+    };
+  }
+
+  if (previous.struggleRating >= 4) {
+    return {
+      kind: "hold",
+      summary: "Last session was very hard. Repeat those numbers before progressing.",
+      sets: plannedPreviousSets.map((set, index) => ({ ...set, setNumber: index + 1 })),
+    };
+  }
+
+  if (allAtCeiling && isWeighted) {
+    return {
+      kind: "load-progress",
+      summary: `Rep ceiling cleared: increase the load and reset to ${exercise.repMin} reps.`,
+      sets: plannedPreviousSets.map((set, index) => {
+        const target = getProgressionWeight(set, exercise, profile, "up");
+        return createTargetSet(index + 1, target.value, target.unit, exercise.repMin, set.bandResistance);
+      }),
+    };
+  }
+
+  if (allAtCeiling) {
+    return {
+      kind: "hold",
+      summary: exercise.name.toLowerCase().includes("pull-up")
+        ? "Rep ceiling cleared. Keep the reps and reduce assistance when you are ready."
+        : "Rep ceiling cleared. Hold this target until you choose a harder variation.",
+      sets: plannedPreviousSets.map((set, index) => ({ ...set, setNumber: index + 1 })),
+    };
+  }
+
+  const targets = plannedPreviousSets.map((set, index) =>
+    createTargetSet(
+      index + 1,
+      set.enteredWeight,
+      set.enteredUnit,
+      set.reps === weakestReps ? Math.min(Math.max(set.reps, exercise.repMin) + 1, exercise.repMax) : Math.min(set.reps, exercise.repMax),
+      set.bandResistance,
+    ),
+  );
+  const progressed = targets.some((set, index) => set.reps > plannedPreviousSets[index].reps);
+
+  return {
+    kind: progressed ? "rep-progress" : "carry-forward",
+    summary: progressed
+      ? "Keep the same load and add one rep to the lowest sets."
+      : "Carry forward the last completed numbers.",
+    sets: targets,
   };
 }
 

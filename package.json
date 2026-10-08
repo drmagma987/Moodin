@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "brgym:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/brgym-run-push.test.ts ./tests/brgym-progression.test.ts ./tests/brgym-progress.test.ts ./tests/brgym-profiles.test.ts",
     "fantasy:integrity": "node ./lib/fantasy/validateLeagueIntegrity.mjs",
     "fantasy:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/fantasy-model.test.ts",
     "fantasy:snapshot": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs --env-file=.env.local ./scripts/build_fantasy_board_snapshot.mjs",
@@ -25,6 +26,7 @@
     "fantasy:rookie-wr-validation": "python3 scripts/build_rookie_wr_validation.py"
   },
   "dependencies": {
+    "@vercel/queue": "^0.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "exceljs": "^4.4.0",
@@ -36,6 +38,7 @@
     "react-dom": "19.2.3",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
+    "web-push": "^3.6.7",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -43,6 +46,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "linkedom": "^0.18.13",

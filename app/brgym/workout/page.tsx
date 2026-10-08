@@ -24,7 +24,10 @@ const categories: WorkoutCategory[] = [
 export default function BRGymWorkoutStartPage() {
   const router = useRouter();
   const { data, hydrated, startWorkout, setActiveEquipmentProfile } = useBRGym();
-  const nextCategory = useMemo(() => getNextWorkoutCategory(data.sessions), [data.sessions]);
+  const activeTrainingProfile = data.settings.activeTrainingProfile;
+  const profileSessions = useMemo(() => data.sessions.filter((session) => (session.trainingProfile ?? "vaughn") === activeTrainingProfile), [activeTrainingProfile, data.sessions]);
+  const profileTemplates = useMemo(() => data.templates.filter((template) => (template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom")) === activeTrainingProfile), [activeTrainingProfile, data.templates]);
+  const nextCategory = useMemo(() => getNextWorkoutCategory(profileSessions), [profileSessions]);
 
   const [selectedCategoryOverride, setSelectedCategoryOverride] = useState<WorkoutCategory | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -38,16 +41,27 @@ export default function BRGymWorkoutStartPage() {
 
   const selectedCategory = selectedCategoryOverride ?? nextCategory;
   const selectedProfileId = selectedProfileIdOverride ?? data.settings.activeEquipmentProfileId;
-  const templates = data.templates.filter((template) => template.category === selectedCategory);
-  const selectedTemplateIdSafe = selectedTemplateId || templates[0]?.id || data.templates[0]?.id || "";
+  const templates = profileTemplates.filter((template) => template.category === selectedCategory);
+  const selectedTemplateIdSafe = selectedTemplateId || templates[0]?.id || profileTemplates[0]?.id || "";
   const quickStartTemplate =
-    data.templates.find((template) => template.category === nextCategory) ?? data.templates[0];
-  const lastCompletedSession = data.sessions[0] ?? null;
+    profileTemplates.find((template) => template.category === nextCategory) ?? profileTemplates[0];
+  const lastCompletedSession = profileSessions[0] ?? null;
   const selectedProfile =
     data.equipmentProfiles.find((profile) => profile.id === selectedProfileId) ?? data.equipmentProfiles[0];
 
   if (!hydrated) {
     return <div className="rounded-[28px] bg-white/5 p-5 text-sm text-slate-300">Loading workout setup…</div>;
+  }
+
+  if (!quickStartTemplate) {
+    return (
+      <div className="space-y-4 rounded-[28px] border border-white/10 bg-white/5 p-5">
+        <p className="brgym-kicker">Custom profile</p>
+        <h2 className="text-2xl font-semibold text-white">Build your first workout.</h2>
+        <p className="text-sm text-slate-300">Custom starts blank so anyone can make the split their own.</p>
+        <Button className="w-full" onClick={() => router.push("/brgym/templates")}>Create a custom template</Button>
+      </div>
+    );
   }
 
   function handleStartWorkout(options?: {

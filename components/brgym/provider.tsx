@@ -6,10 +6,12 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import {
   applyReplacementByName,
+  buildNextWorkoutProgression,
   createId,
   getEquipmentProfile,
   getPostExerciseRecommendation,
   getSubstitutionOptions,
+  normalizeWeight,
 } from "@/lib/brgym/logic";
 import { STORAGE_KEY, getDefaultData } from "@/lib/brgym/storage";
 import type {
@@ -68,6 +70,7 @@ interface BRGymContextValue {
   saveRunLog: (entryId: string, log: RunLog) => void;
   clearRunLog: (entryId: string) => void;
   saveWorkout: () => WorkoutSession | null;
+  updateWorkoutSession: (session: WorkoutSession) => boolean;
   discardWorkout: () => void;
   setActiveEquipmentProfile: (profileId: string) => void;
   saveTemplate: (template: WorkoutTemplate) => void;
@@ -142,13 +145,23 @@ const useBRGymStore = create<BRGymStore>()(
           discomfortFlags: input.discomfortFlags,
           notes: "",
           planEntryId: input.planEntryId ?? null,
-          exercises: template.exercises.map((exercise) => ({
-            ...cloneTemplateExercise(exercise),
-            completedSets: [],
-            notes: "",
-            replacementOptions: getSubstitutionOptions(exercise, profile, input.discomfortFlags),
-            selectedReplacementName: null,
-          })),
+          trainingProfile: get().settings.activeTrainingProfile,
+          exercises: template.exercises.map((exercise) => {
+            const progression = buildNextWorkoutProgression(
+              get().sessions.filter((session) => (session.trainingProfile ?? "vaughn") === get().settings.activeTrainingProfile),
+              exercise,
+              profile,
+            );
+            return {
+              ...cloneTemplateExercise(exercise),
+              completedSets: [],
+              plannedSets: progression.sets,
+              progressionSummary: progression.summary,
+              notes: "",
+              replacementOptions: getSubstitutionOptions(exercise, profile, input.discomfortFlags),
+              selectedReplacementName: null,
+            };
+          }),
         };
         set((current) => ({
           activeWorkout: nextWorkout,
@@ -278,6 +291,10 @@ const useBRGymStore = create<BRGymStore>()(
               struggleRating: exercise.struggleRating as DifficultyRating,
               notes: exercise.notes,
               recommendation,
+              targetSets: exercise.targetSets,
+              repMin: exercise.repMin,
+              repMax: exercise.repMax,
+              progressionIncrement: exercise.progressionIncrement,
             };
           });
         if (exerciseLogs.length === 0) {
@@ -296,6 +313,7 @@ const useBRGymStore = create<BRGymStore>()(
           recommendations: exerciseLogs.map((log) => `${log.exerciseName}: ${log.recommendation}`),
           notes: activeWorkout.notes,
           planEntryId: activeWorkout.planEntryId ?? null,
+          trainingProfile: activeWorkout.trainingProfile ?? "vaughn",
         };
         set((current) => ({
           sessions: [session, ...current.sessions],
@@ -307,6 +325,80 @@ const useBRGymStore = create<BRGymStore>()(
           },
         }));
         return session;
+      },
+      updateWorkoutSession(session) {
+        const profile =
+          get().equipmentProfiles.find((candidate) => candidate.id === session.equipmentProfileId) ??
+          getEquipmentProfile(session.equipmentProfileId);
+        const exerciseLogs = session.exerciseLogs
+          .map((log) => {
+            const knownExercise = applyReplacementByName(log.exerciseName);
+            const exercise: ExerciseTemplate = knownExercise ?? {
+              id: log.exerciseId,
+              name: log.exerciseName.trim(),
+              movementPattern: log.movementPattern,
+              exerciseType: log.exerciseType,
+              targetSets: log.targetSets ?? log.sets.length,
+              repMin: log.repMin ?? 8,
+              repMax: log.repMax ?? 12,
+              equipment: ["bodyweight"],
+              progressionIncrement: log.progressionIncrement ?? 0,
+              notes: "",
+              sensitivityFlags: { knee: false, lowerBack: false, shoulder: false },
+            };
+            const sets = log.sets
+              .filter((set) => Number.isFinite(set.reps) && set.reps > 0 && Number.isFinite(set.enteredWeight))
+              .map((set, index) => {
+                const normalized = normalizeWeight(Math.max(set.enteredWeight, 0), set.enteredUnit);
+                return {
+                  ...set,
+                  setNumber: index + 1,
+                  enteredWeight: Math.max(set.enteredWeight, 0),
+                  normalizedWeightLb: normalized.lb,
+                  normalizedWeightKg: normalized.kg,
+                };
+              });
+            if (!exercise.name || sets.length === 0) return null;
+            const recommendation = getPostExerciseRecommendation(
+              exercise,
+              sets,
+              log.struggleRating,
+              profile,
+              session.discomfortFlags,
+            ).recommendation;
+            return {
+              ...log,
+              exerciseId: knownExercise?.id ?? log.exerciseId,
+              exerciseName: exercise.name,
+              movementPattern: exercise.movementPattern,
+              exerciseType: exercise.exerciseType,
+              equipmentProfileId: profile.id,
+              equipmentProfileName: profile.name,
+              date: session.date,
+              sets,
+              recommendation,
+              targetSets: exercise.targetSets,
+              repMin: exercise.repMin,
+              repMax: exercise.repMax,
+              progressionIncrement: exercise.progressionIncrement,
+            };
+          })
+          .filter((log): log is NonNullable<typeof log> => Boolean(log));
+        if (!session.workoutName.trim() || !Number.isFinite(new Date(session.date).getTime()) || exerciseLogs.length === 0) {
+          return false;
+        }
+        const nextSession: WorkoutSession = {
+          ...session,
+          workoutName: session.workoutName.trim(),
+          exerciseLogs,
+          recommendations: exerciseLogs.map((log) => `${log.exerciseName}: ${log.recommendation}`),
+        };
+        set((current) => ({
+          sessions: current.sessions
+            .map((candidate) => candidate.id === nextSession.id ? nextSession : candidate)
+            .sort((a, b) => b.date.localeCompare(a.date)),
+        }));
+        return true;
       },
       discardWorkout() {
         set((current) => ({
@@ -358,6 +450,7 @@ const useBRGymStore = create<BRGymStore>()(
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             isDefault: false,
+            trainingProfile: "custom",
           };
           return { templates: [duplicated, ...current.templates] };
         });
@@ -418,7 +511,9 @@ const useBRGymStore = create<BRGymStore>()(
           set({
             ...initialData,
             ...parsed,
-            sessions: [...parsed.sessions].sort((a, b) => (a.date < b.date ? 1 : -1)),
+            sessions: parsed.sessions.map((session) => ({ ...session, trainingProfile: session.trainingProfile ?? "vaughn" })).sort((a, b) => (a.date < b.date ? 1 : -1)),
+            templates: parsed.templates.map((template) => ({ ...template, trainingProfile: template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom") })),
+            settings: { ...initialData.settings, ...parsed.settings },
             timer: {
               secondsLeft: parsed.settings.defaultRestSeconds,
               isRunning: false,
@@ -524,7 +619,7 @@ const useBRGymStore = create<BRGymStore>()(
         const savedTemplates = saved.templates ?? [];
         const customTemplates = (saved.templates ?? []).filter(
           (template) => !defaultTemplateIds.has(template.id),
-        );
+        ).map((template) => ({ ...template, trainingProfile: template.trainingProfile ?? "custom" as const }));
         const defaultTemplates = current.templates.map((template) => {
           const savedVersion = savedTemplates.find((candidate) => candidate.id === template.id);
           return savedVersion && savedVersion.updatedAt > template.updatedAt ? savedVersion : template;
@@ -537,6 +632,7 @@ const useBRGymStore = create<BRGymStore>()(
           ...current,
           ...saved,
           templates: [...defaultTemplates, ...customTemplates],
+          sessions: (saved.sessions ?? current.sessions).map((session) => ({ ...session, trainingProfile: session.trainingProfile ?? "vaughn" })),
           settings: { ...current.settings, ...(saved.settings ?? {}) },
           trainingPlan: mergeTrainingPlan(current.trainingPlan, saved.trainingPlan),
           timer: {
@@ -578,6 +674,7 @@ export function useBRGym() {
     saveRunLog: state.saveRunLog,
     clearRunLog: state.clearRunLog,
     saveWorkout: state.saveWorkout,
+    updateWorkoutSession: state.updateWorkoutSession,
     discardWorkout: state.discardWorkout,
     setActiveEquipmentProfile: state.setActiveEquipmentProfile,
     saveTemplate: state.saveTemplate,

@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "app/api/brgym/push/deliver/route.ts": {
+      "experimentalTriggers": [
+        {
+          "type": "queue/v2beta",
+          "topic": "brgym-run-cues",
+          "retryAfterSeconds": 60
+        }
+      ]
+    }
+  }
+}

@@ -55,6 +55,20 @@ export default function BRGymPlanPage() {
     return <div className="rounded-[28px] bg-white/5 p-5 text-sm text-slate-300">Loading your program…</div>;
   }
 
+  if (data.settings.activeTrainingProfile !== "vaughn") {
+    const profileName = data.settings.activeTrainingProfile === "lauren" ? "Lauren" : "Custom";
+    return (
+      <Card>
+        <CardContent>
+          <p className="brgym-kicker">{profileName}</p>
+          <h2 className="mt-2 text-2xl font-semibold text-white">Workout rotation</h2>
+          <p className="mt-2 text-sm text-slate-300">This profile uses its saved split instead of Vaughn’s dated run-and-lift plan.</p>
+          <Button className="mt-5 w-full" onClick={() => router.push("/brgym/workout")}>Open workouts</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const plan = data.trainingPlan;
   if (!plan) {
     return (

@@ -3,9 +3,10 @@ import { Toaster } from "sonner";
 
 import { BRGymAppShell } from "@/components/brgym/app-shell";
 import { BRGymProvider } from "@/components/brgym/provider";
+import "./brgym.css";
 
 export const viewport = {
-  themeColor: "#050816",
+  themeColor: "#050505",
   colorScheme: "dark",
   viewportFit: "cover",
 };

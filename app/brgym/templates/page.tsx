@@ -29,6 +29,10 @@ export default function BRGymTemplatesPage() {
   const [customRepMax, setCustomRepMax] = useState("10");
 
   const exerciseOptions = useMemo(() => Object.keys(EXERCISE_LIBRARY).sort(), []);
+  const activeTrainingProfile = data.settings.activeTrainingProfile;
+  const visibleTemplates = data.templates.filter(
+    (template) => (template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom")) === activeTrainingProfile,
+  );
 
   function fillEditor(template: WorkoutTemplate) {
     setEditingTemplateId(template.id);
@@ -47,11 +51,11 @@ export default function BRGymTemplatesPage() {
   return (
     <div className="space-y-4">
       <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
-        <h2 className="text-2xl font-semibold text-white">Saved templates</h2>
-        <p className="mt-2 text-sm text-slate-300">Create, duplicate, or trim workout saves without touching the main site.</p>
+        <h2 className="text-2xl font-semibold text-white">{activeTrainingProfile === "custom" ? "Custom workouts" : `${activeTrainingProfile === "lauren" ? "Lauren" : "Vaughn"}’s split`}</h2>
+        <p className="mt-2 text-sm text-slate-300">Preset splits stay protected. Duplicate one into Custom when you want to make changes.</p>
       </section>
 
-      <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+      {activeTrainingProfile === "custom" ? <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
         <h3 className="text-lg font-semibold text-white">New custom template</h3>
         <label className="mt-4 block rounded-2xl border border-white/10 bg-white/5 p-3">
           <span className="text-xs uppercase tracking-[0.18em] text-slate-400">Template name</span>
@@ -174,6 +178,7 @@ export default function BRGymTemplatesPage() {
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
               isDefault: false,
+              trainingProfile: "custom",
             };
             saveTemplate(template);
             setEditingTemplateId(null);
@@ -201,10 +206,11 @@ export default function BRGymTemplatesPage() {
             Cancel edit
           </button>
         ) : null}
-      </section>
+      </section> : null}
 
       <section className="space-y-4">
-        {data.templates.map((template) => (
+        {visibleTemplates.length === 0 ? <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 text-sm text-slate-300">No custom workouts yet. Create one above or duplicate a preset from Lauren or Vaughn.</div> : null}
+        {visibleTemplates.map((template) => (
           <article key={template.id} className="rounded-[28px] border border-white/10 bg-white/5 p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -228,9 +234,10 @@ export default function BRGymTemplatesPage() {
               <button
                 className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-slate-100"
                 onClick={() => fillEditor(template)}
+                disabled={template.isDefault}
                 type="button"
               >
-                Edit
+                {template.isDefault ? "Preset" : "Edit"}
               </button>
               <button
                 className="rounded-2xl bg-white/10 px-4 py-3 text-sm text-slate-100"

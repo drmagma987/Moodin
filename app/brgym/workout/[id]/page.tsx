@@ -48,6 +48,10 @@ function getCompletedSet(exercise: ActiveExerciseDraft, setNumber: number) {
   return exercise.completedSets.find((set) => set.setNumber === setNumber) ?? null;
 }
 
+function getPlannedSet(exercise: ActiveExerciseDraft, setNumber: number) {
+  return exercise.plannedSets?.find((set) => set.setNumber === setNumber) ?? null;
+}
+
 function getSetDraftValue(
   inputs: Record<string, ExerciseDraftInputMap>,
   exercise: ActiveExerciseDraft,
@@ -64,6 +68,16 @@ function getSetDraftValue(
       `${completedSet.enteredWeight}`,
       `${completedSet.reps}`,
       completedSet.bandResistance ?? exercise.defaultBandAssistance ?? "",
+    );
+  }
+
+
+  const plannedSet = getPlannedSet(exercise, setNumber);
+  if (plannedSet) {
+    return createDraftInput(
+      plannedSet.enteredWeight > 0 ? `${plannedSet.enteredWeight}` : "",
+      `${plannedSet.reps}`,
+      plannedSet.bandResistance ?? exercise.defaultBandAssistance ?? "",
     );
   }
 
@@ -213,6 +227,7 @@ export default function BRGymWorkoutLoggerPage() {
     ? getSetDraftValue(draftInputs, selectedExercise, nextSetNumber)
     : null;
   const nextPreviousSet = nextSetNumber ? getLastTimeSet(previousLog, nextSetNumber) : null;
+  const nextPlannedSet = nextSetNumber ? getPlannedSet(selectedExercise, nextSetNumber) : null;
 
   function updateSetInput(setNumber: number, partial: Partial<SetDraftInput>) {
     const currentValue = getSetDraftValue(draftInputs, selectedExercise, setNumber);
@@ -315,6 +330,12 @@ export default function BRGymWorkoutLoggerPage() {
             </label>
           </div>
 
+          {selectedExercise.progressionSummary ? (
+            <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-50">
+              <span className="font-semibold">Today’s progression: </span>{selectedExercise.progressionSummary}
+            </div>
+          ) : null}
+
           {nextSetNumber && nextSetInput ? (
             <>
               <div className={`grid gap-2 ${isAssistedPullUp ? "grid-cols-1" : "grid-cols-2"}`}>
@@ -326,11 +347,11 @@ export default function BRGymWorkoutLoggerPage() {
                     className="mt-1 border-none bg-transparent px-0 text-2xl font-semibold shadow-none"
                     inputMode="decimal"
                     onChange={(event) => updateSetInput(nextSetNumber, { weight: event.target.value })}
-                    placeholder={suggestion.suggestedWeight ? `${suggestion.suggestedWeight}` : "0"}
+                    placeholder={nextPlannedSet?.enteredWeight ? `${nextPlannedSet.enteredWeight}` : suggestion.suggestedWeight ? `${suggestion.suggestedWeight}` : "0"}
                     value={nextSetInput.weight}
                   />
                   <p className="text-[11px] text-slate-400">
-                    {suggestion.suggestedWeight ? `Suggested ${formatWeight(suggestion.suggestedWeight, suggestion.suggestedUnit ?? profile.primaryUnit, profile)}` : nextPreviousSet ? `Last ${formatWeight(nextPreviousSet.enteredWeight, nextPreviousSet.enteredUnit, profile)}` : "Choose a clean starting weight"}
+                    {nextPlannedSet?.enteredWeight ? `Today ${formatWeight(nextPlannedSet.enteredWeight, nextPlannedSet.enteredUnit, profile)}` : nextPreviousSet ? `Last ${formatWeight(nextPreviousSet.enteredWeight, nextPreviousSet.enteredUnit, profile)}` : "Choose a clean starting weight"}
                   </p>
                 </label> : null}
                 <label className="rounded-2xl border border-white/10 bg-white/5 p-3">
@@ -342,7 +363,7 @@ export default function BRGymWorkoutLoggerPage() {
                     placeholder={`${selectedExercise.repMin}-${selectedExercise.repMax}`}
                     value={nextSetInput.reps}
                   />
-                  <p className="text-[11px] text-slate-400">{nextPreviousSet ? `Last ${nextPreviousSet.reps}` : `Target ${selectedExercise.repMin}-${selectedExercise.repMax}`}</p>
+                  <p className="text-[11px] text-slate-400">{nextPlannedSet ? `Today ${nextPlannedSet.reps} • last ${nextPreviousSet?.reps ?? "—"}` : `Target ${selectedExercise.repMin}-${selectedExercise.repMax}`}</p>
                 </label>
               </div>
               {isAssistedPullUp ? (

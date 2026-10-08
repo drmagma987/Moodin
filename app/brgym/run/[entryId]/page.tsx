@@ -10,17 +10,25 @@ import { useBRGym } from "@/components/brgym/provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { buildRunPushEvents } from "@/lib/brgym/run-push";
 
 interface SavedRunTimer {
   startedAt: number | null;
   pausedElapsed: number;
   isRunning: boolean;
+  pushToken?: string | null;
 }
+
+type ServerPushStatus = "checking" | "ready" | "arming" | "active" | "unavailable" | "error";
 
 function formatSeconds(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function describeStep(label: string, seconds: number) {
+  return `${label} • ${formatSeconds(seconds)}`;
 }
 
 function playCue(frequency = 880) {
@@ -56,6 +64,37 @@ async function showRunNotification(title: string, body: string) {
   }
 }
 
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+}
+
+async function setServiceWorkerRunToken(token: string | null) {
+  const registration = await navigator.serviceWorker.ready;
+  const worker = navigator.serviceWorker.controller ?? registration.active;
+  worker?.postMessage({ type: "BRGYM_SET_RUN_PUSH_TOKEN", token });
+}
+
+async function getServerPushSubscription() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    throw new Error("Server push is not supported on this device");
+  }
+  const configResponse = await fetch("/api/brgym/push/config", { cache: "no-store" });
+  if (!configResponse.ok) throw new Error("Server push is not configured yet");
+  const config = await configResponse.json() as { publicKey?: string };
+  if (!config.publicKey) throw new Error("Server push is not configured yet");
+
+  const registration = await navigator.serviceWorker.ready;
+  const existing = await registration.pushManager.getSubscription();
+  if (existing) return existing;
+  return registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+  });
+}
+
 export default function GuidedRunPage() {
   const params = useParams<{ entryId: string }>();
   const { data, hydrated } = useBRGym();
@@ -66,9 +105,11 @@ export default function GuidedRunPage() {
   const [elapsed, setElapsed] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [serverPushStatus, setServerPushStatus] = useState<ServerPushStatus>("checking");
   const lastStepIndex = useRef<number | null>(null);
   const completionNotified = useRef(false);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const pushArmGeneration = useRef(0);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -79,6 +120,7 @@ export default function GuidedRunPage() {
         // Start fresh if a partial local timer cannot be restored.
       }
       setNotificationPermission("Notification" in window ? Notification.permission : "unsupported");
+      setServerPushStatus("PushManager" in window ? "ready" : "unavailable");
       setLoaded(true);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -114,6 +156,7 @@ export default function GuidedRunPage() {
     elapsedBeforeStep += steps[index].seconds;
   }
   const currentStep = steps[stepIndex] ?? null;
+  const nextStep = steps[stepIndex + 1] ?? null;
   const complete = steps.length > 0 && elapsed >= totalSeconds;
   const stepSecondsLeft = currentStep ? Math.max(elapsedBeforeStep + currentStep.seconds - elapsed, 0) : 0;
 
@@ -126,10 +169,15 @@ export default function GuidedRunPage() {
     if (lastStepIndex.current !== stepIndex) {
       playCue(currentStep.effort === "fast" ? 1040 : 760);
       navigator.vibrate?.([180, 80, 180]);
-      void showRunNotification(currentStep.label, currentStep.cue ?? "Your next interval starts now.");
+      if (!timer.pushToken) {
+        void showRunNotification(
+          `NOW — ${describeStep(currentStep.label, currentStep.seconds)}`,
+          nextStep ? `NEXT — ${describeStep(nextStep.label, nextStep.seconds)}` : "Final section — finish strong.",
+        );
+      }
       lastStepIndex.current = stepIndex;
     }
-  }, [currentStep, loaded, stepIndex, timer.isRunning]);
+  }, [currentStep, loaded, nextStep, stepIndex, timer.isRunning, timer.pushToken]);
 
   useEffect(() => {
     if (!complete || completionNotified.current) return;
@@ -138,10 +186,12 @@ export default function GuidedRunPage() {
       setTimer((current) => ({ ...current, startedAt: null, pausedElapsed: totalSeconds, isRunning: false }));
       playCue(1180);
       navigator.vibrate?.([220, 100, 220, 100, 220]);
-      void showRunNotification("Run timer complete", "Cooldown finished. Nice work — log your run when you’re ready.");
+      if (!timer.pushToken) {
+        void showRunNotification("Run timer complete", "Cooldown finished. Nice work — log your run when you’re ready.");
+      }
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [complete, totalSeconds]);
+  }, [complete, timer.pushToken, totalSeconds]);
 
   useEffect(() => {
     async function syncWakeLock() {
@@ -179,15 +229,56 @@ export default function GuidedRunPage() {
     );
   }
 
-  function setElapsedSeconds(nextElapsed: number, running: boolean) {
+  function setElapsedSeconds(nextElapsed: number, running: boolean, pushToken: string | null = null) {
     const bounded = Math.min(Math.max(nextElapsed, 0), totalSeconds);
     setTimer({
       startedAt: running && bounded < totalSeconds ? Date.now() - bounded * 1000 : null,
       pausedElapsed: bounded,
       isRunning: running && bounded < totalSeconds,
+      pushToken: running && bounded < totalSeconds ? pushToken : null,
     });
     setElapsed(bounded);
     if (bounded < totalSeconds) completionNotified.current = false;
+  }
+
+  async function disarmServerPush() {
+    pushArmGeneration.current += 1;
+    await setServiceWorkerRunToken(null);
+    setServerPushStatus("ready");
+  }
+
+  async function armServerPush(nextElapsed: number) {
+    if (notificationPermission !== "granted") return null;
+    const generation = pushArmGeneration.current + 1;
+    pushArmGeneration.current = generation;
+    setServerPushStatus("arming");
+    const scheduleToken = crypto.randomUUID().replace(/-/g, "");
+    try {
+      const subscription = await getServerPushSubscription();
+      const events = buildRunPushEvents(steps, nextElapsed);
+      if (events.length === 0) return null;
+      await setServiceWorkerRunToken(scheduleToken);
+      const response = await fetch("/api/brgym/push/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduleToken,
+          subscription: subscription.toJSON(),
+          targetUrl: `/brgym/run/${params.entryId}`,
+          events,
+        }),
+      });
+      if (!response.ok) throw new Error("The server could not schedule run cues");
+      if (pushArmGeneration.current !== generation) return null;
+      setTimer((current) => current.isRunning ? { ...current, pushToken: scheduleToken } : current);
+      setServerPushStatus("active");
+      return scheduleToken;
+    } catch (error) {
+      await setServiceWorkerRunToken(null);
+      setServerPushStatus("error");
+      toast.error(error instanceof Error ? error.message : "Server cues could not be scheduled");
+      return null;
+    }
   }
 
   async function enableNotifications() {
@@ -198,8 +289,20 @@ export default function GuidedRunPage() {
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
     if (permission === "granted") {
-      toast.success("Run cues enabled");
-      void showRunNotification("BR Gym run cues are on", "You’ll get a cue when each timed section changes.");
+      try {
+        await getServerPushSubscription();
+        setServerPushStatus("ready");
+        toast.success("Lock-screen run cues enabled");
+        void showRunNotification(
+          "BR Gym run cues are on",
+          currentStep
+            ? `NOW — ${describeStep(currentStep.label, currentStep.seconds)}${nextStep ? ` • NEXT — ${describeStep(nextStep.label, nextStep.seconds)}` : ""}`
+            : "Start the timer to receive section-change cues.",
+        );
+      } catch (error) {
+        setServerPushStatus("error");
+        toast.error(error instanceof Error ? error.message : "Server push could not be enabled");
+      }
     }
   }
 
@@ -230,6 +333,12 @@ export default function GuidedRunPage() {
                 </div>
                 <p className="tabular-nums text-4xl font-semibold text-white">{formatSeconds(stepSecondsLeft)}</p>
               </div>
+              <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs">
+                <span className="uppercase tracking-[0.16em] text-slate-400">Next</span>
+                <span className="font-medium text-slate-100">
+                  {nextStep ? describeStep(nextStep.label, nextStep.seconds) : "Finish"}
+                </span>
+              </div>
               <div className="h-2 overflow-hidden rounded-full bg-white/10">
                 <div className="h-full rounded-full bg-cyan-400 transition-all" style={{ width: `${Math.min((elapsed / totalSeconds) * 100, 100)}%` }} />
               </div>
@@ -238,20 +347,46 @@ export default function GuidedRunPage() {
 
           <div className="grid grid-cols-3 gap-2">
             <Button
-              onClick={() => {
+              onClick={async () => {
                 playCue(660);
-                if (timer.isRunning) setElapsedSeconds(elapsed, false);
-                else setElapsedSeconds(elapsed, true);
+                if (timer.isRunning) {
+                  setElapsedSeconds(elapsed, false);
+                  await disarmServerPush();
+                }
+                else {
+                  setElapsedSeconds(elapsed, true);
+                  if (notificationPermission === "granted") void armServerPush(elapsed);
+                  if (currentStep) {
+                    void showRunNotification(
+                      `NOW — ${describeStep(currentStep.label, currentStep.seconds)}`,
+                      nextStep ? `NEXT — ${describeStep(nextStep.label, nextStep.seconds)}` : "Final section — finish strong.",
+                    );
+                  }
+                }
               }}
               size="lg"
             >
               {timer.isRunning ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
               {elapsed === 0 && !timer.isRunning ? "Start" : timer.isRunning ? "Pause" : "Resume"}
             </Button>
-            <Button onClick={() => setElapsedSeconds(elapsedBeforeStep + (currentStep?.seconds ?? 0), timer.isRunning)} size="lg" variant="secondary" disabled={complete}>
+            <Button
+              onClick={async () => {
+                const nextElapsed = elapsedBeforeStep + (currentStep?.seconds ?? 0);
+                if (timer.isRunning) {
+                  setElapsedSeconds(nextElapsed, true);
+                  await disarmServerPush();
+                  if (notificationPermission === "granted") await armServerPush(nextElapsed);
+                } else {
+                  setElapsedSeconds(nextElapsed, false);
+                }
+              }}
+              size="lg"
+              variant="secondary"
+              disabled={complete}
+            >
               <SkipForward className="mr-2 h-4 w-4" /> Skip
             </Button>
-            <Button onClick={() => { lastStepIndex.current = null; setElapsedSeconds(0, false); }} size="lg" variant="secondary">
+            <Button onClick={async () => { lastStepIndex.current = null; setElapsedSeconds(0, false); await disarmServerPush(); }} size="lg" variant="secondary">
               <RotateCcw className="mr-2 h-4 w-4" /> Reset
             </Button>
           </div>
@@ -260,13 +395,45 @@ export default function GuidedRunPage() {
 
       {notificationPermission !== "granted" && notificationPermission !== "unsupported" ? (
         <Button className="w-full" onClick={enableNotifications} variant="secondary">
-          <Bell className="mr-2 h-4 w-4" /> Enable section notifications
+          <Bell className="mr-2 h-4 w-4" /> Enable lock-screen cues
         </Button>
       ) : notificationPermission === "granted" ? (
-        <div className="flex items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-100">
-          <BellRing className="h-4 w-4" /> Section notifications are on
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-sm text-emerald-100">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2"><BellRing className="h-4 w-4" /> Lock-screen cues are allowed</div>
+              <p className="mt-1 text-xs text-emerald-100/75">
+                {serverPushStatus === "active"
+                  ? "Server cues are scheduled for every transition and the finish."
+                  : serverPushStatus === "arming"
+                    ? "Scheduling this run’s lock-screen cues…"
+                    : serverPushStatus === "error"
+                      ? "Local cues work, but server cues are not configured yet."
+                      : "Server cues will schedule when you start or resume the run."}
+              </p>
+            </div>
+            <Button
+              onClick={() => {
+                if (!currentStep) return;
+                void showRunNotification(
+                  `NOW — ${describeStep(currentStep.label, currentStep.seconds)}`,
+                  nextStep ? `NEXT — ${describeStep(nextStep.label, nextStep.seconds)}` : "Final section — finish strong.",
+                );
+                toast.success("Test cue sent");
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              Test cue
+            </Button>
+          </div>
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs leading-5 text-slate-400">
+        <p className="font-medium text-slate-200">How run cues work</p>
+        <p className="mt-1">Server pushes can announce each new segment and the completed timer while your iPhone is locked. Audio still plays when BR Gym is awake. A continuously updating Lock Screen countdown requires a native Live Activity.</p>
+      </div>
 
       <Card>
         <CardContent>

@@ -9,8 +9,8 @@ const manifest: MetadataRoute.Manifest = {
   scope: "/brgym/",
   display: "standalone",
   orientation: "portrait",
-  background_color: "#050816",
-  theme_color: "#050816",
+  background_color: "#050505",
+  theme_color: "#050505",
   categories: ["fitness", "health", "sports"],
   shortcuts: [
     {
@@ -25,6 +25,13 @@ const manifest: MetadataRoute.Manifest = {
       short_name: "Workout",
       description: "Start or resume a BR Gym workout.",
       url: "/brgym/workout",
+      icons: [{ src: "/brgym/icon-192.png", sizes: "192x192", type: "image/png" }],
+    },
+    {
+      name: "Training progress",
+      short_name: "Progress",
+      description: "Review BR Gym strength trends and personal records.",
+      url: "/brgym/progress",
       icons: [{ src: "/brgym/icon-192.png", sizes: "192x192", type: "image/png" }],
     },
     {

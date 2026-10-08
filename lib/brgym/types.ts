@@ -6,6 +6,8 @@ export type WorkoutCategory =
   | "Full Body"
   | "Custom";
 
+export type TrainingProfileId = "vaughn" | "lauren" | "custom";
+
 export type EquipmentKind =
   | "dumbbells"
   | "adjustable dumbbells"
@@ -66,6 +68,7 @@ export interface WorkoutTemplate {
   createdAt: string;
   updatedAt: string;
   isDefault?: boolean;
+  trainingProfile?: TrainingProfileId;
 }
 
 export interface EquipmentProfile {
@@ -100,6 +103,10 @@ export interface ExerciseLog {
   struggleRating: DifficultyRating;
   notes: string;
   recommendation: string;
+  targetSets?: number;
+  repMin?: number;
+  repMax?: number;
+  progressionIncrement?: number;
 }
 
 export interface WorkoutSession {
@@ -115,6 +122,7 @@ export interface WorkoutSession {
   recommendations: string[];
   notes: string;
   planEntryId?: string | null;
+  trainingProfile?: TrainingProfileId;
 }
 
 export interface UserSettings {
@@ -122,10 +130,13 @@ export interface UserSettings {
   timerSoundMuted: boolean;
   activeEquipmentProfileId: string;
   preferredTheme: "system" | "dark";
+  activeTrainingProfile: TrainingProfileId;
 }
 
 export interface ActiveExerciseDraft extends ExerciseTemplate {
   completedSets: SetLog[];
+  plannedSets?: SetLog[];
+  progressionSummary?: string;
   struggleRating?: DifficultyRating;
   notes: string;
   replacementOptions?: string[];
@@ -143,6 +154,7 @@ export interface ActiveWorkoutDraft {
   exercises: ActiveExerciseDraft[];
   notes: string;
   planEntryId?: string | null;
+  trainingProfile?: TrainingProfileId;
 }
 
 export interface RunLog {
@@ -188,6 +200,12 @@ export interface RecommendationResult {
   suggestedWeight?: number | null;
   suggestedUnit?: WeightUnit | null;
   explanation?: string;
+}
+
+export interface WorkoutProgressionPlan {
+  sets: SetLog[];
+  summary: string;
+  kind: "first-session" | "carry-forward" | "rep-progress" | "load-progress" | "hold" | "deload";
 }
 
 export interface BRGymData {

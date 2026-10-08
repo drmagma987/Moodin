@@ -4,6 +4,7 @@ import type {
   ExerciseTemplate,
   WorkoutCategory,
   WorkoutTemplate,
+  TrainingProfileId,
 } from "@/lib/brgym/types";
 
 const timestamp = "2026-10-07T00:00:00.000Z";
@@ -555,6 +556,14 @@ export const EXERCISE_LIBRARY: Record<string, ExerciseTemplate> = {
     15,
     2.5,
   ),
+  "Cable single arm lat pulldown": createExercise("cable-single-arm-lat-pulldown", "Cable single arm lat pulldown", "vertical pull", "cable", ["cable", "functional trainer"], "Keep the shoulder down and drive the elbow toward the hip.", { knee: false, lowerBack: false, shoulder: false }, 3, 8, 10),
+  "Cable tricep pushdown with rope": createExercise("cable-tricep-pushdown-rope", "Cable tricep pushdown with rope", "tricep isolation", "cable", ["cable", "functional trainer"], "Keep elbows pinned and separate the rope at lockout.", { knee: false, lowerBack: false, shoulder: false }, 3, 8, 10),
+  "Barbell squat": createExercise("barbell-squat", "Barbell squat", "squat", "barbell", ["barbell", "squat rack"], "Brace before each rep and use a comfortable depth.", { knee: true, lowerBack: true, shoulder: false }, 3, 8, 10),
+  "Dumbbell sumo squat": createExercise("dumbbell-sumo-squat", "Dumbbell sumo squat", "squat", "dumbbell", ["dumbbells", "adjustable dumbbells"], "Use a wide stance and keep the dumbbell centered.", { knee: true, lowerBack: false, shoulder: false }, 3, 8, 10),
+  "Dumbbell standing calf raise": createExercise("dumbbell-standing-calf-raise", "Dumbbell standing calf raise", "calf raise", "dumbbell", ["dumbbells", "adjustable dumbbells"], "Pause at the top and lower under control.", { knee: false, lowerBack: false, shoulder: false }, 3, 15, 15),
+  "Dead bug": createExercise("dead-bug", "Dead bug", "core stability", "bodyweight", ["bodyweight"], "Keep the lower back gently pressed into the floor.", { knee: false, lowerBack: false, shoulder: false }, 3, 10, 10, 0),
+  "Heel taps": createExercise("heel-taps", "Heel taps", "core stability", "bodyweight", ["bodyweight"], "Move slowly without letting the ribs flare.", { knee: false, lowerBack: false, shoulder: false }, 3, 8, 10, 0),
+  "Bird dog": createExercise("bird-dog", "Bird dog", "core stability", "bodyweight", ["bodyweight"], "Reach long while keeping hips square.", { knee: false, lowerBack: false, shoulder: false }, 3, 8, 10, 0),
 };
 
 function getExercises(names: string[]): ExerciseTemplate[] {
@@ -567,7 +576,7 @@ function getExercises(names: string[]): ExerciseTemplate[] {
   });
 }
 
-function createTemplate(id: string, name: string, category: WorkoutCategory, exerciseNames: string[]): WorkoutTemplate {
+function createTemplate(id: string, name: string, category: WorkoutCategory, exerciseNames: string[], trainingProfile: TrainingProfileId = "vaughn"): WorkoutTemplate {
   return {
     id,
     name,
@@ -576,6 +585,7 @@ function createTemplate(id: string, name: string, category: WorkoutCategory, exe
     createdAt: timestamp,
     updatedAt: timestamp,
     isDefault: true,
+    trainingProfile,
   };
 }
 
@@ -616,6 +626,29 @@ export const DEFAULT_TEMPLATES: WorkoutTemplate[] = [
     ]),
     isDefault: false,
   },
+  createTemplate("lauren-push", "Push", "Push", [
+    "Dumbbell incline bench press",
+    "Cable tricep pushdown with rope",
+    "Dumbbell shoulder press",
+    "Dumbbell lateral raise",
+  ], "lauren"),
+  createTemplate("lauren-pull", "Pull", "Pull", [
+    "Dumbbell bent-over row",
+    "Cable single arm lat pulldown",
+    "Dumbbell curl",
+    "Dumbbell hammer curl",
+  ], "lauren"),
+  createTemplate("lauren-legs", "Legs", "Legs / Lower Back", [
+    "Barbell squat",
+    "Dumbbell Romanian deadlift",
+    "Dumbbell sumo squat",
+    "Dumbbell standing calf raise",
+  ], "lauren"),
+  createTemplate("lauren-core", "Bonus · Deep Core", "Custom", [
+    "Dead bug",
+    "Heel taps",
+    "Bird dog",
+  ], "lauren"),
 ];
 
 export const DEFAULT_EQUIPMENT_PROFILES: EquipmentProfile[] = [
@@ -663,6 +696,7 @@ export const DEFAULT_SETTINGS = {
   timerSoundMuted: false,
   activeEquipmentProfileId: "apartment-gym",
   preferredTheme: "dark" as const,
+  activeTrainingProfile: "vaughn" as const,
 };
 
 export const CATEGORY_SEQUENCE: WorkoutCategory[] = [

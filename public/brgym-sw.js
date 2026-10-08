@@ -1,11 +1,14 @@
-const VERSION = "brgym-v4";
+const VERSION = "brgym-v6";
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
+const RUN_PUSH_STATE_CACHE = "brgym-run-push-state";
+const RUN_PUSH_STATE_URL = "/brgym/__run-push-state__";
 const APP_ROUTES = [
   "/brgym/",
   "/brgym/workout",
   "/brgym/plan",
   "/brgym/history",
+  "/brgym/progress",
   "/brgym/templates",
   "/brgym/equipment",
   "/brgym/settings",
@@ -81,6 +84,39 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     void self.skipWaiting();
   }
+  if (event.data?.type === "BRGYM_SET_RUN_PUSH_TOKEN") {
+    event.waitUntil(
+      caches.open(RUN_PUSH_STATE_CACHE).then((cache) => cache.put(
+        RUN_PUSH_STATE_URL,
+        new Response(JSON.stringify({ token: event.data.token ?? null })),
+      )),
+    );
+  }
+});
+
+self.addEventListener("push", (event) => {
+  event.waitUntil((async () => {
+    let payload;
+    try {
+      payload = event.data?.json();
+    } catch {
+      return;
+    }
+    if (!payload?.scheduleToken || !payload?.title || !payload?.body) return;
+
+    const stateResponse = await caches.match(RUN_PUSH_STATE_URL);
+    const state = stateResponse ? await stateResponse.json() : null;
+    if (state?.token !== payload.scheduleToken) return;
+
+    await self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/brgym/icon-192.png",
+      badge: "/brgym/icon-192.png",
+      tag: `brgym-run-cue-${payload.scheduleToken}`,
+      renotify: true,
+      data: { targetUrl: payload.targetUrl },
+    });
+  })());
 });
 
 async function networkFirst(request) {
@@ -138,14 +174,14 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const targetUrl = event.notification.data?.targetUrl || "/brgym/plan";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const existing = clients.find((client) => client.url.includes("/brgym/"));
       if (existing) {
-        existing.focus();
-        return existing;
+        return existing.navigate(targetUrl).then(() => existing.focus());
       }
-      return self.clients.openWindow("/brgym/plan");
+      return self.clients.openWindow(targetUrl);
     }),
   );
 });
