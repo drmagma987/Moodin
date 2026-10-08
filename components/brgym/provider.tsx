@@ -41,6 +41,7 @@ function mergeTrainingPlan(
     ...current,
     entries: current.entries.map((entry) => ({
       ...entry,
+      date: savedEntries.get(entry.id)?.date ?? entry.date,
       runLog: savedEntries.get(entry.id)?.runLog ?? entry.runLog ?? null,
     })),
   };

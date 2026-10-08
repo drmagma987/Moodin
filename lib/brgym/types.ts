@@ -188,6 +188,7 @@ export interface TrainingPlanEntry {
   optional?: boolean;
   runLog?: RunLog | null;
   timedSections?: RunIntervalStep[];
+  trainingProfile?: TrainingProfileId;
 }
 
 export interface TrainingPlan {

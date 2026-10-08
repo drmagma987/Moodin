@@ -26,7 +26,8 @@ export default function BRGymHomePage() {
   );
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`;
-  const nextPlanEntry = activeTrainingProfile === "vaughn" ? data.trainingPlan?.entries.find((entry) => {
+  const nextPlanEntry = activeTrainingProfile !== "custom" ? data.trainingPlan?.entries.find((entry) => {
+    if ((entry.trainingProfile ?? "vaughn") !== activeTrainingProfile) return false;
     const liftDone = entry.kind === "lift" && data.sessions.some((session) => session.planEntryId === entry.id);
     return entry.date >= todayKey && !entry.runLog && !liftDone;
   }) : undefined;

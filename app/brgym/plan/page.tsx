@@ -56,12 +56,11 @@ export default function BRGymPlanPage() {
     return <div className="rounded-[28px] bg-white/5 p-5 text-sm text-slate-300">Loading your program…</div>;
   }
 
-  if (data.settings.activeTrainingProfile !== "vaughn") {
-    const profileName = data.settings.activeTrainingProfile === "lauren" ? "Lauren" : "Custom";
+  if (data.settings.activeTrainingProfile === "custom") {
     return (
       <Card>
         <CardContent>
-          <p className="brgym-kicker">{profileName}</p>
+          <p className="brgym-kicker">Custom</p>
           <h2 className="mt-2 text-2xl font-semibold text-white">Workout rotation</h2>
           <p className="mt-2 text-sm text-slate-300">This profile uses its saved split instead of Vaughn’s dated run-and-lift plan.</p>
           <Button className="mt-5 w-full" onClick={() => router.push("/brgym/workout")}>Open workouts</Button>
@@ -82,13 +81,19 @@ export default function BRGymPlanPage() {
     );
   }
 
+  const activeTrainingProfile = data.settings.activeTrainingProfile;
+  const planEntries = plan.entries.filter(
+    (entry) => (entry.trainingProfile ?? "vaughn") === activeTrainingProfile,
+  );
+  const isLaurenPlan = activeTrainingProfile === "lauren";
+
   const today = localDateKey();
-  const completedCount = plan.entries.filter(
+  const completedCount = planEntries.filter(
     (entry) => Boolean(entry.runLog) || isLiftComplete(entry, completedLiftIds),
   ).length;
   const visibleEntries = showFullPlan
-    ? plan.entries
-    : plan.entries.filter((entry) => entry.date >= today).slice(0, 8);
+    ? planEntries
+    : planEntries.filter((entry) => entry.date >= today).slice(0, 8);
 
   function openRunLog(entry: TrainingPlanEntry) {
     setEditingRunId(entry.id);
@@ -141,15 +146,17 @@ export default function BRGymPlanPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.22em] text-cyan-200">Your active program</p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">{plan.name}</h2>
+              <h2 className="mt-2 text-2xl font-semibold text-white">{isLaurenPlan ? "Lauren’s Hybrid 5K Reset" : plan.name}</h2>
               <p className="mt-2 text-sm text-slate-300">
-                {formatPlanDate(plan.startDate)} through {formatPlanDate(plan.endDate)}
+                {formatPlanDate(planEntries[0]?.date ?? plan.startDate)} through {formatPlanDate(planEntries.at(-1)?.date ?? plan.endDate)}
               </p>
             </div>
-            <Badge variant="cyan">{completedCount}/{plan.entries.length}</Badge>
+            <Badge variant="cyan">{completedCount}/{planEntries.length}</Badge>
           </div>
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
-            Running is the competitive priority through race day. Keep lower-body lifting controlled once the endurance runs reach 2.75 miles.
+            {isLaurenPlan
+              ? "Two runs per week: one short sprint-form session and one easy stamina build. The goal is healthy consistency and a comfortable 5K finish—not a race time."
+              : "Running is the competitive priority through race day. Keep lower-body lifting controlled once the endurance runs reach 2.75 miles."}
           </div>
         </CardContent>
       </Card>
@@ -168,7 +175,7 @@ export default function BRGymPlanPage() {
             const date = new Date();
             date.setDate(date.getDate() + offset);
             const key = localDateKey(date);
-            const count = plan.entries.filter((entry) => entry.date === key).length;
+            const count = planEntries.filter((entry) => entry.date === key).length;
             return (
               <div key={key} className={`rounded-2xl border px-1 py-2 text-center ${offset === 0 ? "border-[#ff5874]/50 bg-[#ff4968]/12" : "border-white/5 bg-black/10"}`}>
                 <p className="text-[9px] font-bold uppercase text-slate-500">{date.toLocaleDateString(undefined, { weekday: "narrow" })}</p>
@@ -350,11 +357,11 @@ export default function BRGymPlanPage() {
       </div>
 
       <Button className="w-full" onClick={() => setShowFullPlan((current) => !current)} variant="secondary">
-        {showFullPlan ? "Show upcoming only" : `Show full plan (${plan.entries.length} sessions)`}
+        {showFullPlan ? "Show upcoming only" : `Show full plan (${planEntries.length} sessions)`}
       </Button>
 
       <div className="flex items-center justify-center gap-2 py-3 text-xs text-slate-500">
-        <ChevronDown className="h-4 w-4" /> Race day is Friday, November 27
+        <ChevronDown className="h-4 w-4" /> {isLaurenPlan ? "Finish day" : "Race day"} is Friday, November 27
       </div>
     </div>
   );

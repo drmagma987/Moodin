@@ -115,6 +115,128 @@ function run(
   return { id, date, kind: "run", title, details, optional, runLog: null, timedSections };
 }
 
+function laurenRun(
+  id: string,
+  date: string,
+  title: string,
+  details: string,
+  timedSections?: RunIntervalStep[],
+): TrainingPlanEntry {
+  return {
+    id,
+    date,
+    kind: "run",
+    title,
+    details,
+    optional: false,
+    runLog: null,
+    timedSections,
+    trainingProfile: "lauren",
+  };
+}
+
+function laurenSprintSession(
+  repeatCount: number,
+  sprintSeconds: number,
+  recoverySeconds: number,
+  effortCue: string,
+): RunIntervalStep[] {
+  const steps: RunIntervalStep[] = [
+    { id: "walk-warm-up", label: "Brisk walk", seconds: 5 * 60, effort: "easy", cue: "Start relaxed and loosen up" },
+    { id: "jog-warm-up", label: "Easy jog", seconds: 5 * 60, effort: "easy", cue: "Conversational pace" },
+    { id: "drills", label: "Mobility + running drills", seconds: 3 * 60, effort: "easy", cue: "Leg swings, skips, and two gentle build-ups" },
+  ];
+  for (let repeat = 1; repeat <= repeatCount; repeat += 1) {
+    steps.push({
+      id: `sprint-${repeat}`,
+      label: `Smooth sprint ${repeat} of ${repeatCount}`,
+      seconds: sprintSeconds,
+      effort: "fast",
+      cue: effortCue,
+    });
+    if (repeat < repeatCount) {
+      steps.push({
+        id: `walk-${repeat}`,
+        label: `Full walk-back recovery ${repeat}`,
+        seconds: recoverySeconds,
+        effort: "recovery",
+        cue: "Wait until breathing feels settled",
+      });
+    }
+  }
+  steps.push({ id: "cooldown", label: "Walk cooldown", seconds: 5 * 60, effort: "easy", cue: "Finish feeling like you could do more" });
+  return steps;
+}
+
+function laurenWalkRunSession(
+  repeatCount: number,
+  runSeconds: number,
+  walkSeconds: number,
+): RunIntervalStep[] {
+  const steps: RunIntervalStep[] = [
+    { id: "warm-up", label: "Brisk walk warm-up", seconds: 5 * 60, effort: "easy", cue: "Ease into the session" },
+  ];
+  for (let repeat = 1; repeat <= repeatCount; repeat += 1) {
+    steps.push({ id: `run-${repeat}`, label: `Easy run ${repeat} of ${repeatCount}`, seconds: runSeconds, effort: "steady", cue: "Conversational—slow down before you strain" });
+    if (repeat < repeatCount) {
+      steps.push({ id: `walk-${repeat}`, label: `Walk reset ${repeat}`, seconds: walkSeconds, effort: "recovery", cue: "Relax your shoulders and reset" });
+    }
+  }
+  steps.push({ id: "cooldown", label: "Walk cooldown", seconds: 5 * 60, effort: "easy", cue: "Let your breathing settle" });
+  return steps;
+}
+
+export function createLaurenHybrid5KEntries(): TrainingPlanEntry[] {
+  const sprintDays = [
+    ["2026-10-13", 6, 10, 90, "About 70%—smooth acceleration, never all-out"],
+    ["2026-10-20", 6, 12, 90, "About 75%—tall posture and relaxed speed"],
+    ["2026-10-27", 7, 12, 90, "75-80%—quick but completely under control"],
+    ["2026-11-03", 6, 15, 105, "About 80%—fast, loose, and repeatable"],
+    ["2026-11-10", 8, 12, 90, "About 80%—crisp form with full recovery"],
+    ["2026-11-17", 6, 20, 120, "80-85%—strong, not straining"],
+    ["2026-11-24", 4, 10, 90, "Relaxed strides only—save energy for Friday"],
+  ] as const;
+  const easyDays = [
+    ["2026-10-11", "6 × 2 min easy run / 90 sec walk. Build rhythm, not speed.", 6, 120, 90],
+    ["2026-10-18", "5 × 3 min easy run / 90 sec walk. Keep the running conversational.", 5, 180, 90],
+    ["2026-10-25", "4 × 5 min easy run / 90 sec walk. Finish with energy left.", 4, 300, 90],
+    ["2026-11-01", "3 × 8 min easy run / 2 min walk. Slow down whenever breathing gets ragged.", 3, 480, 120],
+    ["2026-11-08", "25 minutes easy. Run continuously if comfortable or take a short walk reset every 8 minutes.", 3, 480, 60],
+    ["2026-11-15", "28 minutes easy and conversational. Walking is always available—time moving matters most.", 2, 780, 120],
+    ["2026-11-22", "20-25 minutes very easy. This is a confidence run, not a test.", 2, 600, 90],
+  ] as const;
+
+  const entries: TrainingPlanEntry[] = [];
+  for (const [date, repeats, sprintSeconds, recoverySeconds, cue] of sprintDays) {
+    entries.push(laurenRun(
+      `lauren-sprints-${date}`,
+      date,
+      date === "2026-11-24" ? "Race-week strides" : "Sprint form day",
+      `${repeats} × ${sprintSeconds}-second relaxed sprints with full walk-back recovery. Stop if form gets tight; no all-out reps.`,
+      laurenSprintSession(repeats, sprintSeconds, recoverySeconds, cue),
+    ));
+  }
+  for (const [date, details, repeats, runSeconds, walkSeconds] of easyDays) {
+    entries.push(laurenRun(
+      `lauren-easy-run-${date}`,
+      date,
+      "Easy stamina run",
+      details,
+      laurenWalkRunSession(repeats, runSeconds, walkSeconds),
+    ));
+  }
+  entries.push({
+    id: "lauren-5k-2026-11-27",
+    date: "2026-11-27",
+    kind: "race",
+    title: "5K Finish Day",
+    details: "Cover the full 3.1 miles at a comfortable run/walk effort. The goal is finishing healthy and proud—not racing the clock.",
+    runLog: null,
+    trainingProfile: "lauren",
+  });
+  return entries.sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function createBossEightWeekPlan(): TrainingPlan {
   const entries: TrainingPlanEntry[] = [
     run(
@@ -198,6 +320,8 @@ export function createBossEightWeekPlan(): TrainingPlan {
       runLog: null,
     },
   );
+
+  entries.push(...createLaurenHybrid5KEntries());
 
   return {
     id: "boss-5k-fall-2026",

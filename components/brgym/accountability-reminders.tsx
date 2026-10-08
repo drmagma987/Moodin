@@ -19,7 +19,9 @@ export function AccountabilityReminders() {
   useEffect(() => {
     if (!hydrated || !settings.accountabilityRemindersEnabled) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    const planEntries = entries ?? [];
+    const planEntries = (entries ?? []).filter(
+      (entry) => (entry.trainingProfile ?? "vaughn") === settings.activeTrainingProfile,
+    );
 
     const completedEntryIds = new Set([
       ...data.sessions.map((session) => session.planEntryId).filter(Boolean),
@@ -79,7 +81,7 @@ export function AccountabilityReminders() {
         window.localStorage.removeItem(REMINDER_SIGNATURE_KEY);
       }
     })();
-  }, [data.sessions, entries, hydrated, settings.accountabilityRemindersEnabled, settings.eveningReminderTime, settings.morningReminderTime]);
+  }, [data.sessions, entries, hydrated, settings.accountabilityRemindersEnabled, settings.activeTrainingProfile, settings.eveningReminderTime, settings.morningReminderTime]);
 
   return null;
 }

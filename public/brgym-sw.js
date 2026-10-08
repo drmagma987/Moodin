@@ -1,4 +1,4 @@
-const VERSION = "brgym-v7";
+const VERSION = "brgym-v8";
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const RUN_PUSH_STATE_CACHE = "brgym-run-push-state";
