@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { buildRunPushEvents } from "@/lib/brgym/run-push";
+import { getBRGymPushSubscription, setServiceWorkerPushToken } from "@/lib/brgym/push-client";
 
 interface SavedRunTimer {
   startedAt: number | null;
@@ -62,37 +63,6 @@ async function showRunNotification(title: string, body: string) {
   } catch {
     // Sound, vibration, and the live screen remain available if notifications fail.
   }
-}
-
-function urlBase64ToUint8Array(value: string) {
-  const padding = "=".repeat((4 - value.length % 4) % 4);
-  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = window.atob(base64);
-  return Uint8Array.from(raw, (character) => character.charCodeAt(0));
-}
-
-async function setServiceWorkerRunToken(token: string | null) {
-  const registration = await navigator.serviceWorker.ready;
-  const worker = navigator.serviceWorker.controller ?? registration.active;
-  worker?.postMessage({ type: "BRGYM_SET_RUN_PUSH_TOKEN", token });
-}
-
-async function getServerPushSubscription() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    throw new Error("Server push is not supported on this device");
-  }
-  const configResponse = await fetch("/api/brgym/push/config", { cache: "no-store" });
-  if (!configResponse.ok) throw new Error("Server push is not configured yet");
-  const config = await configResponse.json() as { publicKey?: string };
-  if (!config.publicKey) throw new Error("Server push is not configured yet");
-
-  const registration = await navigator.serviceWorker.ready;
-  const existing = await registration.pushManager.getSubscription();
-  if (existing) return existing;
-  return registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(config.publicKey),
-  });
 }
 
 export default function GuidedRunPage() {
@@ -243,7 +213,7 @@ export default function GuidedRunPage() {
 
   async function disarmServerPush() {
     pushArmGeneration.current += 1;
-    await setServiceWorkerRunToken(null);
+    await setServiceWorkerPushToken("run", null);
     setServerPushStatus("ready");
   }
 
@@ -254,10 +224,10 @@ export default function GuidedRunPage() {
     setServerPushStatus("arming");
     const scheduleToken = crypto.randomUUID().replace(/-/g, "");
     try {
-      const subscription = await getServerPushSubscription();
+      const subscription = await getBRGymPushSubscription();
       const events = buildRunPushEvents(steps, nextElapsed);
       if (events.length === 0) return null;
-      await setServiceWorkerRunToken(scheduleToken);
+      await setServiceWorkerPushToken("run", scheduleToken);
       const response = await fetch("/api/brgym/push/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -274,7 +244,7 @@ export default function GuidedRunPage() {
       setServerPushStatus("active");
       return scheduleToken;
     } catch (error) {
-      await setServiceWorkerRunToken(null);
+      await setServiceWorkerPushToken("run", null);
       setServerPushStatus("error");
       toast.error(error instanceof Error ? error.message : "Server cues could not be scheduled");
       return null;
@@ -290,7 +260,7 @@ export default function GuidedRunPage() {
     setNotificationPermission(permission);
     if (permission === "granted") {
       try {
-        await getServerPushSubscription();
+        await getBRGymPushSubscription();
         setServerPushStatus("ready");
         toast.success("Lock-screen run cues enabled");
         void showRunNotification(

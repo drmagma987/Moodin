@@ -1,10 +1,9 @@
 .brgym-theme {
   min-height: 100vh;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    #050505;
-  background-size: 32px 32px;
+    radial-gradient(circle at 92% -5%, rgba(255, 72, 105, 0.18), transparent 25rem),
+    radial-gradient(circle at -15% 36%, rgba(244, 93, 73, 0.09), transparent 22rem),
+    linear-gradient(180deg, #24272b 0%, #15171a 48%, #0d0f11 100%);
   color: #f5f5f5;
 }
 
@@ -13,7 +12,7 @@
   inset: 0;
   pointer-events: none;
   content: "";
-  background: radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.09), transparent 36rem);
+  background: linear-gradient(115deg, rgba(255,255,255,.025), transparent 42%);
 }
 
 .brgym-theme main,
@@ -23,7 +22,7 @@
 }
 
 .brgym-theme [class*="bg-cyan-400"] {
-  background-color: #f5f5f5 !important;
+  background: linear-gradient(135deg, #ff466d, #ff304f) !important;
 }
 
 .brgym-theme [class*="bg-cyan-400/"] {
@@ -64,11 +63,11 @@
 }
 
 .brgym-theme [class~="text-slate-950"] {
-  color: #050505 !important;
+  color: white !important;
 }
 
 .brgym-theme [class*="shadow-[0_12px_30px_rgba(34,211,238"] {
-  box-shadow: none !important;
+  box-shadow: 0 12px 28px rgba(255, 48, 79, .24), inset 0 1px rgba(255,255,255,.24) !important;
 }
 
 .brgym-theme input,
@@ -86,6 +85,105 @@
   font-size: 0.66rem;
   font-weight: 700;
   letter-spacing: 0.22em;
-  color: #737373;
+  color: #ff6a84;
   text-transform: uppercase;
+}
+
+.brgym-topbar {
+  padding: .75rem;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 1.35rem;
+  background: linear-gradient(145deg, rgba(48,52,57,.88), rgba(25,27,30,.88));
+  box-shadow: 10px 10px 24px rgba(0,0,0,.28), -6px -6px 18px rgba(255,255,255,.025), inset 0 1px rgba(255,255,255,.06);
+  backdrop-filter: blur(22px);
+}
+
+.brgym-logo,
+.brgym-status-orb {
+  border: 1px solid rgba(255,255,255,.07);
+  box-shadow: 5px 5px 12px rgba(0,0,0,.32), -3px -3px 9px rgba(255,255,255,.035), inset 0 1px rgba(255,255,255,.07);
+}
+
+.brgym-status-orb {
+  display: grid;
+  width: 2.55rem;
+  height: 2.55rem;
+  place-items: center;
+  border-radius: 999px;
+  color: #ff526f;
+  background: linear-gradient(145deg, #2d3034, #1b1d20);
+}
+
+.brgym-card {
+  border-color: rgba(255,255,255,.065) !important;
+  background: linear-gradient(145deg, rgba(48,52,57,.92), rgba(23,25,28,.96)) !important;
+  box-shadow: 13px 13px 30px rgba(0,0,0,.3), -7px -7px 22px rgba(255,255,255,.025), inset 0 1px rgba(255,255,255,.065);
+}
+
+.brgym-card[class*="bg-cyan-400"] {
+  border-color: rgba(255, 73, 104, .3) !important;
+  background: linear-gradient(145deg, rgba(54,49,54,.96), rgba(24,25,28,.98)) !important;
+}
+
+.brgym-button {
+  min-height: 2.8rem;
+  box-shadow: 6px 7px 16px rgba(0,0,0,.25), inset 0 1px rgba(255,255,255,.09);
+}
+
+.brgym-button[class*="bg-white/10"],
+.brgym-button[class*="bg-white/5"] {
+  background: linear-gradient(145deg, #303338, #202226) !important;
+  border: 1px solid rgba(255,255,255,.055);
+}
+
+.brgym-dock {
+  left: 50% !important;
+  right: auto !important;
+  width: calc(100% - 1.5rem);
+  transform: translateX(-50%);
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 1.65rem;
+  background: rgba(24,26,29,.91);
+  box-shadow: 0 18px 45px rgba(0,0,0,.55), inset 0 1px rgba(255,255,255,.07);
+  backdrop-filter: blur(24px);
+}
+
+.brgym-nav-active {
+  background: linear-gradient(145deg, #34373c, #202226);
+  box-shadow: 4px 5px 12px rgba(0,0,0,.33), inset 0 1px rgba(255,255,255,.08);
+}
+
+.brgym-nav-active svg { color: #ff4968; }
+
+.brgym-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 2rem;
+  background: linear-gradient(145deg, #393d42, #1b1e21 64%);
+  box-shadow: 16px 18px 38px rgba(0,0,0,.34), -8px -8px 24px rgba(255,255,255,.025), inset 0 1px rgba(255,255,255,.08);
+}
+
+.brgym-hero::after {
+  position: absolute;
+  width: 13rem;
+  height: 13rem;
+  right: -4rem;
+  top: -5rem;
+  content: "";
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255,58,91,.38), transparent 67%);
+  filter: blur(2px);
+}
+
+.brgym-primary-orb {
+  box-shadow: 0 12px 28px rgba(255,48,79,.35), inset 0 2px rgba(255,255,255,.32), inset 0 -4px rgba(133,0,25,.18);
+}
+
+.brgym-theme input,
+.brgym-theme select,
+.brgym-theme textarea {
+  border-color: rgba(255,255,255,.08) !important;
+  background: rgba(10,11,13,.38) !important;
+  box-shadow: inset 3px 3px 8px rgba(0,0,0,.28), inset -2px -2px 5px rgba(255,255,255,.02);
 }

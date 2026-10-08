@@ -3,8 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, CalendarDays, Dumbbell, Ellipsis, House } from "lucide-react";
+import { BarChart3, CalendarDays, Dumbbell, Ellipsis, House, Sparkles } from "lucide-react";
 
+import { AccountabilityReminders } from "@/components/brgym/accountability-reminders";
 import { BRGymPwaRegistration } from "@/components/brgym/pwa-registration";
 import { TrainingProfileSwitcher } from "@/components/brgym/training-profile-switcher";
 
@@ -36,11 +37,12 @@ export function BRGymAppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="brgym-theme min-h-screen text-neutral-100">
-      <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col px-4 pb-28 pt-[max(1rem,env(safe-area-inset-top))]">
-        <header className={`border-b border-white/10 ${inSession ? "mb-3 pb-3" : "mb-7 pb-5"}`}>
+      <AccountabilityReminders />
+      <div className="mx-auto flex min-h-screen w-full max-w-lg flex-col px-4 pb-32 pt-[max(1rem,env(safe-area-inset-top))]">
+        <header className={`brgym-topbar ${inSession ? "mb-3" : "mb-5"}`}>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="overflow-hidden rounded-xl border border-white/15 bg-black">
+              <div className="brgym-logo overflow-hidden rounded-2xl bg-black">
                 <Image
                   alt="BR Gym logo"
                   className={inSession ? "h-10 w-10 object-cover grayscale" : "h-12 w-12 object-cover grayscale"}
@@ -52,10 +54,10 @@ export function BRGymAppShell({ children }: { children: React.ReactNode }) {
               </div>
               <div>
                 <p className="text-sm font-black uppercase tracking-[0.22em] text-white">BR Gym</p>
-                <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-neutral-500">{getSectionLabel(pathname)}</p>
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.17em] text-neutral-500">{getSectionLabel(pathname)}</p>
               </div>
             </div>
-            <div className={`h-2 w-2 rounded-full bg-white ${inSession ? "animate-pulse" : "opacity-30"}`} aria-hidden="true" />
+            <div className="brgym-status-orb" aria-hidden="true"><Sparkles className="h-4 w-4" /></div>
           </div>
         </header>
         {!inSession ? <TrainingProfileSwitcher /> : null}
@@ -63,8 +65,8 @@ export function BRGymAppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-black/90 px-2 pb-[calc(env(safe-area-inset-bottom)+0.55rem)] pt-2 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-lg grid-cols-5 gap-1">
+      <nav className="brgym-dock fixed inset-x-3 bottom-3 z-20 mx-auto max-w-[31rem] px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-2">
+        <div className="grid grid-cols-5 gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/brgym"
@@ -78,8 +80,8 @@ export function BRGymAppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-center text-[10px] font-medium transition ${
-                  active ? "bg-white text-black" : "text-neutral-500 hover:text-white"
+                className={`flex flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2.5 text-center text-[10px] font-semibold transition ${
+                  active ? "brgym-nav-active text-white" : "text-neutral-500 hover:text-white"
                 }`}
               >
                 <Icon className="h-4 w-4" strokeWidth={active ? 2.5 : 1.8} />

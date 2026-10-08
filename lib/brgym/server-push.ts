@@ -3,6 +3,7 @@ import webPush, { type PushSubscription } from "web-push";
 export const RUN_PUSH_TOPIC = "brgym-run-cues";
 
 export interface QueuedRunPush {
+  channel: "run" | "reminder";
   scheduleToken: string;
   subscription: PushSubscription;
   title: string;
@@ -28,6 +29,7 @@ export async function deliverRunPush(message: QueuedRunPush) {
     await webPush.sendNotification(
       message.subscription,
       JSON.stringify({
+        channel: message.channel,
         scheduleToken: message.scheduleToken,
         title: message.title,
         body: message.body,

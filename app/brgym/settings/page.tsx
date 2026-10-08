@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { BellRing, Clock3 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useBRGym } from "@/components/brgym/provider";
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { getBRGymPushSubscription, setServiceWorkerPushToken } from "@/lib/brgym/push-client";
 
 export default function BRGymSettingsPage() {
   const { data, hydrated, exportAllData, importAllData, resetAllData, updateSettings } = useBRGym();
@@ -26,6 +28,61 @@ export default function BRGymSettingsPage() {
         <p className="mt-2 text-sm text-slate-300">
           Recommendations are based on logged performance and are not medical advice.
         </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <div className="flex items-start gap-3">
+            <div className="brgym-status-orb shrink-0"><BellRing className="h-4 w-4" /></div>
+            <div>
+              <p className="brgym-kicker">Accountability</p>
+              <h3 className="mt-2 text-lg font-semibold text-white">Twice-daily workout reminders</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-400">BR Gym names the workout on today’s calendar in the morning and checks back in that evening.</p>
+            </div>
+          </div>
+          <label className="mt-5 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+            <span className="text-sm text-slate-100">Accountability reminders</span>
+            <Switch
+              checked={data.settings.accountabilityRemindersEnabled}
+              onChange={async (event) => {
+                const enabled = event.target.checked;
+                if (!enabled) {
+                  updateSettings({ accountabilityRemindersEnabled: false });
+                  await setServiceWorkerPushToken("reminder", null);
+                  window.localStorage.removeItem("brgym-reminder-schedule-v1");
+                  return;
+                }
+                if (!("Notification" in window)) {
+                  toast.error("Notifications are not supported on this device");
+                  return;
+                }
+                const permission = await Notification.requestPermission();
+                if (permission !== "granted") {
+                  toast.error("Notification permission is required");
+                  return;
+                }
+                try {
+                  await getBRGymPushSubscription();
+                  updateSettings({ accountabilityRemindersEnabled: true });
+                  toast.success("Accountability reminders enabled");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not enable reminders");
+                }
+              }}
+            />
+          </label>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs uppercase tracking-[.14em] text-slate-400">
+              <span className="flex items-center gap-2"><Clock3 className="h-3.5 w-3.5" /> Morning</span>
+              <Input className="mt-2" type="time" value={data.settings.morningReminderTime} onChange={(event) => updateSettings({ morningReminderTime: event.target.value })} />
+            </label>
+            <label className="rounded-2xl border border-white/10 bg-white/5 p-3 text-xs uppercase tracking-[.14em] text-slate-400">
+              <span className="flex items-center gap-2"><Clock3 className="h-3.5 w-3.5" /> Evening</span>
+              <Input className="mt-2" type="time" value={data.settings.eveningReminderTime} onChange={(event) => updateSettings({ eveningReminderTime: event.target.value })} />
+            </label>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-slate-500">Reminder schedules refresh whenever you move a planned workout.</p>
         </CardContent>
       </Card>
 

@@ -697,6 +697,9 @@ export const DEFAULT_SETTINGS = {
   activeEquipmentProfileId: "apartment-gym",
   preferredTheme: "dark" as const,
   activeTrainingProfile: "vaughn" as const,
+  accountabilityRemindersEnabled: false,
+  morningReminderTime: "08:00",
+  eveningReminderTime: "17:30",
 };
 
 export const CATEGORY_SEQUENCE: WorkoutCategory[] = [

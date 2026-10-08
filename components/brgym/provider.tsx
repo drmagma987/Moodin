@@ -69,6 +69,7 @@ interface BRGymContextValue {
   setWorkoutNotes: (notes: string) => void;
   saveRunLog: (entryId: string, log: RunLog) => void;
   clearRunLog: (entryId: string) => void;
+  reschedulePlanEntry: (entryId: string, date: string) => void;
   saveWorkout: () => WorkoutSession | null;
   updateWorkoutSession: (session: WorkoutSession) => boolean;
   discardWorkout: () => void;
@@ -262,6 +263,23 @@ const useBRGymStore = create<BRGymStore>()(
               }
             : null,
         }));
+      },
+      reschedulePlanEntry(entryId, date) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+        set((current) => {
+          if (!current.trainingPlan) return current;
+          const entries = current.trainingPlan.entries
+            .map((entry) => entry.id === entryId ? { ...entry, date } : entry)
+            .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+          return {
+            trainingPlan: {
+              ...current.trainingPlan,
+              entries,
+              startDate: entries[0]?.date ?? current.trainingPlan.startDate,
+              endDate: entries.at(-1)?.date ?? current.trainingPlan.endDate,
+            },
+          };
+        });
       },
       saveWorkout() {
         const activeWorkout = get().activeWorkout;
@@ -673,6 +691,7 @@ export function useBRGym() {
     setWorkoutNotes: state.setWorkoutNotes,
     saveRunLog: state.saveRunLog,
     clearRunLog: state.clearRunLog,
+    reschedulePlanEntry: state.reschedulePlanEntry,
     saveWorkout: state.saveWorkout,
     updateWorkoutSession: state.updateWorkoutSession,
     discardWorkout: state.discardWorkout,

@@ -6,6 +6,7 @@ import { deliverRunPush, RUN_PUSH_TOPIC, type QueuedRunPush } from "@/lib/brgym/
 export const runtime = "nodejs";
 
 interface ScheduleRequest {
+  channel?: unknown;
   scheduleToken?: unknown;
   subscription?: unknown;
   targetUrl?: unknown;
@@ -37,11 +38,12 @@ export async function POST(request: Request) {
   }
 
   const scheduleToken = typeof body.scheduleToken === "string" ? body.scheduleToken : "";
+  const channel = body.channel === "reminder" ? "reminder" : "run";
   const targetUrl = typeof body.targetUrl === "string" ? body.targetUrl : "";
   const candidates = Array.isArray(body.events) ? body.events as CandidateEvent[] : [];
   if (!/^[a-zA-Z0-9_-]{20,100}$/.test(scheduleToken)
     || !validSubscription(body.subscription)
-    || !targetUrl.startsWith("/brgym/run/")
+    || (channel === "run" ? !targetUrl.startsWith("/brgym/run/") : targetUrl !== "/brgym/plan")
     || candidates.length < 1
     || candidates.length > 50) {
     return Response.json({ error: "Invalid run schedule" }, { status: 400 });
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
   }));
   if (events.some((event) => !Number.isInteger(event.delaySeconds)
     || event.delaySeconds < 1
-    || event.delaySeconds > 4 * 60 * 60
+    || event.delaySeconds > (channel === "run" ? 4 * 60 * 60 : 7 * 24 * 60 * 60)
     || event.title.length < 1
     || event.title.length > 100
     || event.body.length < 1
@@ -65,6 +67,7 @@ export async function POST(request: Request) {
   const subscription = body.subscription;
   const messages = await Promise.all(events.map((event, index) => {
     const message: QueuedRunPush = {
+      channel,
       scheduleToken,
       subscription,
       title: event.title,
@@ -80,8 +83,8 @@ export async function POST(request: Request) {
     }
     return send(RUN_PUSH_TOPIC, message, {
       delaySeconds: event.delaySeconds,
-      retentionSeconds: Math.max(3600, event.delaySeconds + 3600),
-      idempotencyKey: `${scheduleToken}-${index}-${event.delaySeconds}`,
+      retentionSeconds: Math.min(7 * 24 * 60 * 60, Math.max(3600, event.delaySeconds + 3600)),
+      idempotencyKey: `${channel}-${scheduleToken}-${index}-${event.delaySeconds}`,
     });
   }));
 

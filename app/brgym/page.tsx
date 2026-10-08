@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, BarChart3, CalendarDays, ChevronRight, Dumbbell } from "lucide-react";
+import { ArrowUpRight, BarChart3, BellRing, CalendarDays, ChevronRight, Dumbbell, Flame } from "lucide-react";
+import { toast } from "sonner";
 
 import { useBRGym } from "@/components/brgym/provider";
 import { getNextWorkoutCategory } from "@/lib/brgym/logic";
+import { getBRGymPushSubscription } from "@/lib/brgym/push-client";
 
 export default function BRGymHomePage() {
-  const { data, hydrated } = useBRGym();
+  const { data, hydrated, updateSettings } = useBRGym();
 
   if (!hydrated) {
     return <div className="rounded-[28px] bg-white/5 p-5 text-sm text-slate-300">Loading BR Gym…</div>;
@@ -51,13 +53,13 @@ export default function BRGymHomePage() {
 
   return (
     <div className="space-y-7">
-      <section className="px-1">
-        <p className="brgym-kicker">
+      <section className="brgym-hero p-6">
+        <p className="brgym-kicker relative z-10">
           {nextPlanEntry ? "Next on your plan" : "Next likely day"}
         </p>
-        <div className="mt-3 flex items-end justify-between gap-4 border-b border-white/10 pb-6">
+        <div className="relative z-10 mt-4 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-4xl font-semibold tracking-[-0.04em] text-white">{nextPlanEntry?.title ?? nextCategory}</h2>
+            <h2 className="max-w-[16rem] text-4xl font-semibold leading-[.96] tracking-[-0.05em] text-white">{nextPlanEntry?.title ?? nextCategory}</h2>
             <p className="mt-2 text-sm text-slate-300">
               {nextPlanEntry
                 ? new Date(`${nextPlanEntry.date}T12:00:00`).toLocaleDateString(undefined, {
@@ -69,12 +71,56 @@ export default function BRGymHomePage() {
             </p>
           </div>
           <Link
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-black"
+            className="brgym-primary-orb flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-cyan-400 text-white"
             href={nextActionHref}
             aria-label={nextActionLabel}
           >
             <ArrowUpRight className="h-6 w-6" />
           </Link>
+        </div>
+      </section>
+
+      <section className="brgym-card rounded-[28px] border p-5">
+        <div className="flex items-start gap-4">
+          <div className="brgym-status-orb shrink-0"><BellRing className="h-4 w-4" /></div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="brgym-kicker">Accountability</p>
+              <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[.14em] text-orange-200"><Flame className="h-3.5 w-3.5" /> Twice daily</span>
+            </div>
+            <h3 className="mt-2 text-lg font-semibold text-white">Your plan should tap you on the shoulder.</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Morning and evening reminders name today’s workout. If life changes, move it deliberately in Plan.
+            </p>
+            {typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted" ? (
+              <Link className="mt-4 inline-flex text-sm font-semibold text-[#ff6a84]" href="/brgym/settings">Reminders active · Manage times</Link>
+            ) : (
+              <button
+                className="brgym-button mt-4 w-full rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-semibold text-white"
+                onClick={async () => {
+                  if (!("Notification" in window)) {
+                    toast.error("Notifications are not supported on this device");
+                    return;
+                  }
+                  const permission = await Notification.requestPermission();
+                  if (permission !== "granted") {
+                    toast.error("Allow notifications to turn on accountability reminders");
+                    return;
+                  }
+                  try {
+                    await getBRGymPushSubscription();
+                    updateSettings({ accountabilityRemindersEnabled: true });
+                    toast.success("Twice-daily workout reminders are on");
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Could not enable reminders");
+                  }
+                }}
+                type="button"
+              >
+                Enable workout reminders
+              </button>
+            )}
+          </div>
         </div>
       </section>
 

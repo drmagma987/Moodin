@@ -34,8 +34,9 @@ function isLiftComplete(entry: TrainingPlanEntry, sessionPlanEntryIds: Set<strin
 
 export default function BRGymPlanPage() {
   const router = useRouter();
-  const { data, hydrated, clearRunLog, saveRunLog, startWorkout } = useBRGym();
+  const { data, hydrated, clearRunLog, reschedulePlanEntry, saveRunLog, startWorkout } = useBRGym();
   const [editingRunId, setEditingRunId] = useState<string | null>(null);
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [showFullPlan, setShowFullPlan] = useState(false);
   const [runDraft, setRunDraft] = useState({
     distanceMiles: "",
@@ -153,6 +154,32 @@ export default function BRGymPlanPage() {
         </CardContent>
       </Card>
 
+      <section className="brgym-card rounded-[28px] border p-5">
+        <p className="brgym-kicker">Calendar control</p>
+        <div className="mt-2 flex items-end justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-semibold text-white">The plan serves you.</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Can’t train that day? Move the workout intentionally. Its two reminders move with it.</p>
+          </div>
+          <CalendarDays className="mb-1 h-7 w-7 shrink-0 text-[#ff5874]" />
+        </div>
+        <div className="mt-4 grid grid-cols-7 gap-1.5">
+          {Array.from({ length: 7 }, (_, offset) => {
+            const date = new Date();
+            date.setDate(date.getDate() + offset);
+            const key = localDateKey(date);
+            const count = plan.entries.filter((entry) => entry.date === key).length;
+            return (
+              <div key={key} className={`rounded-2xl border px-1 py-2 text-center ${offset === 0 ? "border-[#ff5874]/50 bg-[#ff4968]/12" : "border-white/5 bg-black/10"}`}>
+                <p className="text-[9px] font-bold uppercase text-slate-500">{date.toLocaleDateString(undefined, { weekday: "narrow" })}</p>
+                <p className="mt-1 text-sm font-semibold text-white">{date.getDate()}</p>
+                <span className={`mx-auto mt-1 block h-1.5 w-1.5 rounded-full ${count ? "bg-[#ff4968]" : "bg-white/10"}`} />
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       <div className="space-y-3">
         {visibleEntries.map((entry) => {
           const liftComplete = isLiftComplete(entry, completedLiftIds);
@@ -189,6 +216,31 @@ export default function BRGymPlanPage() {
                 </div>
 
                 <p className="text-sm leading-6 text-slate-200">{entry.details}</p>
+
+                {reschedulingId === entry.id ? (
+                  <div className="rounded-2xl border border-[#ff5874]/25 bg-black/15 p-3">
+                    <label className="text-xs font-bold uppercase tracking-[.16em] text-[#ff8b9e]">
+                      Move this workout
+                      <Input
+                        className="mt-2"
+                        min={today}
+                        onChange={(event) => {
+                          if (!event.target.value) return;
+                          reschedulePlanEntry(entry.id, event.target.value);
+                          setReschedulingId(null);
+                          toast.success(`${entry.title} moved to ${formatPlanDate(event.target.value)}`);
+                        }}
+                        type="date"
+                        value={entry.date}
+                      />
+                    </label>
+                    <Button className="mt-2 w-full" onClick={() => setReschedulingId(null)} size="sm" variant="ghost">Cancel</Button>
+                  </div>
+                ) : !complete ? (
+                  <Button className="w-full" onClick={() => setReschedulingId(entry.id)} variant="outline">
+                    <CalendarDays className="mr-2 h-4 w-4" /> Move workout date
+                  </Button>
+                ) : null}
 
                 {entry.kind === "lift" && entry.templateId ? (
                   <Button

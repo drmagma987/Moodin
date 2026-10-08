@@ -131,6 +131,9 @@ export interface UserSettings {
   activeEquipmentProfileId: string;
   preferredTheme: "system" | "dark";
   activeTrainingProfile: TrainingProfileId;
+  accountabilityRemindersEnabled: boolean;
+  morningReminderTime: string;
+  eveningReminderTime: string;
 }
 
 export interface ActiveExerciseDraft extends ExerciseTemplate {
