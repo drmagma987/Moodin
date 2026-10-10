@@ -25,11 +25,15 @@ export async function getBRGymPushSubscription() {
   });
 }
 
-export async function setServiceWorkerPushToken(channel: "run" | "reminder", token: string | null) {
+export async function setServiceWorkerPushToken(channel: "run" | "reminder" | "rest", token: string | null) {
   const registration = await navigator.serviceWorker.ready;
   const worker = navigator.serviceWorker.controller ?? registration.active;
   worker?.postMessage({
-    type: channel === "run" ? "BRGYM_SET_RUN_PUSH_TOKEN" : "BRGYM_SET_REMINDER_PUSH_TOKEN",
+    type: channel === "run"
+      ? "BRGYM_SET_RUN_PUSH_TOKEN"
+      : channel === "rest"
+        ? "BRGYM_SET_REST_PUSH_TOKEN"
+        : "BRGYM_SET_REMINDER_PUSH_TOKEN",
     token,
   });
 }

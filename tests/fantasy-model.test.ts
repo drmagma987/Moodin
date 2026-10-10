@@ -4213,7 +4213,7 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   const playersById = new Map(dataset.players.map((player) => [player.player.id, player] as const));
 
   assert.equal(dataset.evidenceStatus.week, activeWeeklySlate.week);
-  assert.ok(dataset.actionQueue.length > 0, "verified Week 3 injury-opportunity evidence can now power the server snapshot");
+  assert.equal(dataset.actionQueue.length, 0, "the bundled server snapshot fails closed until the Week 4 client refresh supplies current evidence");
   assert.ok(dataset.actionQueue.every((entry) => entry.proposedTransaction.kind !== "add-drop"
     || entry.proposedTransaction.add.every((player) => player.playerId
       ? playersById.get(player.playerId)?.availability === "free-agent"

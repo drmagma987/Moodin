@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { ArrowRight, ChevronDown, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { RestTimer } from "@/components/brgym/rest-timer";
@@ -107,6 +107,7 @@ export default function BRGymWorkoutLoggerPage() {
   const [selectedExerciseIdOverride, setSelectedExerciseIdOverride] = useState<string | null>(null);
   const [draftInputs, setDraftInputs] = useState<Record<string, ExerciseDraftInputMap>>({});
   const [extraSetCounts, setExtraSetCounts] = useState<Record<string, number>>({});
+  const [completionRatingExerciseId, setCompletionRatingExerciseId] = useState<string | null>(null);
 
   const savedSession = useMemo(
     () => data.sessions.find((session) => session.id === savedSessionId) ?? null,
@@ -228,6 +229,11 @@ export default function BRGymWorkoutLoggerPage() {
     : null;
   const nextPreviousSet = nextSetNumber ? getLastTimeSet(previousLog, nextSetNumber) : null;
   const nextPlannedSet = nextSetNumber ? getPlannedSet(selectedExercise, nextSetNumber) : null;
+  const selectedExerciseIndex = activeWorkout.exercises.findIndex((exercise) => exercise.id === selectedExercise.id);
+  const nextIncompleteExercise = [
+    ...activeWorkout.exercises.slice(selectedExerciseIndex + 1),
+    ...activeWorkout.exercises.slice(0, selectedExerciseIndex),
+  ].find((exercise) => exercise.id !== selectedExercise.id && exercise.completedSets.length < exercise.targetSets) ?? null;
 
   function updateSetInput(setNumber: number, partial: Partial<SetDraftInput>) {
     const currentValue = getSetDraftValue(draftInputs, selectedExercise, setNumber);
@@ -262,6 +268,25 @@ export default function BRGymWorkoutLoggerPage() {
     logSet(selectedExercise.id, setLog);
     updateSetInput(setNumber, { weight: `${weight}`, reps: `${reps}` });
     toast.success(`${selectedExercise.name} • Set ${setNumber} logged`);
+  }
+
+  function addAdditionalSet() {
+    setCompletionRatingExerciseId(null);
+    setExtraSetCounts((current) => ({
+      ...current,
+      [selectedExercise.id]: (current[selectedExercise.id] ?? 0) + 1,
+    }));
+  }
+
+  function rateAndContinue(rating: 1 | 2 | 3 | 4 | 5) {
+    setExerciseStruggle(selectedExercise.id, rating);
+    setCompletionRatingExerciseId(null);
+    if (nextIncompleteExercise) {
+      setSelectedExerciseIdOverride(nextIncompleteExercise.id);
+      toast.success(`${selectedExercise.name} rated ${rating}/5`, { description: `Next: ${nextIncompleteExercise.name}` });
+      return;
+    }
+    toast.success(`${selectedExercise.name} rated ${rating}/5`, { description: "All planned lifts are complete. Save when ready." });
   }
 
   return (
@@ -360,6 +385,7 @@ export default function BRGymWorkoutLoggerPage() {
                     className="mt-1 border-none bg-transparent px-0 text-2xl font-semibold shadow-none"
                     inputMode="numeric"
                     onChange={(event) => updateSetInput(nextSetNumber, { reps: event.target.value })}
+                    onFocus={(event) => event.currentTarget.select()}
                     placeholder={`${selectedExercise.repMin}-${selectedExercise.repMax}`}
                     value={nextSetInput.reps}
                   />
@@ -375,18 +401,33 @@ export default function BRGymWorkoutLoggerPage() {
               <Button className="w-full" onClick={() => submitSet(nextSetNumber)} size="lg">Log Set {nextSetNumber}</Button>
             </>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
-              <Button onClick={() => setExtraSetCounts((current) => ({ ...current, [selectedExercise.id]: (current[selectedExercise.id] ?? 0) + 1 }))} variant="secondary">
-                <Plus className="mr-2 h-4 w-4" /> Add set
-              </Button>
-              <Button
-                onClick={() => {
-                  const currentIndex = activeWorkout.exercises.findIndex((exercise) => exercise.id === selectedExercise.id);
-                  const nextExercise = activeWorkout.exercises.slice(currentIndex + 1).find((exercise) => exercise.completedSets.length < exercise.targetSets);
-                  if (nextExercise) setSelectedExerciseIdOverride(nextExercise.id);
-                }}
-                disabled={!activeWorkout.exercises.some((exercise) => exercise.id !== selectedExercise.id && exercise.completedSets.length < exercise.targetSets)}
-              >Next lift</Button>
+            <div className="space-y-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/8 p-3">
+              {completionRatingExerciseId === selectedExercise.id ? (
+                <div>
+                  <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-emerald-100">Rate this lift to continue</p>
+                  <div className="mt-3 grid grid-cols-5 gap-2">
+                    {([1, 2, 3, 4, 5] as const).map((rating) => (
+                      <button
+                        key={rating}
+                        aria-label={`${rating}: ${STRUGGLE_LABELS[rating]}`}
+                        className="rounded-xl border border-white/10 bg-white/8 px-1 py-3 text-center text-white active:scale-95"
+                        onClick={() => rateAndContinue(rating)}
+                        type="button"
+                      >
+                        <span className="block text-lg font-semibold">{rating}</span>
+                        <span className="mt-0.5 block text-[9px] text-slate-400">{rating === 1 ? "Easy" : rating === 2 ? "Solid" : rating === 3 ? "Clean" : rating === 4 ? "Hard" : "Failed"}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <Button className="w-full" onClick={() => setCompletionRatingExerciseId(selectedExercise.id)} size="lg">
+                  Rate difficulty &amp; {nextIncompleteExercise ? "next lift" : "finish"} <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              )}
+              <button className="flex w-full items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-300" onClick={addAdditionalSet} type="button">
+                <Plus className="h-3.5 w-3.5" /> Add an additional set
+              </button>
             </div>
           )}
         </div>
@@ -431,13 +472,13 @@ export default function BRGymWorkoutLoggerPage() {
                   <div key={setNumber} className="grid grid-cols-[auto_1fr_1fr_auto] items-end gap-2">
                     <span className="pb-3 text-slate-400">{setNumber}</span>
                     <Input aria-label={`Set ${setNumber} weight`} inputMode="decimal" onChange={(event) => updateSetInput(setNumber, { weight: event.target.value })} placeholder="Weight" value={setInput.weight} />
-                    <Input aria-label={`Set ${setNumber} reps`} inputMode="numeric" onChange={(event) => updateSetInput(setNumber, { reps: event.target.value })} placeholder="Reps" value={setInput.reps} />
+                    <Input aria-label={`Set ${setNumber} reps`} inputMode="numeric" onChange={(event) => updateSetInput(setNumber, { reps: event.target.value })} onFocus={(event) => event.currentTarget.select()} placeholder="Reps" value={setInput.reps} />
                     <Button onClick={() => submitSet(setNumber)} size="sm">Save</Button>
                   </div>
                 );
               })}
               <div className="flex gap-2">
-                <Button onClick={() => setExtraSetCounts((current) => ({ ...current, [selectedExercise.id]: (current[selectedExercise.id] ?? 0) + 1 }))} size="sm" variant="secondary"><Plus className="mr-1 h-4 w-4" /> Add set</Button>
+                <Button onClick={addAdditionalSet} size="sm" variant="secondary"><Plus className="mr-1 h-4 w-4" /> Add set</Button>
                 <Link className="rounded-xl bg-white/8 px-3 py-2 text-xs text-cyan-200" href={`/brgym/exercises/${selectedExercise.id}`}>Exercise history</Link>
               </div>
             </div>

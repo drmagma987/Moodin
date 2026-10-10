@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ArrowUpRight, BriefcaseBusiness, ChevronRight, LockKeyhole, Sparkles, X } from "lucide-react";
 import type { InSeasonCommandCenterDataset, TransactionQueueEntry } from "@/lib/fantasy/types";
 import { weeklyWaiverContext } from "@/lib/fantasy/weeklyWaiverContext";
+import { rosKickerRecommendation } from "@/lib/fantasy/kickerRecommendation";
 import { applyWorkbookEvidenceResponse, DataSyncSheet, DraftArchiveSheet, NextGenStatsSheet, ProductionOpportunitySheet, TradesSheet, WaiverMarketSheet, WaiversSheet } from "./fantasy-workbook-sheets";
 import styles from "./fantasy-workbook.module.css";
 
@@ -134,33 +136,48 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
     ? workSheet
     : FANTASY_SHEETS.find((sheet) => sheet.id === fantasySheet)?.label ?? "Edge Brief";
 
+  const urgentActions = dataset.actionQueue.filter((action) => action.priority === "immediate").length;
+  const availablePlayers = dataset.players.filter((player) => player.availability === "free-agent").length;
+
   return (
-    <main className={styles.shell}>
+    <main className={`${styles.shell} ${mode === "fantasy" ? styles.fantasyMode : ""}`}>
       <div className={styles.workbook}>
         <header>
-          <div className={styles.titleBar}>
-            <span className={styles.titleName}>Weekly Operations Model.xlsx — {mode === "work" ? "Saved" : "Private view"}</span>
-            <div className={styles.titleActions}><span>Search</span><span>Comments</span><span>Share</span></div>
-          </div>
-          <div className={styles.menuBar} aria-label="Workbook menu">
-            {['File', 'Home', 'Insert', 'Data', 'Review', 'View'].map((item) => <button key={item} className={`${styles.menuButton} ${item === 'Home' ? styles.menuButtonActive : ''}`}>{item}</button>)}
-          </div>
-          <div className={styles.ribbon}>
-            <div className={styles.ribbonGroup}><button className={styles.toolButton}>▣ Paste</button><button className={styles.toolButton}><strong>B</strong></button><button className={styles.toolButton}><em>I</em></button></div>
-            <div className={styles.ribbonGroup}><button className={styles.toolButton}>Sort A–Z</button><button className={styles.toolButton}>Filter</button><button className={styles.toolButton}>Σ Sum</button></div>
-            <div className={styles.modeControl}>
-              <span className={styles.modeLabel}>Workbook view</span>
-              <div className={styles.modeToggle} aria-label="Workbook view">
-                <button className={`${styles.modeButton} ${mode === "work" ? styles.modeButtonActive : ""}`} aria-pressed={mode === "work"} onClick={() => switchMode("work")}>Work</button>
-                <button className={`${styles.modeButton} ${mode === "fantasy" ? styles.modeButtonActive : ""}`} aria-pressed={mode === "fantasy"} onClick={() => switchMode("fantasy")}>FF</button>
+          {mode === "work" ? <>
+            <div className={styles.titleBar}>
+              <span className={styles.titleName}>Weekly Operations Model.xlsx — Saved</span>
+              <div className={styles.titleActions}><span>Search</span><span>Comments</span><span>Share</span></div>
+            </div>
+            <div className={styles.menuBar} aria-label="Workbook menu">
+              {['File', 'Home', 'Insert', 'Data', 'Review', 'View'].map((item) => <button key={item} className={`${styles.menuButton} ${item === 'Home' ? styles.menuButtonActive : ''}`}>{item}</button>)}
+            </div>
+            <div className={styles.ribbon}>
+              <div className={styles.ribbonGroup}><button className={styles.toolButton}>▣ Paste</button><button className={styles.toolButton}><strong>B</strong></button><button className={styles.toolButton}><em>I</em></button></div>
+              <div className={styles.ribbonGroup}><button className={styles.toolButton}>Sort A–Z</button><button className={styles.toolButton}>Filter</button><button className={styles.toolButton}>Σ Sum</button></div>
+              <div className={styles.modeControl}>
+                <span className={styles.modeLabel}>Workbook view</span>
+                <div className={styles.modeToggle} aria-label="Workbook view">
+                  <button className={`${styles.modeButton} ${styles.modeButtonActive}`} aria-pressed="true" onClick={() => switchMode("work")}>Work</button>
+                  <button className={styles.modeButton} aria-pressed="false" onClick={() => switchMode("fantasy")}>FF</button>
+                </div>
               </div>
             </div>
-          </div>
-          <div className={styles.formulaBar}>
-            <div className={styles.nameBox}>{mode === "work" ? "G7" : selectedAction ? `E${Math.max(2, dataset.actionQueue.findIndex((entry) => entry.id === selectedAction.id) + 2)}` : "A1"}</div>
-            <div className={styles.formulaIcon}>fx</div>
-            <div className={styles.formulaValue}>{mode === "work" ? '=IF(E7>0,"REVIEW","HOLD")' : selectedAction ? `=DECISION_EDGE("${selectedAction.kind.toUpperCase()}","${selectedAction.priority.toUpperCase()}")` : "=REFRESH_REQUIRED()"}</div>
-          </div>
+            <div className={styles.formulaBar}>
+              <div className={styles.nameBox}>G7</div>
+              <div className={styles.formulaIcon}>fx</div>
+              <div className={styles.formulaValue}>=IF(E7&gt;0,&quot;REVIEW&quot;,&quot;HOLD&quot;)</div>
+            </div>
+          </> : <div className={styles.fantasyHeader}>
+            <div className={styles.brandLockup}>
+              <span className={styles.brandMark}><Sparkles aria-hidden="true" /></span>
+              <div><p className={styles.brandEyebrow}>Private league intelligence</p><p className={styles.brandName}>Sunday Office</p></div>
+            </div>
+            <div className={styles.headerContext}>
+              <span><LockKeyhole aria-hidden="true" /> Private view</span>
+              <span>Week {dataset.evidenceStatus.week}</span>
+              <button className={styles.workModeButton} onClick={() => switchMode("work")}><BriefcaseBusiness aria-hidden="true" /> Work view</button>
+            </div>
+          </div>}
         </header>
 
         {mode === "work" ? (
@@ -173,9 +190,45 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
             </div>
           </div>
         ) : fantasySheet === "edge" ? (
+          <div className={styles.sheetStack}>
+            <section className={styles.edgeHero}>
+              <div>
+                <p className={styles.heroEyebrow}>Edge brief · Week {dataset.evidenceStatus.week}</p>
+                <h1>Make the next move obvious.</h1>
+                <p className={styles.heroCopy}>Your strongest league-specific decisions, ranked by urgency and backed by current opportunity.</p>
+              </div>
+              <div className={styles.heroMetrics} aria-label="League snapshot">
+                <div><strong>{urgentActions}</strong><span>act now</span></div>
+                <div><strong>{dataset.actionQueue.length}</strong><span>modeled moves</span></div>
+                <div><strong>{availablePlayers}</strong><span>available</span></div>
+              </div>
+            </section>
+            <div className={styles.marketNote}>
+              <span className={styles.marketSignal}>Special teams edge</span>
+              <strong>{rosKickerRecommendation.drop.name} <span aria-hidden="true">→</span> {rosKickerRecommendation.add.name}</strong>
+              <span>{rosKickerRecommendation.rationale} Bid {rosKickerRecommendation.bid}. {rosKickerRecommendation.caution}</span>
+              <span className={styles.sourceLinks}>{rosKickerRecommendation.sources.map((source) => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.label} <ArrowUpRight aria-hidden="true" /></a>)}</span>
+            </div>
           <div className={`${styles.workspace} ${selectedAction ? styles.workspaceWithInspector : ""}`}>
             <div className={styles.gridRegion}>
-              <table className={styles.table} aria-label="Fantasy decision queue">
+              <div className={styles.decisionIntro}><div><p className={styles.inspectorEyebrow}>Decision queue</p><h2>Moves worth your attention</h2></div><p>Tap a move to inspect the evidence and downside.</p></div>
+              <div className={styles.decisionCards} aria-label="Fantasy decision queue">
+                {dataset.actionQueue.map((action) => {
+                  const waiver = waiverForAction(action, dataset);
+                  const trade = tradeForAction(action, dataset);
+                  const edge = waiver?.edgeScore ?? trade?.starterDelta ?? 0;
+                  const confidence = waiver?.confidence ?? trade?.verdict ?? "review";
+                  const countermove = action.proposedTransaction.kind === "add-drop" ? playerName(action.proposedTransaction.drop[0]?.playerId ?? null, dataset) : trade?.counterpartyTeamName ?? "League manager";
+                  const isSelected = action.id === selectedActionId;
+                  return <button key={action.id} type="button" className={`${styles.decisionCard} ${isSelected ? styles.decisionCardSelected : ""}`} aria-pressed={isSelected} onClick={() => setSelectedActionId(action.id)}>
+                    <span className={styles.cardTopline}><span className={`${styles.priorityPill} ${action.priority === "immediate" ? styles.priorityNow : ""}`}>{action.priority.replace("-", " ")}</span><span className={edge >= 0 ? styles.edgePositive : styles.edgeNegative}>{signed(edge)} edge</span></span>
+                    <strong className={styles.cardTitle}>{transactionLabel(action)}</strong>
+                    <span className={styles.cardMeta}>{action.kind === "waiver" ? `Add / drop · ${countermove}` : `Trade · ${countermove}`}</span>
+                    <span className={styles.cardFooter}><span>{confidence}</span><span>Review case <ChevronRight aria-hidden="true" /></span></span>
+                  </button>;
+                })}
+              </div>
+              <table className={`${styles.table} ${styles.decisionTable}`} aria-label="Fantasy decision queue table">
                 <thead><tr><th className={styles.rowNumber}></th>{["A · Priority", "B · Decision", "C · Player / Package", "D · Countermove", "E · Edge", "F · Confidence", "G · Action"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead>
                 <tbody>{dataset.actionQueue.map((action, index) => {
                   const waiver = waiverForAction(action, dataset);
@@ -188,7 +241,8 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
                 })}</tbody>
               </table>
             </div>
-            {selectedAction ? <aside className={styles.inspector} aria-label="Selected recommendation details"><button className={styles.closeInspector} onClick={() => setSelectedActionId(null)} aria-label="Close details">×</button><p className={styles.inspectorEyebrow}>{selectedAction.kind} · {selectedAction.priority}</p><h2 className={styles.inspectorTitle}>{selectedAction.title}</h2><p className={styles.inspectorMeta}>{transactionLabel(selectedAction)}</p><p className={styles.inspectorText}>{selectedAction.summary}</p><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Model call</p><p className={styles.inspectorValue}>{selectedWaiver ? `${selectedWaiver.verdict.toUpperCase()} · ${selectedWaiver.faabRange?.label ?? "Watch only"}` : selectedTrade ? `${selectedTrade.verdict.toUpperCase()} · ${signed(selectedTrade.starterDelta)} starter value` : "Review supporting evidence"}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>What could break the case</p><p className={styles.inspectorValue}>{selectedWaiver?.primaryRisk ?? selectedTrade?.qualitySummary ?? "Recheck roster ownership and current injury context before acting."}</p></div></aside> : null}
+            {selectedAction ? <aside className={styles.inspector} aria-label="Selected recommendation details"><button className={styles.closeInspector} onClick={() => setSelectedActionId(null)} aria-label="Close details"><X aria-hidden="true" /></button><p className={styles.inspectorEyebrow}>{selectedAction.kind} · {selectedAction.priority}</p><h2 className={styles.inspectorTitle}>{selectedAction.title}</h2><p className={styles.inspectorMeta}>{transactionLabel(selectedAction)}</p><p className={styles.inspectorText}>{selectedAction.summary}</p><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>Model call</p><p className={styles.inspectorValue}>{selectedWaiver ? `${selectedWaiver.verdict.toUpperCase()} · ${selectedWaiver.faabRange?.label ?? "Watch only"}` : selectedTrade ? `${selectedTrade.verdict.toUpperCase()} · ${signed(selectedTrade.starterDelta)} starter value` : "Review supporting evidence"}</p></div><div className={styles.inspectorBlock}><p className={styles.inspectorLabel}>What could break the case</p><p className={styles.inspectorValue}>{selectedWaiver?.primaryRisk ?? selectedTrade?.qualitySummary ?? "Recheck roster ownership and current injury context before acting."}</p></div></aside> : null}
+          </div>
           </div>
         ) : fantasySheet === "opportunity" ? <ProductionOpportunitySheet dataset={dataset} />
           : fantasySheet === "waivers" ? <WaiversSheet dataset={dataset} />
@@ -199,11 +253,11 @@ export function FantasyWorkbook({ dataset: initialDataset }: { dataset: InSeason
                 : fantasySheet === "draft" ? <DraftArchiveSheet />
                   : <div className={styles.emptySheet}><div><strong>{activeSheetLabel}</strong></div></div>}
 
-        <nav className={styles.sheetBar} aria-label="Workbook sheets">
-          <button className={`${styles.sheetButton} ${styles.sheetAdd}`} aria-label="Add worksheet">＋</button>
+        <nav className={styles.sheetBar} aria-label={mode === "work" ? "Workbook sheets" : "Fantasy tools"}>
+          {mode === "work" ? <button className={`${styles.sheetButton} ${styles.sheetAdd}`} aria-label="Add worksheet">＋</button> : null}
           {mode === "work" ? WORK_SHEETS.map((sheet) => <button key={sheet} className={`${styles.sheetButton} ${workSheet === sheet ? styles.sheetButtonActive : ""}`} onClick={() => setWorkSheet(sheet)}>{sheet}</button>) : FANTASY_SHEETS.map((sheet) => <button key={sheet.id} className={`${styles.sheetButton} ${fantasySheet === sheet.id ? styles.sheetButtonActive : ""}`} onClick={() => setFantasySheet(sheet.id)}>{sheet.label}</button>)}
         </nav>
-        <footer className={styles.statusBar}><span>{mode === "work" ? "Ready · AutoSave on · Esc loads Work view" : `Week ${dataset.evidenceStatus.week} final data → Week ${weeklyWaiverContext.week} decisions · ${dataset.rosterSnapshot.source}`}</span><span>{mode === "work" ? "Average: 87.1   Count: 12   Sum: 1,045" : `${dataset.leagueTeams.length} teams · ${dataset.players.filter((player) => player.availability !== "free-agent").length} rostered · ${dataset.players.filter((player) => player.availability === "free-agent").length} available · `}<Link className={styles.classicLink} href="/fantasy-football?ui=classic">Classic view</Link></span></footer>
+        <footer className={styles.statusBar}><span>{mode === "work" ? "Ready · AutoSave on · Esc loads Work view" : `Week ${dataset.evidenceStatus.week} final data · Week ${Math.max(dataset.evidenceStatus.week + 1, weeklyWaiverContext.week)} decisions · ${dataset.rosterSnapshot.source}`}</span><span>{mode === "work" ? "Average: 87.1   Count: 12   Sum: 1,045" : `${dataset.leagueTeams.length} teams · ${dataset.players.filter((player) => player.availability !== "free-agent").length} rostered · ${dataset.players.filter((player) => player.availability === "free-agent").length} available · `}<Link className={styles.classicLink} href="/fantasy-football?ui=classic">Classic view</Link></span></footer>
       </div>
     </main>
   );

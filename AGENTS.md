@@ -1191,3 +1191,78 @@ If checks cannot be run, say so clearly.
   - fixed stale prior-week advanced-usage fields from contaminating newly refreshed weekly evidence
   - verified the live model prioritizes Ollie Gordon II and Braelon Allen for FC Netanyah00, with Yahoo ownership filtering preserved
   - verified with canonical league integrity, 166 fantasy model tests, TypeScript, lint (existing bachelor-party font warning only), and the production build
+
+### 2026-10-06
+
+- Closed the Week 4 evidence cycle for the Fantasy Football Supertool:
+  - advanced the active slate to all 16 Week 4 games final and moved the live nflverse refresh boundary to Week 4
+  - replaced stale pending-MNF copy with complete-slate evidence language
+  - added a league-specific ROS kicker recommendation to swap Eddy Pineiro for available Matt Gay, based on current Yahoo ownership, league scoring, Week 1-4 results, and current ROS expert rank
+  - surfaced the kicker move, supporting sources, and a $0-$1 bid directly in the workbook Edge Brief
+  - validated the live Week 4 feed at 325 matched modeled players; all 166 fantasy tests, scoped lint, and a vendor-excluding TypeScript check passed
+
+### 2026-10-07
+
+- Finished a production-readiness pass for the BR Gym PWA:
+  - replaced the non-functional nested manifest convention with a verified static `/brgym/manifest.webmanifest` route
+  - added correctly sized PNG and Apple touch icons, install shortcuts, scoped service-worker registration, cache refresh/update handling, and install/offline UI
+  - expanded the service worker from a home-page-only cache to versioned shell/runtime caches with stale-cache cleanup and offline route fallbacks
+  - made rest timers deadline-based and persistent so phone backgrounding or reloading does not pause the countdown
+  - fixed client hydration, isolated BR Gym from Moodin background audio, and blocked saves that would silently omit lifts missing a struggle rating
+  - excluded the independent `vendor` workspace from the main app lint/TypeScript boundary
+  - verified with `npm run lint`, `npx tsc --noEmit`, a production build, service-worker syntax validation, live manifest/icon HTTP checks, and a production browser hydration smoke test
+- Added the first device-local BR Gym training program and self-serve split builder:
+  - seeded the supplied Push, Pull, and kettlebell Legs sessions with exact 3 × 8-10 targets
+  - added a dated October 7-November 27 strength-and-5K plan with Monday/midweek/weekend lifting, two weekly runs, optional November recovery runs, taper guidance, and Friday race day
+  - added run logging for distance, time, splits, average heart rate, difficulty, and notes
+  - linked scheduled lifts to the existing workout logger and completion history
+  - added custom exercise creation inside the template editor while keeping all program, template, and log data on-device
+  - bumped the BR Gym service-worker cache and verified the plan, exact exercise templates, run form, TypeScript, scoped lint, and the production build
+- Added BR Gym history correction and real workout progression:
+  - saved lifting sessions can now be corrected after the fact, including workout name/date, exercise identity, set weights/reps, difficulty, exercise notes, and workout notes
+  - history corrections remain independent from templates and recompute recommendations used by future workouts
+  - newly started workouts now persist concrete per-set targets derived from exact exercise history
+  - progression carries forward prior performance, adds reps to the lowest sets, raises load to the next available setup weight after clearing the rep ceiling, holds after one hard session, and steps down after two consecutive hard sessions
+  - deferred backlog from the open-source gym-logger review: richer set types/warm-ups, PR and trend summaries, versioned migrations plus CSV interoperability, and per-exercise rest/plate/superset configuration
+  - verified with the BR Gym test suite, scoped ESLint, and `npx tsc --noEmit`
+- Redesigned BR Gym around its black-and-white identity:
+  - replaced the blue gradient/cyan visual system with a restrained black, white, and neutral-gray mobile interface
+  - simplified the header and home dashboard, added icon-led five-tab navigation, and retained color only for meaningful warning/success states
+  - added a Progress tab that derives selectable exercise trends, estimated 1RM history for weighted lifts, best-set rep history for bodyweight work, and automatic personal records from saved sessions
+  - added progress-model tests, added the Progress route to the PWA manifest/offline shell, and bumped the BR Gym service-worker cache to `brgym-v6`
+  - richer set types/warm-ups, deeper analytics, versioned migrations/CSV interoperability, and per-exercise rest/plate/superset configuration remain future backlog items
+- Added person-specific BR Gym profiles for Lauren, Vaughn, and Custom:
+  - Lauren now has protected Push, Pull, Legs, and Bonus Deep Core presets transcribed from the supplied screenshots, including the 15-rep calf raises and 10-rep dead bugs
+  - Vaughn remains the migration-safe default for existing local history and the dated strength/run plan
+  - Custom starts blank and keeps user-created templates separate from both preset splits
+  - workout history, progression recommendations, PRs, and charts are scoped to the selected person so training data does not bleed between profiles
+  - verified with 13 BR Gym tests, lint, TypeScript, a production build, and HTTP 200 smoke checks for the primary BR Gym routes
+- Added BR Gym accountability and a modern visual pass:
+  - rebuilt the app shell, Today hero, cards, controls, and floating navigation around a sculpted charcoal-and-coral interface inspired by the supplied music-player reference
+  - added opt-in morning and evening Web Push reminders that name the workout scheduled for that day
+  - added calendar context and per-workout date moves; rescheduling automatically replaces stale reminder schedules so accountability stays intentional
+  - preserved separate run-cue and accountability push tokens in the service worker and bumped its cache to `brgym-v7`
+  - verified with the BR Gym test suite, service-worker syntax validation, `npm run lint`, `npx tsc --noEmit`, and mobile browser review
+- Added Lauren’s dated hybrid Couch-to-5K/sprint-return plan:
+  - schedules one fully recovered sprint-form session and one easy run/walk stamina session per week through the shared Friday, November 27 finish date
+  - keeps effort non-competitive, progresses conservatively, and aligns Lauren’s Tuesday/Sunday run days with Vaughn’s calendar where practical
+  - scopes the Plan, Today card, completion state, calendar moves, and accountability reminders to the active training profile
+  - repaired plan-date rehydration so intentionally moved sessions remain moved after reloads and app updates
+  - bumped the BR Gym service-worker cache to `brgym-v8` and verified with 14 BR Gym tests, lint, TypeScript, and a local mobile browser review
+
+### 2026-10-08
+
+- Redesigned the Fantasy Football workbook's private fantasy mode using the Apple-design interaction and visual principles:
+  - preserved the discreet Excel-style Work view while giving the fantasy view its own `Sunday Office` identity
+  - added a focused Edge Brief hero, at-a-glance league metrics, clearer kicker signal treatment, and a translucent floating tool dock
+  - replaced the wide mobile decision table with responsive, tactile recommendation cards and a focused evidence sheet
+  - restyled the remaining fantasy worksheets, controls, tables, inspectors, and archive for a cohesive dark material system
+  - added immediate press feedback plus reduced-motion, reduced-transparency, and increased-contrast fallbacks
+  - verified with `npm run lint` (existing bachelor-party font warning only), `npx tsc --noEmit`, and `git diff --check`
+- Fixed the BR Gym workout flow after device testing:
+  - rest audio is now unlocked during the set-logging gesture and plays a louder two-tone completion chime with stronger haptics
+  - two-minute rests now schedule their own cancellable server push, with a foreground service-worker notification fallback and an explicit enable-alerts control
+  - Quick Start now follows the next incomplete dated lift in the active training plan before falling back to history-based split rotation
+  - prefilled rep inputs select their full value on focus so typing replaces the suggestion instead of appending to it
+  - completing the final planned or additional set now promotes a large rate-and-continue action, with adding another set kept as the smaller secondary choice
+  - bumped the BR Gym service-worker cache to `brgym-v9`

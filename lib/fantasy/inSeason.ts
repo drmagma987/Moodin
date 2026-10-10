@@ -1359,7 +1359,7 @@ export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset 
     scenarioNotes: [
       `League ownership comes from the ${inSeasonRosterSnapshotMeta.source} captured ${inSeasonRosterSnapshotMeta.capturedAt}.`,
       `${rosterSnapshot.unmatchedRosterPlayers.length} roster entries could not be matched to the current modeled player board.`,
-      `${activeWeeklySlate.latestGame}. The client refreshes finalized Week ${activeWeeklySlate.week} box scores and snaps without assigning zeros to pending MNF players.`,
+      `${activeWeeklySlate.latestGame}. The client refreshes finalized Week ${activeWeeklySlate.week} box scores and snaps; absent source rows remain unknown rather than being assigned zeros.`,
       `Week ${activeWeeklySlate.week} evidence is blended at ${Math.round(activeWeeklySlate.evidenceWeight * 100)}% so role signals can surface without treating an early-season observation as a stable rate.`,
       "Tank01 is treated as an experimental live-state provider seam, not a core dependency, until live value is proven.",
       "Trade ideas are evaluated by starter-range and playoff-upside impact, not generic name value.",

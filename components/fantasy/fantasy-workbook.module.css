@@ -215,6 +215,309 @@
 
 .classicLink { color: inherit; text-decoration: underline; text-underline-offset: 0.2rem; }
 
+/* Fantasy view: a focused decision product inside the discreet workbook shell. */
+.fantasyMode {
+  --ink: #f7f8fb;
+  --ink-secondary: #a9b2c3;
+  --surface: rgba(20, 24, 34, 0.82);
+  --surface-solid: #151924;
+  --hairline: rgba(255, 255, 255, 0.09);
+  --accent: #9bf8c8;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 14% -12%, rgba(111, 230, 181, 0.16), transparent 34rem),
+    radial-gradient(circle at 90% 4%, rgba(128, 155, 255, 0.14), transparent 30rem),
+    #080a10;
+  color: var(--ink);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  font-optical-sizing: auto;
+}
+
+.fantasyMode .workbook {
+  max-width: 100%;
+  background: transparent;
+  box-shadow: none;
+}
+
+.fantasyHeader {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 5.25rem;
+  border-bottom: 1px solid var(--hairline);
+  background: rgba(8, 10, 16, 0.72);
+  padding: 0.75rem clamp(1rem, 3vw, 2.5rem);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+}
+
+.brandLockup { display: flex; align-items: center; gap: 0.8rem; }
+.brandMark {
+  display: grid;
+  width: 2.55rem;
+  height: 2.55rem;
+  place-items: center;
+  border: 1px solid rgba(169, 255, 210, 0.34);
+  border-radius: 0.9rem;
+  background: linear-gradient(145deg, rgba(155, 248, 200, 0.22), rgba(105, 137, 255, 0.12));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.18), 0 10px 30px rgba(0, 0, 0, 0.24);
+  color: var(--accent);
+}
+.brandMark svg { width: 1.25rem; height: 1.25rem; }
+.brandEyebrow { color: #8893a6; font-size: 0.65rem; font-weight: 750; letter-spacing: 0.09em; text-transform: uppercase; }
+.brandName { margin-top: 0.08rem; font-size: 1.08rem; font-weight: 740; letter-spacing: -0.025em; }
+.headerContext { display: flex; align-items: center; gap: 0.65rem; color: #aab4c4; font-size: 0.76rem; font-weight: 650; }
+.headerContext > span { display: inline-flex; align-items: center; gap: 0.32rem; border-radius: 999px; background: rgba(255,255,255,0.055); padding: 0.5rem 0.7rem; }
+.headerContext svg { width: 0.82rem; height: 0.82rem; }
+.workModeButton {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  padding: 0 0.85rem;
+  color: #e5e9f0;
+  font: inherit;
+  cursor: pointer;
+  transition: background 160ms ease, transform 100ms ease-out;
+}
+.workModeButton:hover { background: rgba(255,255,255,0.11); }
+.workModeButton:active { transform: scale(0.97); }
+
+.edgeHero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 2rem;
+  max-width: 92rem;
+  margin: 0 auto;
+  padding: clamp(2.6rem, 6vw, 5.5rem) clamp(1rem, 4vw, 3.75rem) clamp(1.8rem, 4vw, 3rem);
+}
+.heroEyebrow { color: var(--accent); font-size: 0.72rem; font-weight: 760; letter-spacing: 0.12em; text-transform: uppercase; }
+.edgeHero h1 { max-width: 48rem; margin-top: 0.55rem; font-size: clamp(2.5rem, 6.5vw, 5.6rem); font-weight: 760; letter-spacing: -0.055em; line-height: 0.94; text-wrap: balance; }
+.heroCopy { max-width: 39rem; margin-top: 1.25rem; color: var(--ink-secondary); font-size: clamp(0.98rem, 1.5vw, 1.12rem); line-height: 1.6; text-wrap: pretty; }
+.heroMetrics { display: grid; grid-template-columns: repeat(3, minmax(6rem, 1fr)); overflow: hidden; border: 1px solid var(--hairline); border-radius: 1.45rem; background: rgba(255,255,255,0.045); box-shadow: inset 0 1px rgba(255,255,255,0.05); }
+.heroMetrics div { display: flex; min-height: 6.5rem; flex-direction: column; justify-content: center; border-right: 1px solid var(--hairline); padding: 1rem 1.2rem; }
+.heroMetrics div:last-child { border-right: 0; }
+.heroMetrics strong { font-size: 1.85rem; font-weight: 730; letter-spacing: -0.045em; }
+.heroMetrics span { margin-top: 0.2rem; color: #8994a7; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; }
+
+.fantasyMode .sheetStack { min-height: calc(100vh - 7rem); background: transparent; }
+.fantasyMode .workspace { min-height: auto; background: transparent; }
+.fantasyMode .workspaceWithInspector { max-width: 92rem; margin: 0 auto; grid-template-columns: minmax(0, 1fr) minmax(19rem, 24rem); gap: 1rem; padding: 1rem clamp(1rem, 4vw, 3.75rem) 8rem; }
+.fantasyMode .gridRegion { border: 1px solid var(--hairline); border-radius: 1.6rem; background: rgba(17, 20, 29, 0.72); box-shadow: inset 0 1px rgba(255,255,255,0.035), 0 24px 60px rgba(0,0,0,0.2); }
+
+.marketNote {
+  max-width: calc(92rem - clamp(2rem, 8vw, 7.5rem));
+  margin: 0 auto 0.25rem;
+}
+.fantasyMode .marketNote {
+  display: grid;
+  grid-template-columns: auto auto minmax(12rem, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  border: 1px solid rgba(155, 248, 200, 0.14);
+  border-radius: 1.2rem;
+  background: linear-gradient(90deg, rgba(155, 248, 200, 0.085), rgba(126, 149, 255, 0.055));
+  padding: 0.9rem 1rem;
+  color: #aab4c4;
+  font-size: 0.76rem;
+}
+.fantasyMode .marketNote strong { color: #f4f7f9; font-size: 0.82rem; letter-spacing: -0.01em; text-transform: none; }
+.marketSignal { border-radius: 999px; background: rgba(155,248,200,0.12); padding: 0.35rem 0.55rem; color: var(--accent); font-size: 0.62rem; font-weight: 760; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.fantasyMode .sourceLinks { gap: 0.35rem; }
+.fantasyMode .sourceLinks a { display: inline-flex; align-items: center; gap: 0.2rem; color: #b8c5ff; text-decoration: none; }
+.fantasyMode .sourceLinks svg { width: 0.8rem; height: 0.8rem; }
+
+.decisionIntro { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding: 1.3rem 1.35rem 0.85rem; }
+.decisionIntro h2 { margin-top: 0.25rem; font-size: 1.35rem; font-weight: 720; letter-spacing: -0.03em; }
+.decisionIntro > p { max-width: 18rem; color: #818da1; font-size: 0.75rem; line-height: 1.5; text-align: right; }
+.decisionCards { display: none; }
+
+.fantasyMode .table { color: #dfe4ed; font-size: 0.79rem; }
+.fantasyMode .table th,
+.fantasyMode .table td { height: 3rem; border-color: rgba(255,255,255,0.065); padding: 0.6rem 0.75rem; }
+.fantasyMode .table thead th,
+.fantasyMode .rowNumber { background: #171b26; color: #8994a7; }
+.fantasyMode .dataRow:hover td { background: rgba(255,255,255,0.045); }
+.fantasyMode .selectedRow td { background: rgba(155,248,200,0.075); }
+.fantasyMode .selectedCell { box-shadow: inset 0 0 0 1px rgba(155,248,200,0.6); }
+.fantasyMode .positiveCell { background: rgba(155,248,200,0.1); color: #aaf6cf; }
+.fantasyMode .warningCell { background: rgba(255,211,117,0.09); color: #ffe0a0; }
+.fantasyMode .negativeCell { background: rgba(255,134,147,0.1); color: #ffb0ba; }
+.fantasyMode .actionCell { color: #becaff; text-decoration: none; }
+
+.fantasyMode .inspector {
+  position: sticky;
+  top: 6.25rem;
+  align-self: start;
+  max-height: calc(100vh - 8rem);
+  border: 1px solid var(--hairline);
+  border-radius: 1.6rem;
+  background: rgba(27, 31, 42, 0.76);
+  padding: 1.35rem;
+  box-shadow: inset 0 1px rgba(255,255,255,0.055), 0 28px 70px rgba(0,0,0,0.3);
+  backdrop-filter: blur(26px) saturate(140%);
+  -webkit-backdrop-filter: blur(26px) saturate(140%);
+}
+.fantasyMode .inspectorEyebrow { color: var(--accent); font-size: 0.65rem; letter-spacing: 0.11em; }
+.fantasyMode .inspectorTitle { margin-top: 0.5rem; font-size: 1.55rem; font-weight: 730; letter-spacing: -0.035em; }
+.fantasyMode .inspectorMeta { color: #9ca7b9; }
+.fantasyMode .inspectorText { color: #c0c8d5; }
+.fantasyMode .inspectorBlock { border-color: var(--hairline); border-radius: 1rem; background: rgba(255,255,255,0.045); }
+.fantasyMode .inspectorLabel { color: #7f8a9c; font-size: 0.65rem; letter-spacing: 0.08em; }
+.fantasyMode .closeInspector { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 999px; background: rgba(255,255,255,0.07); color: #d8dee8; }
+.fantasyMode .closeInspector svg { width: 1rem; height: 1rem; }
+.fantasyMode .closeInspector:active { transform: scale(0.92); }
+
+.fantasyMode .sheetBar {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  left: max(1rem, env(safe-area-inset-left));
+  z-index: 40;
+  width: fit-content;
+  max-width: calc(100vw - 2rem);
+  min-height: 3.35rem;
+  margin: 0 auto;
+  align-items: center;
+  gap: 0.18rem;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 1.2rem;
+  background: rgba(28, 31, 40, 0.72);
+  padding: 0.32rem;
+  box-shadow: inset 0 1px rgba(255,255,255,0.08), 0 20px 55px rgba(0,0,0,0.42);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+}
+.fantasyMode .sheetButton { min-height: 2.65rem; border: 0; border-radius: 0.88rem; padding: 0 0.82rem; color: #98a3b5; font-size: 0.72rem; font-weight: 660; cursor: pointer; transition: color 160ms ease, background 160ms ease, transform 100ms ease-out; }
+.fantasyMode .sheetButton:hover { color: #f1f4f8; background: rgba(255,255,255,0.055); }
+.fantasyMode .sheetButton:active { transform: scale(0.96); }
+.fantasyMode .sheetButtonActive { background: rgba(255,255,255,0.12); color: white; box-shadow: inset 0 1px rgba(255,255,255,0.08); }
+.fantasyMode .statusBar { position: relative; min-height: 5.8rem; border: 0; background: transparent; padding: 1rem clamp(1rem, 4vw, 3.75rem) 5.5rem; color: #687386; }
+.fantasyMode .classicLink { color: #9aa7d7; }
+
+.fantasyMode .matrixPanel,
+.fantasyMode .syncToolbar,
+.fantasyMode .opportunityToolbar,
+.fantasyMode .marketNote + .workspace,
+.fantasyMode .sheetStack > .workspace { color: var(--ink); }
+.fantasyMode .matrixPanel,
+.fantasyMode .syncToolbar,
+.fantasyMode .opportunityToolbar {
+  border-color: var(--hairline);
+  background: rgba(18, 21, 30, 0.78);
+}
+.fantasyMode .matrixLabel,
+.fantasyMode .opportunityToolbar span,
+.fantasyMode .syncToolbar span { color: #8d98aa; }
+.fantasyMode .opportunityToolbar strong { color: var(--accent); }
+.fantasyMode .matrixFields select,
+.fantasyMode .matrixResult,
+.fantasyMode .syncToolbar button,
+.fantasyMode .fileButton,
+.fantasyMode .opportunityFilters button {
+  border-color: var(--hairline);
+  border-radius: 0.75rem;
+  background: rgba(255,255,255,0.055);
+  color: #e3e8f0;
+}
+.fantasyMode .matrixFields select { color-scheme: dark; }
+.fantasyMode .matrixResult { min-height: 4.8rem; }
+.fantasyMode .syncToolbar button,
+.fantasyMode .fileButton,
+.fantasyMode .opportunityFilters button { transition: background 160ms ease, border-color 160ms ease, transform 100ms ease-out; }
+.fantasyMode .syncToolbar button:hover,
+.fantasyMode .fileButton:hover,
+.fantasyMode .opportunityFilters button:hover { border-color: rgba(155,248,200,0.4); background: rgba(155,248,200,0.08); }
+.fantasyMode .syncToolbar button:active,
+.fantasyMode .fileButton:active,
+.fantasyMode .opportunityFilters button:active { transform: scale(0.97); }
+.fantasyMode .opportunityFilters .opportunityFilterActive { border-color: rgba(155,248,200,0.4); background: rgba(155,248,200,0.14); color: var(--accent); }
+.fantasyMode .sortHeader:hover { background: rgba(255,255,255,0.06); color: var(--accent); }
+.fantasyMode .archiveSheet {
+  min-height: calc(100vh - 5rem);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(155,248,200,0.1), transparent 28rem),
+    transparent;
+  color: var(--ink);
+}
+.fantasyMode .archiveSheet h2,
+.fantasyMode .archiveSheet > p:not(.inspectorEyebrow) { background: transparent; }
+.fantasyMode .archiveSheet h2 { padding: 0; font-size: clamp(2.8rem, 7vw, 6rem); letter-spacing: -0.055em; line-height: 0.95; }
+.fantasyMode .archiveSheet > p:not(.inspectorEyebrow) { padding: 0; color: var(--ink-secondary); }
+.fantasyMode .archiveSheet a { border: 1px solid rgba(155,248,200,0.32); border-radius: 999px; background: rgba(155,248,200,0.12); color: var(--accent); transition: background 160ms ease, transform 100ms ease-out; }
+.fantasyMode .archiveSheet a:hover { background: rgba(155,248,200,0.18); }
+.fantasyMode .archiveSheet a:active { transform: scale(0.97); }
+
+@media (max-width: 900px) {
+  .edgeHero { grid-template-columns: 1fr; align-items: start; gap: 1.5rem; }
+  .heroMetrics { width: 100%; }
+  .fantasyMode .marketNote { grid-template-columns: auto 1fr; margin-right: 1rem; margin-left: 1rem; }
+  .fantasyMode .marketNote > span:nth-of-type(2) { grid-column: 1 / -1; }
+  .fantasyMode .sourceLinks { grid-column: 1 / -1; }
+  .fantasyMode .workspaceWithInspector { grid-template-columns: minmax(0, 1fr); }
+  .fantasyMode .inspector { position: fixed; inset: auto 0.75rem calc(5rem + env(safe-area-inset-bottom)) 0.75rem; z-index: 45; max-height: min(72vh, 42rem); border-radius: 1.6rem; animation: sheetIn 320ms cubic-bezier(.2,.8,.2,1); }
+}
+
+@media (max-width: 700px) {
+  .fantasyHeader { min-height: 4.5rem; }
+  .headerContext > span { display: none; }
+  .workModeButton { width: 2.65rem; padding: 0; justify-content: center; }
+  .workModeButton { font-size: 0; }
+  .workModeButton svg { width: 1rem; height: 1rem; }
+  .edgeHero { padding-top: 2.8rem; }
+  .edgeHero h1 { max-width: 22rem; font-size: clamp(2.65rem, 13vw, 4rem); }
+  .heroMetrics div { min-height: 5.2rem; padding: 0.75rem; }
+  .heroMetrics strong { font-size: 1.45rem; }
+  .heroMetrics span { font-size: 0.57rem; }
+  .fantasyMode .workspaceWithInspector { padding: 0.75rem 0.75rem 7rem; }
+  .decisionIntro { align-items: start; flex-direction: column; padding: 1.2rem 1rem 0.65rem; }
+  .decisionIntro > p { text-align: left; }
+  .decisionCards { display: grid; gap: 0.6rem; padding: 0.25rem 0.65rem 0.75rem; }
+  .decisionTable { display: none; }
+  .decisionCard { display: flex; width: 100%; min-height: 9.5rem; flex-direction: column; align-items: stretch; border: 1px solid var(--hairline); border-radius: 1.2rem; background: rgba(255,255,255,0.035); padding: 1rem; color: inherit; text-align: left; box-shadow: inset 0 1px rgba(255,255,255,0.025); cursor: pointer; transition: border-color 160ms ease, background 160ms ease, transform 100ms ease-out; }
+  .decisionCard:active { transform: scale(0.985); }
+  .decisionCardSelected { border-color: rgba(155,248,200,0.42); background: rgba(155,248,200,0.075); }
+  .cardTopline, .cardFooter { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+  .priorityPill { border-radius: 999px; background: rgba(255,255,255,0.07); padding: 0.32rem 0.5rem; color: #aab3c2; font-size: 0.59rem; font-weight: 760; letter-spacing: 0.07em; text-transform: uppercase; }
+  .priorityNow { background: rgba(255,197,105,0.12); color: #ffd69a; }
+  .edgePositive, .edgeNegative { font-size: 0.69rem; font-weight: 740; }
+  .edgePositive { color: #9bf8c8; }
+  .edgeNegative { color: #ffabb6; }
+  .cardTitle { margin-top: 1rem; font-size: 1.05rem; line-height: 1.3; letter-spacing: -0.02em; }
+  .cardMeta { margin-top: 0.28rem; color: #8d98aa; font-size: 0.73rem; }
+  .cardFooter { margin-top: auto; padding-top: 1rem; color: #8994a5; font-size: 0.68rem; font-weight: 680; text-transform: capitalize; }
+  .cardFooter span:last-child { display: inline-flex; align-items: center; gap: 0.15rem; color: #c7d1ff; }
+  .cardFooter svg { width: 0.85rem; height: 0.85rem; }
+  .fantasyMode .sheetBar { justify-content: flex-start; }
+  .fantasyMode .sheetButton { padding: 0 0.72rem; }
+  .fantasyMode .statusBar { display: none; }
+}
+
+@keyframes sheetIn {
+  from { opacity: 0; transform: translateY(1.5rem) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fantasyMode *, .fantasyMode *::before, .fantasyMode *::after { scroll-behavior: auto !important; animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .fantasyHeader, .fantasyMode .sheetBar, .fantasyMode .inspector { background: #161a24; backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+@media (prefers-contrast: more) {
+  .fantasyHeader, .fantasyMode .sheetBar, .fantasyMode .inspector, .fantasyMode .gridRegion { border-color: rgba(255,255,255,0.45); background: #10131b; }
+}
+
 @media (min-width: 1440px) {
   .workbook { max-width: 1560px; margin: 0 auto; }
 }

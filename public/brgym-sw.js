@@ -1,9 +1,10 @@
-const VERSION = "brgym-v8";
+const VERSION = "brgym-v9";
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const RUN_PUSH_STATE_CACHE = "brgym-run-push-state";
 const RUN_PUSH_STATE_URL = "/brgym/__run-push-state__";
 const REMINDER_PUSH_STATE_URL = "/brgym/__reminder-push-state__";
+const REST_PUSH_STATE_URL = "/brgym/__rest-push-state__";
 const APP_ROUTES = [
   "/brgym/",
   "/brgym/workout",
@@ -101,6 +102,14 @@ self.addEventListener("message", (event) => {
       )),
     );
   }
+  if (event.data?.type === "BRGYM_SET_REST_PUSH_TOKEN") {
+    event.waitUntil(
+      caches.open(RUN_PUSH_STATE_CACHE).then((cache) => cache.put(
+        REST_PUSH_STATE_URL,
+        new Response(JSON.stringify({ token: event.data.token ?? null })),
+      )),
+    );
+  }
 });
 
 self.addEventListener("push", (event) => {
@@ -113,7 +122,12 @@ self.addEventListener("push", (event) => {
     }
     if (!payload?.scheduleToken || !payload?.title || !payload?.body) return;
 
-    const stateResponse = await caches.match(payload.channel === "reminder" ? REMINDER_PUSH_STATE_URL : RUN_PUSH_STATE_URL);
+    const stateUrl = payload.channel === "reminder"
+      ? REMINDER_PUSH_STATE_URL
+      : payload.channel === "rest"
+        ? REST_PUSH_STATE_URL
+        : RUN_PUSH_STATE_URL;
+    const stateResponse = await caches.match(stateUrl);
     const state = stateResponse ? await stateResponse.json() : null;
     if (state?.token !== payload.scheduleToken) return;
 
@@ -121,7 +135,11 @@ self.addEventListener("push", (event) => {
       body: payload.body,
       icon: "/brgym/icon-192.png",
       badge: "/brgym/icon-192.png",
-      tag: payload.channel === "reminder" ? "brgym-accountability" : `brgym-run-cue-${payload.scheduleToken}`,
+      tag: payload.channel === "reminder"
+        ? "brgym-accountability"
+        : payload.channel === "rest"
+          ? "brgym-rest-complete"
+          : `brgym-run-cue-${payload.scheduleToken}`,
       renotify: true,
       data: { targetUrl: payload.targetUrl },
     });

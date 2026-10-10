@@ -27,7 +27,25 @@ export default function BRGymWorkoutStartPage() {
   const activeTrainingProfile = data.settings.activeTrainingProfile;
   const profileSessions = useMemo(() => data.sessions.filter((session) => (session.trainingProfile ?? "vaughn") === activeTrainingProfile), [activeTrainingProfile, data.sessions]);
   const profileTemplates = useMemo(() => data.templates.filter((template) => (template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom")) === activeTrainingProfile), [activeTrainingProfile, data.templates]);
-  const nextCategory = useMemo(() => getNextWorkoutCategory(profileSessions), [profileSessions]);
+  const todayKey = useMemo(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`;
+  }, []);
+  const nextPlanLift = useMemo(() => {
+    if (activeTrainingProfile === "custom") return null;
+    const completedPlanIds = new Set(profileSessions.map((session) => session.planEntryId).filter(Boolean));
+    return data.trainingPlan?.entries.find((entry) =>
+      entry.kind === "lift"
+      && (entry.trainingProfile ?? "vaughn") === activeTrainingProfile
+      && entry.date >= todayKey
+      && !completedPlanIds.has(entry.id),
+    ) ?? null;
+  }, [activeTrainingProfile, data.trainingPlan, profileSessions, todayKey]);
+  const plannedTemplate = useMemo(
+    () => nextPlanLift?.templateId ? profileTemplates.find((template) => template.id === nextPlanLift.templateId) ?? null : null,
+    [nextPlanLift, profileTemplates],
+  );
+  const nextCategory = plannedTemplate?.category ?? getNextWorkoutCategory(profileSessions);
 
   const [selectedCategoryOverride, setSelectedCategoryOverride] = useState<WorkoutCategory | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -43,8 +61,9 @@ export default function BRGymWorkoutStartPage() {
   const selectedProfileId = selectedProfileIdOverride ?? data.settings.activeEquipmentProfileId;
   const templates = profileTemplates.filter((template) => template.category === selectedCategory);
   const selectedTemplateIdSafe = selectedTemplateId || templates[0]?.id || profileTemplates[0]?.id || "";
-  const quickStartTemplate =
-    profileTemplates.find((template) => template.category === nextCategory) ?? profileTemplates[0];
+  const quickStartTemplate = plannedTemplate
+    ?? profileTemplates.find((template) => template.category === nextCategory)
+    ?? profileTemplates[0];
   const lastCompletedSession = profileSessions[0] ?? null;
   const selectedProfile =
     data.equipmentProfiles.find((profile) => profile.id === selectedProfileId) ?? data.equipmentProfiles[0];
@@ -69,6 +88,7 @@ export default function BRGymWorkoutStartPage() {
     category?: WorkoutCategory;
     equipmentProfileId?: string;
     discomfort?: SensitivityFlags;
+    planEntryId?: string;
   }) {
     const profileId = options?.equipmentProfileId ?? selectedProfileId;
     const templateId = options?.templateId ?? selectedTemplateIdSafe;
@@ -81,6 +101,7 @@ export default function BRGymWorkoutStartPage() {
       equipmentProfileId: profileId,
       discomfortFlags: discomfort,
       categoryOverride: category,
+      planEntryId: options?.planEntryId,
     });
     router.push(`/brgym/workout/${workoutId}`);
   }
@@ -91,10 +112,12 @@ export default function BRGymWorkoutStartPage() {
         <CardContent className="space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/80">Quick start</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/80">{nextPlanLift ? "Next scheduled lift" : "Quick start"}</p>
               <h2 className="mt-2 text-2xl font-semibold text-white">{quickStartTemplate.name}</h2>
               <p className="mt-2 text-sm text-slate-300">
-                Pick up where you likely left off with your current gym setup.
+                {nextPlanLift
+                  ? `${new Date(`${nextPlanLift.date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} on your training plan.`
+                  : "Pick up where you likely left off with your current gym setup."}
               </p>
             </div>
             <Badge variant="cyan">{nextCategory}</Badge>
@@ -128,6 +151,7 @@ export default function BRGymWorkoutStartPage() {
                 category: quickStartTemplate.category,
                 equipmentProfileId: data.settings.activeEquipmentProfileId,
                 discomfort: { knee: false, lowerBack: false, shoulder: false },
+                planEntryId: nextPlanLift?.id,
               })
             }
             size="lg"
