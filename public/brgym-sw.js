@@ -1,4 +1,4 @@
-const VERSION = "brgym-v9";
+const VERSION = "brgym-v10";
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 const RUN_PUSH_STATE_CACHE = "brgym-run-push-state";
@@ -127,9 +127,11 @@ self.addEventListener("push", (event) => {
       : payload.channel === "rest"
         ? REST_PUSH_STATE_URL
         : RUN_PUSH_STATE_URL;
-    const stateResponse = await caches.match(stateUrl);
-    const state = stateResponse ? await stateResponse.json() : null;
-    if (state?.token !== payload.scheduleToken) return;
+    if (payload.channel !== "test") {
+      const stateResponse = await caches.match(stateUrl);
+      const state = stateResponse ? await stateResponse.json() : null;
+      if (state?.token !== payload.scheduleToken) return;
+    }
 
     await self.registration.showNotification(payload.title, {
       body: payload.body,
@@ -137,6 +139,8 @@ self.addEventListener("push", (event) => {
       badge: "/brgym/icon-192.png",
       tag: payload.channel === "reminder"
         ? "brgym-accountability"
+        : payload.channel === "test"
+          ? "brgym-push-test"
         : payload.channel === "rest"
           ? "brgym-rest-complete"
           : `brgym-run-cue-${payload.scheduleToken}`,

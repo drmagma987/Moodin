@@ -7,7 +7,7 @@ export function urlBase64ToUint8Array(value: string) {
   return Uint8Array.from(raw, (character) => character.charCodeAt(0));
 }
 
-export async function getBRGymPushSubscription() {
+export async function getBRGymPushSubscription(options?: { refreshExisting?: boolean }) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     throw new Error("Push notifications are not supported on this device");
   }
@@ -18,7 +18,8 @@ export async function getBRGymPushSubscription() {
 
   const registration = await navigator.serviceWorker.ready;
   const existing = await registration.pushManager.getSubscription();
-  if (existing) return existing;
+  if (existing && !options?.refreshExisting) return existing;
+  if (existing) await existing.unsubscribe();
   return registration.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(config.publicKey),

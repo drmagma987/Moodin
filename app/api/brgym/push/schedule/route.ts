@@ -38,7 +38,13 @@ export async function POST(request: Request) {
   }
 
   const scheduleToken = typeof body.scheduleToken === "string" ? body.scheduleToken : "";
-  const channel = body.channel === "reminder" ? "reminder" : body.channel === "rest" ? "rest" : "run";
+  const channel = body.channel === "reminder"
+    ? "reminder"
+    : body.channel === "rest"
+      ? "rest"
+      : body.channel === "test"
+        ? "test"
+        : "run";
   const targetUrl = typeof body.targetUrl === "string" ? body.targetUrl : "";
   const candidates = Array.isArray(body.events) ? body.events as CandidateEvent[] : [];
   if (!/^[a-zA-Z0-9_-]{20,100}$/.test(scheduleToken)
@@ -47,7 +53,9 @@ export async function POST(request: Request) {
       ? !targetUrl.startsWith("/brgym/run/")
       : channel === "rest"
         ? !targetUrl.startsWith("/brgym/workout/")
-        : targetUrl !== "/brgym/plan")
+        : channel === "test"
+          ? targetUrl !== "/brgym/settings"
+          : targetUrl !== "/brgym/plan")
     || candidates.length < 1
     || candidates.length > 50) {
     return Response.json({ error: "Invalid run schedule" }, { status: 400 });
@@ -60,7 +68,7 @@ export async function POST(request: Request) {
   }));
   if (events.some((event) => !Number.isInteger(event.delaySeconds)
     || event.delaySeconds < 1
-    || event.delaySeconds > (channel === "reminder" ? 7 * 24 * 60 * 60 : 4 * 60 * 60)
+    || event.delaySeconds > (channel === "reminder" ? 7 * 24 * 60 * 60 : channel === "test" ? 60 : 4 * 60 * 60)
     || event.title.length < 1
     || event.title.length > 100
     || event.body.length < 1

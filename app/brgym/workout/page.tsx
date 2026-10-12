@@ -23,7 +23,7 @@ const categories: WorkoutCategory[] = [
 
 export default function BRGymWorkoutStartPage() {
   const router = useRouter();
-  const { data, hydrated, startWorkout, setActiveEquipmentProfile } = useBRGym();
+  const { data, hydrated, startWorkout, setActiveEquipmentProfile, substitutePlanLift } = useBRGym();
   const activeTrainingProfile = data.settings.activeTrainingProfile;
   const profileSessions = useMemo(() => data.sessions.filter((session) => (session.trainingProfile ?? "vaughn") === activeTrainingProfile), [activeTrainingProfile, data.sessions]);
   const profileTemplates = useMemo(() => data.templates.filter((template) => (template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom")) === activeTrainingProfile), [activeTrainingProfile, data.templates]);
@@ -94,6 +94,11 @@ export default function BRGymWorkoutStartPage() {
     const templateId = options?.templateId ?? selectedTemplateIdSafe;
     const category = options?.category ?? selectedCategory;
     const discomfort = options?.discomfort ?? discomfortFlags;
+    const planEntryId = options?.planEntryId ?? nextPlanLift?.id;
+
+    if (planEntryId && nextPlanLift?.templateId !== templateId) {
+      substitutePlanLift(planEntryId, templateId);
+    }
 
     setActiveEquipmentProfile(profileId);
     const workoutId = startWorkout({
@@ -101,7 +106,7 @@ export default function BRGymWorkoutStartPage() {
       equipmentProfileId: profileId,
       discomfortFlags: discomfort,
       categoryOverride: category,
-      planEntryId: options?.planEntryId,
+      planEntryId,
     });
     router.push(`/brgym/workout/${workoutId}`);
   }

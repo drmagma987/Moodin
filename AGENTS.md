@@ -1266,3 +1266,24 @@ If checks cannot be run, say so clearly.
   - prefilled rep inputs select their full value on focus so typing replaces the suggestion instead of appending to it
   - completing the final planned or additional set now promotes a large rate-and-continue action, with adding another set kept as the smaller secondary choice
   - bumped the BR Gym service-worker cache to `brgym-v9`
+
+### 2026-10-10
+
+- Hardened BR Gym accountability pushes after a missed 8:00 AM reminder:
+  - replaced the opaque reminder signature with a versioned seven-day scheduling receipt containing the accepted event count and next delivery time
+  - active training profile, local timezone, completed plan entries, rescheduled dates, and reminder times now participate explicitly in schedule generation
+  - the app automatically rebuilds the reminder queue after the update and after the next scheduled event passes
+  - Settings now shows whether Vercel accepted a reminder schedule and when the next reminder is due
+  - added a `Repair & send test push` action that renews a stale browser subscription, sends a real server push, and then rebuilds the normal schedule
+  - added a separate push-test channel, bumped the service-worker cache to `brgym-v10`, and added accountability scheduler tests
+  - verified with 16 BR Gym tests, lint (existing bachelor-party font warning only), TypeScript, service-worker syntax validation, and `git diff --check`
+
+### 2026-10-12
+
+- Expanded BR Gym run-day follow-through and split substitution behavior:
+  - guided runs now finish with an on-screen log for distance, time, average heart rate, difficulty, splits, and notes instead of sending the user elsewhere to record the result
+  - saved runs now appear in Training History with calculated pace and the recorded effort details
+  - recent unlogged sessions remain in the default Plan view for seven days so a past run can be completed without opening the full program
+  - customized lift starts now consume the scheduled plan slot and swap the displaced split into the next appropriate lift day, preventing duplicate Push/Pull days after a substitution
+  - persisted plan merges now retain substituted lift titles and template assignments across reloads and app updates
+  - added deterministic split-rotation tests and verified 18 BR Gym tests, lint (existing bachelor-party font warning only), TypeScript, service-worker syntax validation, and `git diff --check`

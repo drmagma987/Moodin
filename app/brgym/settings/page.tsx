@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { BellRing, Clock3 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { BellRing, CheckCircle2, Clock3, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { useBRGym } from "@/components/brgym/provider";
@@ -10,11 +10,26 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { getBRGymPushSubscription, setServiceWorkerPushToken } from "@/lib/brgym/push-client";
+import {
+  clearAccountabilityScheduleReceipt,
+  readAccountabilityScheduleReceipt,
+  REMINDER_REFRESH_EVENT,
+  type AccountabilityScheduleReceipt,
+} from "@/lib/brgym/accountability";
 
 export default function BRGymSettingsPage() {
   const { data, hydrated, exportAllData, importAllData, resetAllData, updateSettings } = useBRGym();
   const [message, setMessage] = useState<string | null>(null);
+  const [reminderReceipt, setReminderReceipt] = useState<AccountabilityScheduleReceipt | null>(null);
+  const [testingPush, setTestingPush] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const updateReceipt = () => setReminderReceipt(readAccountabilityScheduleReceipt());
+    updateReceipt();
+    window.addEventListener(`${REMINDER_REFRESH_EVENT}:status`, updateReceipt);
+    return () => window.removeEventListener(`${REMINDER_REFRESH_EVENT}:status`, updateReceipt);
+  }, []);
 
   if (!hydrated) {
     return <div className="rounded-[28px] bg-white/5 p-5 text-sm text-slate-300">Loading settings…</div>;
@@ -50,7 +65,8 @@ export default function BRGymSettingsPage() {
                 if (!enabled) {
                   updateSettings({ accountabilityRemindersEnabled: false });
                   await setServiceWorkerPushToken("reminder", null);
-                  window.localStorage.removeItem("brgym-reminder-schedule-v1");
+                  clearAccountabilityScheduleReceipt();
+                  setReminderReceipt(null);
                   return;
                 }
                 if (!("Notification" in window)) {
@@ -83,6 +99,64 @@ export default function BRGymSettingsPage() {
             </label>
           </div>
           <p className="mt-3 text-xs leading-5 text-slate-500">Reminder schedules refresh whenever you move a planned workout.</p>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex items-start gap-3">
+              <span className={`mt-0.5 rounded-full p-1.5 ${reminderReceipt?.eventCount ? "bg-emerald-400/12 text-emerald-200" : "bg-amber-400/12 text-amber-200"}`}>
+                {reminderReceipt?.eventCount ? <CheckCircle2 className="h-4 w-4" /> : <BellRing className="h-4 w-4" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white">{reminderReceipt?.eventCount ? `${reminderReceipt.eventCount} reminders confirmed` : "No confirmed reminder schedule"}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  {reminderReceipt?.nextEventAt
+                    ? `Next: ${new Date(reminderReceipt.nextEventAt).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                    : "Repair the subscription below to verify server-to-phone delivery."}
+                </p>
+              </div>
+            </div>
+            <Button
+              className="mt-3 w-full"
+              disabled={testingPush}
+              onClick={async () => {
+                if (!("Notification" in window)) {
+                  toast.error("Notifications are not supported on this device");
+                  return;
+                }
+                const permission = await Notification.requestPermission();
+                if (permission !== "granted") {
+                  toast.error("Notification permission is required");
+                  return;
+                }
+                setTestingPush(true);
+                try {
+                  const subscription = await getBRGymPushSubscription({ refreshExisting: true });
+                  const response = await fetch("/api/brgym/push/schedule", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      channel: "test",
+                      scheduleToken: crypto.randomUUID().replaceAll("-", ""),
+                      subscription: subscription.toJSON(),
+                      targetUrl: "/brgym/settings",
+                      events: [{ delaySeconds: 2, title: "BR Gym notifications work", body: "Your 8:00 AM reminders are ready." }],
+                    }),
+                  });
+                  if (!response.ok) throw new Error("The server could not queue the test notification");
+                  clearAccountabilityScheduleReceipt();
+                  setReminderReceipt(null);
+                  window.dispatchEvent(new Event(REMINDER_REFRESH_EVENT));
+                  toast.success("Test push queued", { description: "It should arrive in a few seconds." });
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not test notifications");
+                } finally {
+                  setTestingPush(false);
+                }
+              }}
+              size="sm"
+              variant="secondary"
+            >
+              <Send className="mr-2 h-4 w-4" /> {testingPush ? "Repairing…" : "Repair & send test push"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "brgym:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/brgym-run-push.test.ts ./tests/brgym-progression.test.ts ./tests/brgym-progress.test.ts ./tests/brgym-profiles.test.ts",
+    "brgym:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/brgym-accountability.test.ts ./tests/brgym-plan-rotation.test.ts ./tests/brgym-run-push.test.ts ./tests/brgym-progression.test.ts ./tests/brgym-progress.test.ts ./tests/brgym-profiles.test.ts",
     "fantasy:integrity": "node ./lib/fantasy/validateLeagueIntegrity.mjs",
     "fantasy:test": "node --test --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs ./tests/fantasy-model.test.ts",
     "fantasy:snapshot": "node --no-warnings --experimental-strip-types --loader ./tests/ts-alias-loader.mjs --env-file=.env.local ./scripts/build_fantasy_board_snapshot.mjs",

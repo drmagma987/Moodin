@@ -88,12 +88,22 @@ export default function BRGymPlanPage() {
   const isLaurenPlan = activeTrainingProfile === "lauren";
 
   const today = localDateKey();
+  const recentDate = new Date();
+  recentDate.setDate(recentDate.getDate() - 7);
+  const recentCutoff = localDateKey(recentDate);
   const completedCount = planEntries.filter(
     (entry) => Boolean(entry.runLog) || isLiftComplete(entry, completedLiftIds),
   ).length;
   const visibleEntries = showFullPlan
     ? planEntries
-    : planEntries.filter((entry) => entry.date >= today).slice(0, 8);
+    : planEntries.filter((entry) =>
+        entry.date >= today
+        || (
+          entry.date >= recentCutoff
+          && !entry.runLog
+          && !isLiftComplete(entry, completedLiftIds)
+        ),
+      ).slice(0, 10);
 
   function openRunLog(entry: TrainingPlanEntry) {
     setEditingRunId(entry.id);

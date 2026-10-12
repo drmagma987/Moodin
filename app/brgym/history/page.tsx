@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Pencil, Save, Trash2, X } from "lucide-react";
+import { Footprints, Pencil, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { useBRGym } from "@/components/brgym/provider";
@@ -52,6 +52,13 @@ export default function BRGymHistoryPage() {
   const { data, hydrated, updateWorkoutSession } = useBRGym();
   const [editingSession, setEditingSession] = useState<WorkoutSession | null>(null);
   const visibleSessions = data.sessions.filter((session) => (session.trainingProfile ?? "vaughn") === data.settings.activeTrainingProfile);
+  const visibleRuns = (data.trainingPlan?.entries ?? [])
+    .filter((entry) =>
+      entry.kind !== "lift"
+      && Boolean(entry.runLog)
+      && (entry.trainingProfile ?? "vaughn") === data.settings.activeTrainingProfile,
+    )
+    .sort((a, b) => (b.runLog?.completedAt ?? b.date).localeCompare(a.runLog?.completedAt ?? a.date));
 
   if (!hydrated) {
     return <div className="rounded-[28px] bg-white/5 p-5 text-sm text-slate-300">Loading history…</div>;
@@ -64,9 +71,9 @@ export default function BRGymHistoryPage() {
   return (
     <div className="space-y-4">
       <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
-        <h2 className="text-2xl font-semibold text-white">Workout history</h2>
+        <h2 className="text-2xl font-semibold text-white">Training history</h2>
         <p className="mt-2 text-sm text-slate-300">
-          Correct saved details here. Templates stay unchanged, while future progression immediately uses the corrected history.
+          Runs and lifts live together here. Strength corrections update future progression without changing your templates.
         </p>
       </section>
 
@@ -74,9 +81,48 @@ export default function BRGymHistoryPage() {
         {Object.keys(EXERCISE_LIBRARY).map((name) => <option key={name} value={name} />)}
       </datalist>
 
-      {visibleSessions.length === 0 ? (
-        <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 text-sm text-slate-300">No saved workouts yet.</div>
-      ) : visibleSessions.map((session) => {
+      {visibleSessions.length === 0 && visibleRuns.length === 0 ? (
+        <div className="rounded-[28px] border border-white/10 bg-white/5 p-5 text-sm text-slate-300">No saved training yet.</div>
+      ) : null}
+
+      {visibleRuns.map((entry) => {
+        const run = entry.runLog!;
+        const pace = run.distanceMiles > 0 ? run.totalMinutes / run.distanceMiles : null;
+        const paceTotalSeconds = pace === null ? null : Math.round(pace * 60);
+        const paceMinutes = paceTotalSeconds === null ? null : Math.floor(paceTotalSeconds / 60);
+        const paceSeconds = paceTotalSeconds === null ? null : paceTotalSeconds % 60;
+        return (
+          <article key={entry.id} className="rounded-[28px] border border-emerald-400/20 bg-emerald-400/8 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl bg-emerald-400/15 p-3 text-emerald-200"><Footprints className="h-5 w-5" /></div>
+                <div>
+                  <p className="text-lg font-semibold text-white">{entry.title}</p>
+                  <p className="mt-1 text-sm text-slate-300">
+                    {run.distanceMiles} mi • {run.totalMinutes} min
+                    {paceMinutes !== null && paceSeconds !== null ? ` • ${paceMinutes}:${paceSeconds.toString().padStart(2, "0")}/mi` : ""}
+                  </p>
+                </div>
+              </div>
+              <p className="text-right text-xs text-slate-400">{new Date(run.completedAt).toLocaleString()}</p>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Difficulty</p>
+                <p className="mt-1 font-semibold text-white">{run.difficulty}/10</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Average HR</p>
+                <p className="mt-1 font-semibold text-white">{run.averageHeartRate ? `${run.averageHeartRate} bpm` : "Not logged"}</p>
+              </div>
+            </div>
+            {run.intervalPaces ? <p className="mt-3 text-sm text-slate-200"><span className="text-slate-400">Splits:</span> {run.intervalPaces}</p> : null}
+            {run.notes ? <p className="mt-2 text-sm text-slate-200"><span className="text-slate-400">Notes:</span> {run.notes}</p> : null}
+          </article>
+        );
+      })}
+
+      {visibleSessions.map((session) => {
         const isEditing = editingSession?.id === session.id;
         const visibleSession = isEditing ? editingSession : session;
         return (
