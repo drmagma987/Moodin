@@ -9,15 +9,15 @@ import type {
 
 export const inSeasonRosterSnapshotMeta = {
   source: "Yahoo Starting Rosters PDF",
-  capturedAt: "2026-09-28T10:31:38-04:00",
-  week: 3,
+  capturedAt: "2026-10-13T09:40:25-04:00",
+  week: 6,
 } as const;
 
 export const inSeasonRosterSnapshotTeams = [
   {
     teamId: "dirty-sanchez",
     name: "Dirty Sanchez",
-    players: ["Trevor Lawrence", "Jonathan Taylor", "Ashton Jeanty", "Rashee Rice", "Matthew Golden", "Jameson Williams", "George Kittle", "De'Von Achane", "Mike Evans", "Cam Little", "Zay Flowers", "Juwan Johnson", "Quentin Johnston", "Keaton Mitchell", "Malik Willis", "Xavier Worthy"],
+    players: ["Trevor Lawrence", "Jonathan Taylor", "Ashton Jeanty", "Zay Flowers", "Mike Evans", "Matthew Golden", "George Kittle", "Jameson Williams", "Malik Washington", "Cam Little", "Juwan Johnson", "Rashee Rice", "Quentin Johnston", "Keaton Mitchell", "Xavier Worthy", "Mike Washington Jr.", "De'Von Achane"],
   },
   {
     teamId: "dakked-raw",
@@ -25,61 +25,110 @@ export const inSeasonRosterSnapshotTeams = [
     aliases: ["Dakked Raw"],
     satisfiedPositions: ["QB"] as PlayerPosition[],
     preferredStarterNames: ["Caleb Williams"],
-    players: ["Bryce Young", "Kenneth Walker III", "Chase Brown", "Garrett Wilson", "Luther Burden III", "Carnell Tate", "Dalton Schultz", "Bucky Irving", "Tony Pollard", "Ka'imi Fairbairn", "Colston Loveland", "Caleb Williams", "Kyle Monangai", "Makai Lemon", "Emmett Johnson", "Adonai Mitchell"],
+    players: ["Bryce Young", "Bucky Irving", "Kenneth Walker III", "Garrett Wilson", "Luther Burden III", "Carnell Tate", "Colston Loveland", "Emanuel Wilson", "Tony Pollard", "Ka'imi Fairbairn", "Chase Brown", "Makai Lemon", "Emmett Johnson", "Brian Robinson", "Caleb Williams", "Kyle Monangai"],
   },
   {
     teamId: "like-a-good-nabers",
     name: "Like a good Nabers...",
-    players: ["Josh Allen", "Derrick Henry", "D'Andre Swift", "Christian Watson", "DK Metcalf", "Stefon Diggs", "Dalton Kincaid", "Michael Wilson", "Jeremiyah Love", "Evan McPherson", "Tucker Kraft", "Josh Jacobs", "Jakobi Meyers", "Jake Ferguson", "Tyreek Hill", "Tre Tucker"],
+    players: ["Josh Allen", "Derrick Henry", "D'Andre Swift", "Christian Watson", "Michael Wilson", "DK Metcalf", "Tucker Kraft", "Jeremiyah Love", "Dalton Kincaid", "Evan McPherson", "Stefon Diggs", "Tre Tucker", "Josh Jacobs", "Jakobi Meyers", "Jake Ferguson", "Tyreek Hill"],
   },
   {
     teamId: "husky-fever",
     name: "Husky Fever",
-    players: ["Jared Goff", "Christian McCaffrey", "Kyren Williams", "CeeDee Lamb", "Davante Adams", "Khalil Shakir", "Tyler Warren", "Jaylen Warren", "TreVeyon Henderson", "Harrison Mevis", "Mark Andrews", "Jayden Daniels", "Bo Nix", "Rachaad White", "Kayshon Boutte", "Malachi Fields", "A.J. Brown"],
+    players: ["Jayden Daniels", "Christian McCaffrey", "Kyren Williams", "CeeDee Lamb", "Davante Adams", "Khalil Shakir", "Tyler Warren", "Jaylen Warren", "Keenan Allen", "Harrison Mevis", "TreVeyon Henderson", "Jared Goff", "Mark Andrews", "Rachaad White", "Kenny Gainwell", "T.J. Hockenson", "A.J. Brown"],
   },
   {
     teamId: "gabagool",
     name: "Gabagool",
-    players: ["Jalen Hurts", "Breece Hall", "Cam Skattebo", "Drake London", "Emeka Egbuka", "Tee Higgins", "Trey McBride", "Jalen Coker", "Chris Godwin Jr.", "Jason Myers", "Rhamondre Stevenson", "Jacory Croskey-Merritt", "Woody Marks", "Matthew Stafford", "Tyler Shough", "Darren Waller"],
+    players: ["Matthew Stafford", "Cam Skattebo", "Rhamondre Stevenson", "Drake London", "Chris Godwin Jr.", "Emeka Egbuka", "Trey McBride", "Mike Gesicki", "Tee Higgins", "Spencer Shrader", "Tyler Shough", "Jacory Croskey-Merritt", "Jalen Coker", "Jalen Hurts", "Woody Marks", "Breece Hall"],
   },
   {
     teamId: "your-moms-fav-friend",
     name: "Your moms fav friend",
-    players: ["Lamar Jackson", "James Cook III", "David Montgomery", "Nico Collins", "George Pickens", "Jaylen Waddle", "Travis Kelce", "Parker Washington", "Jayden Reed", "Jake Bates", "Brian Thomas Jr.", "Jordan Addison", "Dallas Goedert", "Aaron Jones Sr.", "Jordan Love", "Ray Davis"],
+    players: ["Jordan Love", "James Cook III", "David Montgomery", "George Pickens", "Parker Washington", "Nico Collins", "Dallas Goedert", "Jaylen Waddle", "Aaron Jones Sr.", "Jake Bates", "Pat Freiermuth", "Travis Kelce", "Lamar Jackson", "Brian Thomas Jr.", "Jordan Addison", "KC Concepcion Jr."],
   },
   {
     teamId: "juggalo-all-stars",
     name: "Juggalo All-Stars",
-    players: ["Justin Herbert", "Bijan Robinson", "Omarion Hampton", "Ladd McConkey", "DJ Moore", "Dontayvion Wicks", "Sam LaPorta", "Bhayshul Tuten", "Chuba Hubbard", "Brandon Aubrey", "Michael Pittman Jr.", "Puka Nacua", "Rico Dowdle", "Kaelon Black", "Marvin Harrison Jr.", "Kyler Murray", "Jordyn Tyson"],
+    players: ["Jacoby Brissett", "Bijan Robinson", "Omarion Hampton", "Puka Nacua", "DJ Moore", "Ladd McConkey", "Sam LaPorta", "Bhayshul Tuten", "Chuba Hubbard", "Brandon Aubrey", "Dontayvion Wicks", "Kendrick Bourne", "Tre' Harris", "Marvin Harrison Jr.", "Kyler Murray", "Rico Dowdle", "Jordyn Tyson"],
   },
   {
     teamId: "njigba-please",
     name: "Njigba Please",
-    players: ["Patrick Mahomes", "Travis Etienne Jr.", "Quinshon Judkins", "Jaxon Smith-Njigba", "Malik Nabers", "Tetairoa McMillan", "Isaiah Likely", "Devaughn Vele", "Brock Bowers", "Tyler Loop", "Blake Corum", "Rashod Bateman", "Drake Maye", "Tyler Allgeier", "Tank Bigsby", "Malik Washington"],
+    players: ["Drake Maye", "Quinshon Judkins", "Ollie Gordon II", "Jaxon Smith-Njigba", "Malik Nabers", "Devaughn Vele", "Brock Bowers", "Wan'Dale Robinson", "Braelon Allen", "Tyler Loop", "Isaiah Likely", "Tetairoa McMillan", "Patrick Mahomes", "Blake Corum", "Dohnte Meyers", "Keon Coleman", "Travis Etienne Jr."],
   },
   {
     teamId: "fc-netanyah00",
     name: "FC Netanyah00",
-    players: ["Brock Purdy", "Jahmyr Gibbs", "Jadarian Price", "Amon-Ra St. Brown", "Chris Olave", "Josh Downs", "Harold Fannin Jr.", "DeVonta Smith", "Romeo Doubs", "Eddy Pineiro", "Dak Prescott", "Rome Odunze", "J.K. Dobbins", "Caleb Douglas", "Denzel Boston", "Kenyon Sadiq", "Isiah Pacheco"],
+    players: ["Brock Purdy", "J.K. Dobbins", "Josh Downs", "Chris Olave", "Rome Odunze", "Harold Fannin Jr.", "Denzel Boston", "Romeo Doubs", "Dak Prescott", "DeVonta Smith", "Amon-Ra St. Brown", "Jahmyr Gibbs", "Kenyon Sadiq", "Jadarian Price", "Will Reichard"],
   },
   {
     teamId: "peyton-and-brady-place",
     name: "Peyton and Brady place",
-    players: ["Joe Burrow", "Saquon Barkley", "Javonte Williams", "Justin Jefferson", "Ja'Marr Chase", "Terry McLaurin", "Kyle Pitts Sr.", "MarShawn Lloyd", "Deebo Samuel Sr.", "Harrison Butker", "Courtland Sutton", "Jordan Mason", "RJ Harvey", "Baker Mayfield", "Alvin Kamara", "Oronde Gadsden", "Zach Charbonnet"],
+    players: ["Javonte Williams", "Alvin Kamara", "Terry McLaurin", "Courtland Sutton", "Kyle Pitts Sr.", "RJ Harvey", "MarShawn Lloyd", "Dominic Zvada", "Justin Jefferson", "Roman Wilson", "Deebo Samuel Sr.", "Ja'Marr Chase", "Joe Burrow", "Saquon Barkley", "Zach Charbonnet", "Jordan Mason", "Harrison Butker"],
   },
 ] as const;
 
 export const inSeasonSnapshotMyTeamId = "fc-netanyah00";
 const injuredReserveNames = new Set([
   "a j brown",
-  "isiah pacheco",
+  "breece hall",
+  "de von achane",
+  "jadarian price",
   "jordyn tyson",
   "jordan mason",
-  "michael pittman",
+  "travis etienne",
   "zach charbonnet",
 ]);
 
 const currentPlayerContext = new Map<string, Partial<InSeasonPlayerSnapshot>>([
+  ["dameon pierce", {
+    currentRole: "competition",
+    injuryOpportunity: {
+      source: "CBS Sports and NFL Fantasy Week 6 reports on Will Shipley and Saquon Barkley",
+      capturedAt: "2026-10-13T15:30:00-04:00",
+      confirmed: true,
+      successorVerified: true,
+    },
+    opportunityContext: {
+      stability: "contingent",
+      reason: "Shipley is expected to miss multiple weeks; Pierce starts against Carolina only if Barkley's hamstring absence continues.",
+    },
+  }],
+  ["kendre miller", {
+    currentRole: "competition",
+    injuryOpportunity: {
+      source: "CBS Sports and FantasyPros Week 6 reports on Travis Etienne and Alvin Kamara",
+      capturedAt: "2026-10-13T15:30:00-04:00",
+      confirmed: true,
+      successorVerified: true,
+    },
+    opportunityContext: {
+      stability: "contingent",
+      reason: "Miller's season-high 10 Week 5 carries can persist while Kamara manages a back issue and Etienne remains on IR.",
+    },
+  }],
+  ["kimani vidal", {
+    currentRole: "competition",
+    opportunityContext: {
+      stability: "uncertain",
+      reason: "Vidal led the Chargers backfield in Week 5 snaps, but the committee and Week 7 bye cap immediate certainty.",
+    },
+  }],
+  ["de vonta smith", {
+    injuryStatus: "Out",
+    opportunityContext: {
+      stability: "uncertain",
+      reason: "The Week 6 Yahoo roster snapshot lists Smith out after missing Week 5 with a hamstring injury.",
+    },
+  }],
+  ["kenyon sadiq", {
+    injuryStatus: "Questionable",
+    opportunityContext: {
+      stability: "uncertain",
+      reason: "The Week 6 Yahoo roster snapshot lists Sadiq questionable after his Week 5 concussion.",
+    },
+  }],
   ["breece hall", {
     injuryStatus: "Questionable",
     opportunityContext: {

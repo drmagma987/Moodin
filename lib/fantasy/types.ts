@@ -989,7 +989,7 @@ export type WaiverRecommendationSnapshot = {
   opportunityType: "injury-created" | "usage-breakout" | "efficiency-signal" | "roster-upgrade" | "speculative";
   expertSupport: {
     sourceCount: number;
-    rotoballerFaab: string | null;
+    primaryMarketGuidance: string | null;
     fantasyProsRank: number | null;
     fantasyProsRange: string | null;
   };

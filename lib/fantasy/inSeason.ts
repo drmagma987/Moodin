@@ -29,6 +29,8 @@ import { applyCurrentSeasonProjectionUpdates } from "@/lib/fantasy/currentSeason
 import { activeWeeklySlate } from "@/lib/fantasy/activeWeeklySlate";
 import { buildLeaguePositionGrades, type TeamOpportunityProfile } from "@/lib/fantasy/leagueOpportunity";
 import { buildProductionOpportunitySnapshots } from "@/lib/fantasy/productionOpportunity";
+import { applyWeeklyEvidenceBundle, type WeeklyEvidenceBundle } from "@/lib/fantasy/weeklyEvidenceRefresh";
+import weekFiveEvidenceJson from "@/lib/fantasy/data/weekFiveEvidence.generated.json" with { type: "json" };
 
 const protectedFoundationNames = new Set<string>(
   leagueSourceOfTruth.keepers.myDeclaredPlayers,
@@ -1059,13 +1061,25 @@ export function buildWaiverRecommendationSnapshots(
     .map((playerId) => playersById.get(playerId))
     .filter((player): player is InSeasonPlayerSnapshot => player !== undefined)
     .filter((player) => !protectedFoundationNames.has(player.player.fullName) && player.injuryStatus !== "IR" && primaryPosition(player) !== "K");
+  const rosterCapacity = leagueSourceOfTruth.lineup.QB + leagueSourceOfTruth.lineup.WR +
+    leagueSourceOfTruth.lineup.RB + leagueSourceOfTruth.lineup.TE + leagueSourceOfTruth.lineup.FLEX +
+    leagueSourceOfTruth.lineup.K + leagueSourceOfTruth.lineup.BN + leagueSourceOfTruth.lineup.IR;
+  const hasOpenRosterSpot = myTeam.playerIds.length < rosterCapacity;
+  const swapOptions: Array<InSeasonPlayerSnapshot | null> = hasOpenRosterSpot ? [null] : dropCandidates;
+  const byeTeams = new Set<string>(weeklyWaiverContext.byeTeams);
+  const activeRunningBacks = myTeam.playerIds
+    .map((playerId) => playersById.get(playerId))
+    .filter((player): player is InSeasonPlayerSnapshot => player !== undefined)
+    .filter((player) => primaryPosition(player) === "RB")
+    .filter((player) => !byeTeams.has(player.player.team))
+    .filter((player) => !/^(IR|PUP|NFI|Out|O|Doubtful|D)$/i.test(player.injuryStatus ?? ""));
   const baseline = fillFutureValueLineup(myTeam, playersById, trendsByPlayerId);
 
   return freeAgents
     .map((addPlayer) => {
       const addTrend = trendsByPlayerId.get(addPlayer.player.id);
       const expertSignal = getWeeklyWaiverExpertSignal(addPlayer.player.fullName);
-      const expertSourceCount = expertSignal?.sourceCount ?? Number(Boolean(expertSignal?.rotoballer)) + Number(Boolean(expertSignal?.fantasyPros));
+      const expertSourceCount = expertSignal?.sourceCount ?? Number(Boolean(expertSignal?.cbs)) + Number(Boolean(expertSignal?.fantasyPros)) + Number(Boolean(expertSignal?.nflRank));
       const observationWeight = addPlayer.projectionUpdate?.observationWeight ?? completedGameEvidenceMeta.evidenceWeight;
       const observedCarries = addPlayer.recentUsage.games > 0
         ? (addPlayer.recentUsage.carriesPerGame - addPlayer.baselineUsage.carriesPerGame * (1 - observationWeight)) /
@@ -1079,19 +1093,21 @@ export function buildWaiverRecommendationSnapshots(
         addPlayer.advancedUsage?.statuses.routes === "verified" &&
         observedCarries >= 12 &&
         observedSnapShare >= 0.35;
-      const bestSwap = dropCandidates
+      const bestSwap = swapOptions
         .map((dropPlayer) => {
           const after = fillFutureValueLineup(
             {
               ...myTeam,
-              playerIds: swapPlayers(myTeam.playerIds, dropPlayer.player.id, addPlayer.player.id),
+              playerIds: dropPlayer
+                ? swapPlayers(myTeam.playerIds, dropPlayer.player.id, addPlayer.player.id)
+                : [...myTeam.playerIds, addPlayer.player.id],
             },
             playersById,
             trendsByPlayerId,
           );
           const starterDelta = Number((after.starterTotal - baseline.starterTotal).toFixed(2));
           const weeklyDelta = Number(
-            (addPlayer.weeklyProjection.p50 - dropPlayer.weeklyProjection.p50).toFixed(2),
+            (addPlayer.weeklyProjection.p50 - (dropPlayer?.weeklyProjection.p50 ?? 0)).toFixed(2),
           );
           const playoffUpsideDelta = Number(
             (after.upsideTotal - baseline.upsideTotal).toFixed(2),
@@ -1135,12 +1151,21 @@ export function buildWaiverRecommendationSnapshots(
           (assessDecisionReadiness(addPlayer, "rushing-efficiency").actionable && (advanced.rushingYardsOverExpectedPerAttempt ?? -99) >= 0.4)
         ),
       );
+      const rbShortageBoost = primaryPosition(addPlayer) === "RB" && activeRunningBacks.length < leagueSourceOfTruth.lineup.RB
+        ? expertSignal?.cbs
+          ? 34
+          : expertSignal?.nflRank
+            ? 26
+            : expertSignal?.fantasyPros
+              ? 18
+              : 10
+        : 0;
       const externalBoost = expertSourceCount * 4 + (expertSignal?.fantasyPros?.rank === 1 ? 3 : 0);
-      const edgeScore = Number((bestSwap?.score ?? 0) + externalBoost + (efficiencySignal ? 4 : 0));
+      const edgeScore = Number((bestSwap?.score ?? 0) + externalBoost + rbShortageBoost + (efficiencySignal ? 4 : 0));
       const rawVerdict =
-        verifiedRoleBreakout || starterDelta >= 8 || (starterDelta >= 4 && addTrend?.classification === "waiver-rise")
+        (rbShortageBoost >= 30 && expertSourceCount >= 2) || verifiedRoleBreakout || starterDelta >= 8 || (starterDelta >= 4 && addTrend?.classification === "waiver-rise")
           ? "priority"
-          : starterDelta >= 2 || expertSourceCount >= 2 ||
+          : rbShortageBoost >= 18 || starterDelta >= 2 || expertSourceCount >= 2 ||
               playoffUpsideDelta >= 8 ||
               addTrend?.recommendation === "add"
             ? "bid"
@@ -1150,7 +1175,11 @@ export function buildWaiverRecommendationSnapshots(
       const injuryCase = !verifiedRoleBreakout && addTrend?.classification !== "waiver-rise" && (addPlayer.opportunityContext?.stability === "contingent" || /injury|\bis out\b|return/i.test(`${expertSignal?.opportunity ?? ""} ${expertSignal?.primaryRisk ?? ""}`));
       const purpose = addPlayer.injuryOpportunity || injuryCase ? "injury-opportunity" : "usage";
       const claim = assessDecisionReadiness(addPlayer, purpose);
-      const rosterCoverage = coverageForDecision(players, [addPlayer.player.id, ...(bestSwap ? [bestSwap.dropPlayer.player.id, ...bestSwap.comparisonPlayerIds] : [])]);
+      const rosterCoverage = coverageForDecision(players, [
+        addPlayer.player.id,
+        ...(bestSwap?.dropPlayer ? [bestSwap.dropPlayer.player.id] : []),
+        ...(bestSwap?.comparisonPlayerIds ?? []),
+      ]);
       const coverage = { actionable: rosterCoverage.actionable && claim.actionable,
         reasons: [...rosterCoverage.reasons, ...claim.reasons] };
       const verdict = coverage.actionable ? rawVerdict === "priority" && addPlayer.projectionBasis === "preseason-prior" ? "bid" : rawVerdict : rawVerdict === "pass" ? "pass" : "watch";
@@ -1196,7 +1225,7 @@ export function buildWaiverRecommendationSnapshots(
         opportunityType,
         expertSupport: {
           sourceCount: expertSourceCount,
-          rotoballerFaab: expertSignal?.rotoballer?.move ?? null,
+          primaryMarketGuidance: expertSignal?.cbs ? `${expertSignal.cbs.move} · ${expertSignal.cbs.budget}` : null,
           fantasyProsRank: expertSignal?.fantasyPros?.rank ?? null,
           fantasyProsRange: expertSignal?.fantasyPros ? `#${expertSignal.fantasyPros.rank} · $${expertSignal.fantasyPros.trueValue} true value` : null,
         },
@@ -1214,7 +1243,7 @@ export function buildWaiverRecommendationSnapshots(
                 : `${addPlayer.player.fullName} does not beat your current bench math enough to force a move right now.`,
         rationale: [
           ...claim.warnings,
-          ...(expertSignal?.rotoballer ? [`RotoBaller Week ${weeklyWaiverContext.week}: #${expertSignal.rotoballer.rank}, ${expertSignal.rotoballer.move}.`] : []),
+          ...(expertSignal?.cbs ? [`CBS Sports Week ${weeklyWaiverContext.week}: #${expertSignal.cbs.rank}, ${expertSignal.cbs.move}; ${expertSignal.cbs.budget} of remaining FAAB.`] : []),
           ...(expertSignal?.fantasyPros ? [`FantasyPros Week ${weeklyWaiverContext.week} PPR highlighted rank: #${expertSignal.fantasyPros.rank}; $${expertSignal.fantasyPros.trueValue} true value on a $100 budget.`] : []),
           ...(expertSignal?.nflRank ? [`NFL Fantasy Week ${weeklyWaiverContext.week} overall target rank: #${expertSignal.nflRank}.`] : []),
           ...(verifiedRoleBreakout ? [`Verified role breakout: ${Math.round(observedCarries)} carries on ${Math.round(observedSnapShare * 100)}% of offensive snaps.`] : []),
@@ -1253,8 +1282,8 @@ export function buildWaiverRecommendationSnapshots(
       (a, b) =>
         (b.verdict === "priority" ? 3 : b.verdict === "bid" ? 2 : b.verdict === "watch" ? 1 : 0) -
           (a.verdict === "priority" ? 3 : a.verdict === "bid" ? 2 : a.verdict === "watch" ? 1 : 0) ||
-        b.starterDelta - a.starterDelta ||
-        b.edgeScore - a.edgeScore,
+        b.edgeScore - a.edgeScore ||
+        b.starterDelta - a.starterDelta,
     )
     .slice(0, 16);
 }
@@ -1307,10 +1336,15 @@ export function buildTransactionQueue(
 export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset {
   const rosterSnapshot = buildPdfRosterInSeasonSnapshot();
   const completedEvidence = applyCompletedGameEvidence(rosterSnapshot.players);
-  const players = applyCurrentSeasonProjectionUpdates(completedEvidence.players, {
-    week: completedGameEvidenceMeta.week,
-    capturedAt: completedGameEvidenceMeta.capturedAt,
-    observationWeight: completedGameEvidenceMeta.evidenceWeight,
+  const latestEvidence = applyWeeklyEvidenceBundle(
+    completedEvidence.players,
+    weekFiveEvidenceJson as WeeklyEvidenceBundle,
+    { requireFreshTimestamp: false },
+  );
+  const players = applyCurrentSeasonProjectionUpdates(latestEvidence.players, {
+    week: activeWeeklySlate.week,
+    capturedAt: activeWeeklySlate.capturedAt,
+    observationWeight: activeWeeklySlate.evidenceWeight,
   });
   const opportunityTrends = buildOpportunityTrendSnapshots(players);
   const tradeIdeas = buildTradeIdeaSnapshots(
@@ -1342,8 +1376,11 @@ export function getInSeasonCommandCenterDataset(): InSeasonCommandCenterDataset 
       capturedAt: activeWeeklySlate.capturedAt,
       latestGame: activeWeeklySlate.latestGame,
       evidenceWeight: activeWeeklySlate.evidenceWeight,
-      matchedPlayers: 0,
-      sources: activeWeeklySlate.sources.map((source) => ({ ...source })),
+      matchedPlayers: latestEvidence.observedPlayers,
+      sources: (weekFiveEvidenceJson as WeeklyEvidenceBundle).sources.map((source) => ({
+        label: source.label,
+        url: source.url,
+      })),
     },
     completedGameReviews,
     advancedMetricSignals,

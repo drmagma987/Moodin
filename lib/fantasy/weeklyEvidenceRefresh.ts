@@ -71,9 +71,15 @@ export type EvidenceMatchAudit = { playerId: string; name: string; stats: Eviden
 
 /** Join only unique identities in the requested season/week. An absent row is
  * unknown, never zero activity or an inferred injury. No ownership is changed. */
-export function applyWeeklyEvidenceBundle(players: InSeasonPlayerSnapshot[], bundle: WeeklyEvidenceBundle) {
+export function applyWeeklyEvidenceBundle(
+  players: InSeasonPlayerSnapshot[],
+  bundle: WeeklyEvidenceBundle,
+  options: { requireFreshTimestamp?: boolean } = {},
+) {
   if (bundle.season !== leagueSourceOfTruth.season || bundle.week !== activeWeeklySlate.week) throw new Error("Evidence season/week does not match the active slate.");
-  if (!Number.isFinite(Date.parse(bundle.capturedAt)) || Date.now() - Date.parse(bundle.capturedAt) > 14 * 86_400_000 || Date.parse(bundle.capturedAt) - Date.now() > 86_400_000) throw new Error("Evidence timestamp is invalid or stale.");
+  const capturedAt = Date.parse(bundle.capturedAt);
+  if (!Number.isFinite(capturedAt)) throw new Error("Evidence timestamp is invalid.");
+  if (options.requireFreshTimestamp !== false && (Date.now() - capturedAt > 14 * 86_400_000 || capturedAt - Date.now() > 86_400_000)) throw new Error("Evidence timestamp is invalid or stale.");
   const rows = (csv?: string) => csv ? parseCsv(csv).filter((row) => Number(row.season) === bundle.season && Number(row.week) === bundle.week && (row.season_type ?? row.game_type) === "REG") : [];
   const index = (records: Record<string, string>[], nameField: string) => {
     const result = new Map<string, Record<string, string> | null>();
@@ -138,15 +144,18 @@ export function applyWeeklyEvidenceBundle(players: InSeasonPlayerSnapshot[], bun
       stats: matchStatus(bundle.statsCsv !== undefined, stat, validBox),
       snaps: matchStatus(bundle.snapsCsv !== undefined, snap, validSnaps),
       context: matchStatus(bundle.metadata !== undefined, context, true) });
+    // Advanced ratios are exact-week facts. Clear an older week's ratios even
+    // when the player was on bye, inactive, or absent from the latest feed so
+    // the Week N dashboard never presents Week N-1 efficiency as current.
+    if (player.advancedUsage && player.advancedUsage.week !== bundle.week) {
+      delete player.advancedUsage;
+    }
     if (validBox || validSnaps) {
       observedPlayers += 1;
       // Advanced rates are exact-week denominators. Never carry routes, RYOE,
       // or Next Gen metrics from an older week beside a newly matched box
       // score; that creates internally impossible ratios and can suppress an
       // otherwise valid waiver or trade decision.
-      if (player.advancedUsage && player.advancedUsage.week !== bundle.week) {
-        delete player.advancedUsage;
-      }
       const previousAge = player.evidence ? Date.parse(bundle.capturedAt) - Date.parse(player.evidence.capturedAt) : NaN;
       const previous = player.evidence?.week === bundle.week && player.evidence.source.trim() && previousAge >= -86_400_000 && previousAge <= 14 * 86_400_000 ? player.evidence : undefined;
       player.evidence = { week: bundle.week, capturedAt: bundle.capturedAt, source: "nflverse weekly stats / PFR snaps",

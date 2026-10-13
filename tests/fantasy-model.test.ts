@@ -4108,12 +4108,14 @@ test("PDF roster snapshot matches all 10 Yahoo teams without ownership gaps", ()
 
   assert.equal(snapshot.teams.length, 10);
   assert.equal(snapshot.myTeam.name, "FC Netanyah00");
-  assert.equal(snapshot.myTeam.playerIds.length, 17);
+  assert.equal(snapshot.myTeam.playerIds.length, 15, "the Week 6 Yahoo snapshot has two open FC Netanyah00 roster spots");
   const myPlayerNames = snapshot.players
     .filter((player) => player.rosterTeamId === snapshot.myTeam.teamId)
     .map((player) => player.player.fullName);
   assert.ok(myPlayerNames.includes("Brock Purdy"));
   assert.ok(myPlayerNames.includes("Denzel Boston"));
+  assert.ok(myPlayerNames.includes("Will Reichard"));
+  assert.ok(!myPlayerNames.includes("Isiah Pacheco"));
   assert.ok(!myPlayerNames.includes("Kenny Gainwell"));
   assert.ok(!myPlayerNames.includes("Hunter Henry"));
   assert.equal(snapshot.unmatchedRosterPlayers.length, 0);
@@ -4188,24 +4190,16 @@ test("advanced in-season parsers calculate route-independent air share, RYOE, CP
   assert.equal(buildForcedMissedTackleMetricsFromCsv(charting, 2026, 1).get("jadarian price")?.forcedMissedTackleRate, 0.3);
 });
 
-test("advanced Week 1 board surfaces signals from both completed games", () => {
+test("default in-season board replaces obsolete Week 1 advanced signals with the checked Week 5 snapshot", () => {
   const dataset = getInSeasonCommandCenterDataset();
   const signatures = new Set(dataset.advancedMetricSignals.map((signal) => `${signal.playerName}:${signal.classification}`));
   const price = dataset.players.find((player) => player.player.fullName === "Jadarian Price");
 
-  assert.ok(signatures.has("Jaxon Smith-Njigba:elite-target"));
-  assert.ok(signatures.has("Romeo Doubs:air-yards-watch"));
-  assert.ok(signatures.has("Jadarian Price:runner-creation"));
-  assert.ok(signatures.has("Drake Maye:qb-environment"));
-  assert.ok(signatures.has("Puka Nacua:elite-target"));
-  assert.ok(signatures.has("Davante Adams:air-yards-watch"));
-  assert.ok(signatures.has("Christian McCaffrey:elite-target"));
-  assert.ok(signatures.has("Christian McCaffrey:runner-creation"));
-  assert.ok(signatures.has("Matthew Stafford:qb-environment"));
-  assert.ok(!signatures.has("Sam Darnold:qb-environment"), "two attempts cannot produce a QB environment signal");
-  assert.ok(!signatures.has("Ronnie Rivers:elite-target"), "three routes cannot put a buried backup alongside full-role players");
-  assert.equal(price?.advancedUsage?.forcedMissedTackles, null);
-  assert.equal(price?.advancedUsage?.statuses.forcedMissedTackles, "pending-source");
+  assert.equal(dataset.evidenceStatus.week, 5);
+  assert.ok(dataset.evidenceStatus.matchedPlayers >= 300);
+  assert.equal(signatures.size, 0, "Week 1 advanced ratios must not survive beside Week 5 box-score evidence");
+  assert.equal(price?.evidence?.week, 1, "an IR player absent from Week 5 keeps his old box-score provenance");
+  assert.equal(price?.advancedUsage, undefined);
 });
 
 test("live in-season dataset never recommends an impossible rostered add or lopsided trade", () => {
@@ -4213,7 +4207,7 @@ test("live in-season dataset never recommends an impossible rostered add or lops
   const playersById = new Map(dataset.players.map((player) => [player.player.id, player] as const));
 
   assert.equal(dataset.evidenceStatus.week, activeWeeklySlate.week);
-  assert.equal(dataset.actionQueue.length, 0, "the bundled server snapshot fails closed until the Week 4 client refresh supplies current evidence");
+  assert.ok(dataset.actionQueue.length > 0, "the checked Week 5 server snapshot should produce a current action queue");
   assert.ok(dataset.actionQueue.every((entry) => entry.proposedTransaction.kind !== "add-drop"
     || entry.proposedTransaction.add.every((player) => player.playerId
       ? playersById.get(player.playerId)?.availability === "free-agent"
@@ -4232,21 +4226,14 @@ test("live in-season dataset never recommends an impossible rostered add or lops
     return /rare same-position exception/i.test(idea.constructionSummary);
   }), "same-position one-for-ones must be explicitly justified exceptions");
   assert.ok(dataset.waiverRecommendations.every((idea) => idea.dropPlayerId === null || playersById.get(idea.dropPlayerId)?.injuryStatus !== "IR"));
-  const njigba = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Jaxon Smith-Njigba");
-  assert.equal(njigba?.classification, "role-confirmation");
-  assert.equal(njigba?.priceContext, "elite");
-  assert.notEqual(njigba?.actionability, "actionable");
-  assert.match(njigba?.summary ?? "", /already elite price|evidence incomplete/i);
-  const stevenson = dataset.opportunityTrends.find((trend) => playersById.get(trend.playerId)?.player.fullName === "Rhamondre Stevenson");
-  assert.equal(stevenson?.classification, "watch");
-  assert.equal(stevenson?.actionability, "watch");
-  assert.ok((stevenson?.opportunityScore ?? 99) < 5);
-  assert.match(stevenson?.summary ?? "", /teammate absence|Henderson inactive/i);
-  assert.ok(stevenson?.signals.some((signal) => /TreVeyon Henderson inactive/i.test(signal)));
+  const kendre = dataset.waiverRecommendations.find((idea) => playersById.get(idea.addPlayerId)?.player.fullName === "Kendre Miller");
+  assert.equal(kendre?.verdict, "priority");
+  assert.equal(kendre?.dropPlayerId, null, "the current Yahoo roster has open spots");
+  assert.ok(!dataset.waiverRecommendations.some((idea) => playersById.get(idea.addPlayerId)?.player.fullName === "Woody Marks"), "a player rostered by Gabagool cannot appear as a waiver add");
   const watson = buildOpportunityTrendSnapshots(dataset.players.filter((player) => player.player.fullName === "Christian Watson"))[0];
   const bryceYoung = buildOpportunityTrendSnapshots(dataset.players.filter((player) => player.player.fullName === "Bryce Young"))[0];
-  assert.equal(watson?.classification, "sell-high");
-  assert.equal(watson?.recommendation, "watch", "Week 1 sell calls stay non-actionable until Week 2 evidence refreshes");
+  assert.equal(watson?.classification, "buy-low");
+  assert.equal(watson?.recommendation, "trade-for", "Week 5 evidence can promote a current opportunity discount");
   assert.equal(bryceYoung?.classification, "sell-high");
   assert.equal(bryceYoung?.recommendation, "watch", "Week 1 sell calls stay non-actionable until Week 2 evidence refreshes");
 });
@@ -4303,15 +4290,19 @@ test("trade recommendations exploit an injured-QB need with a clean QB-for-RB su
   ), "the recommendation list should surface the clean Purdy-for-Warren construction");
 });
 
-test("trade analyzer rejects cosmetically balanced packages with no meaningful upgraded leg", () => {
+test("trade analyzer does not auto-accept a package whose apparent balance lacks a clean two-sided fit", () => {
   const dataset = getCoveredTestDataset();
   const byName = new Map(dataset.players.map((player) => [player.player.fullName, player] as const));
   const london = byName.get("Drake London");
   assert.ok(london);
-  london.rosProjection = { p10: 160, p50: 210, p90: 270 };
   const names = ["Brock Purdy", "Chris Olave", "Jalen Hurts", "Drake London"];
   const [purdy, olave, hurts] = names.map((name) => byName.get(name));
   assert.ok(purdy && olave && hurts);
+  for (const [index, player] of [purdy, olave, hurts, london].entries()) {
+    player.weeklyProjection = { p10: 9, p50: index < 2 ? 10 : 10.2, p90: 14 };
+    player.rosProjection = { p10: 120, p50: index < 2 ? 180 : 182, p90: 230 };
+    player.marketTier = 5;
+  }
   const result = analyzeTradeProposal(
     dataset.players,
     dataset.myTeam,
@@ -4443,12 +4434,12 @@ test("opportunity proposals preserve elite anchors and device preferences can bl
 test("marginal lineup effects distinguish current replacements from return-adjusted IR value", () => {
   const dataset = getInSeasonCommandCenterDataset();
   const byName = new Map(dataset.players.map((player) => [player.player.fullName, player] as const));
-  const pacheco = byName.get("Isiah Pacheco");
+  const price = byName.get("Jadarian Price");
   const swift = byName.get("D'Andre Swift");
   const targetTeam = dataset.leagueTeams.find((team) => team.teamId === swift?.rosterTeamId);
-  assert.ok(pacheco?.injuryStatus === "IR" && swift && targetTeam);
+  assert.ok(price?.injuryStatus === "IR" && swift && targetTeam);
 
-  const effects = calculateMarginalLineupEffects(dataset.players, dataset.myTeam, targetTeam, [pacheco.player.id], [swift.player.id]);
+  const effects = calculateMarginalLineupEffects(dataset.players, dataset.myTeam, targetTeam, [price.player.id], [swift.player.id]);
   assert.ok(effects.myEffect.incomingStarters.includes(swift.player.id), "the acquisition must receive credit only if it enters the usable lineup");
   assert.ok(effects.myEffect.replacements.some((replacement) => replacement.incomingPlayerId === swift.player.id));
   const tyson = byName.get("Jordyn Tyson");
@@ -4459,7 +4450,7 @@ test("marginal lineup effects distinguish current replacements from return-adjus
   assert.ok(stashEffects.myEffect.unusedIncomingValue > 0, "IR return value must be retained even when the player remains outside the current lineup");
   assert.ok(!stashEffects.myEffect.incomingStarters.includes(tyson.player.id), "an unavailable player must not receive immediate starter credit");
   const dashboard = buildLeagueOpportunityDashboard(dataset.players, dataset.myTeam, dataset.leagueTeams);
-  assert.ok(dashboard.diagnosis.injuredKeepPlayerIds.includes(pacheco.player.id), "an injured roster asset must not be mislabeled as expendable");
+  assert.ok(dashboard.diagnosis.injuredKeepPlayerIds.includes(price.player.id), "an injured roster asset must not be mislabeled as expendable");
 });
 
 test("waiver recommendations produce add-drop transactions and action queue entries", () => {
@@ -5609,10 +5600,10 @@ test("season-ending RB news zeros the injured player and conservatively splits s
 });
 
 test("weekly expert context excludes stale ranks instead of silently reusing them", () => {
-  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-09-29T13:00:00-04:00")).current, true);
-  assert.equal(getWeeklyWaiverExpertSignal("Ollie Gordon II", Date.parse("2026-09-29T13:00:00-04:00"))?.sourceCount, 3);
-  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-10-07T12:00:00-04:00")).current, false);
-  assert.equal(getWeeklyWaiverExpertSignal("Ollie Gordon II", Date.parse("2026-10-07T12:00:00-04:00")), undefined);
+  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-10-13T16:00:00-04:00")).current, true);
+  assert.equal(getWeeklyWaiverExpertSignal("Kendre Miller", Date.parse("2026-10-13T16:00:00-04:00"))?.sourceCount, 2);
+  assert.equal(weeklyWaiverContextStatus(Date.parse("2026-10-21T12:00:00-04:00")).current, false);
+  assert.equal(getWeeklyWaiverExpertSignal("Kendre Miller", Date.parse("2026-10-21T12:00:00-04:00")), undefined);
 });
 
 test("optional efficiency gaps, inactive players and kickers do not block baseline evaluation", () => {

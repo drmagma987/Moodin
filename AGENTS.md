@@ -1287,3 +1287,14 @@ If checks cannot be run, say so clearly.
   - customized lift starts now consume the scheduled plan slot and swap the displaced split into the next appropriate lift day, preventing duplicate Push/Pull days after a substitution
   - persisted plan merges now retain substituted lift titles and template assignments across reloads and app updates
   - added deterministic split-rotation tests and verified 18 BR Gym tests, lint (existing bachelor-party font warning only), TypeScript, service-worker syntax validation, and `git diff --check`
+
+### 2026-10-13
+
+- Refreshed the Fantasy Football Supertool for the Week 6 waiver cycle:
+  - replaced the September roster snapshot with the complete Yahoo starting-roster PDF captured October 13 at 9:40 AM
+  - reconciled all 164 rostered players across 10 teams, including FC Netanyah00's 15-player roster and two open spots
+  - bundled checked nflverse Week 5 stats and PFR snap counts for 304 matched modeled players so the server-rendered tool is current before a manual refresh
+  - advanced-evidence cleanup now prevents old exact-week ratios from appearing beside a newer slate when a player was on bye or inactive
+  - updated the waiver market to current CBS Sports, FantasyPros, and NFL Fantasy Week 6 guidance
+  - made open roster spots produce add-only transactions and added Week 6 RB-shortage awareness, putting Kendre Miller and Dameon Pierce at the top of the current queue
+  - verified with all 166 fantasy-model tests, `npm run lint` (existing bachelor-party font warning only), `npx tsc --noEmit`, league-integrity validation, and `git diff --check`
