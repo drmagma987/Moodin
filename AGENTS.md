@@ -1298,6 +1298,8 @@ If checks cannot be run, say so clearly.
   - retained older detailed run records in History while making all detailed run fields optional for new completions
   - removed persisted split substitutions from plan rehydration so the earlier malformed future schedule repairs itself from the default dates and actual workout history
   - bumped the BR Gym service worker to `brgym-v11`
+  - follow-up stale-draft repair: surfaced the existing discard action on Today, workout setup, and the active workout screen so an abandoned lift cannot indefinitely block later scheduled lifts; discarding preserves all previously saved history
+  - bumped the BR Gym service worker to `brgym-v12`
 
 ### 2026-10-13
 

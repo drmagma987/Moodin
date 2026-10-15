@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Play, Settings2 } from "lucide-react";
+import { ChevronDown, Play, Settings2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { useBRGym } from "@/components/brgym/provider";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +25,7 @@ const categories: WorkoutCategory[] = [
 
 export default function BRGymWorkoutStartPage() {
   const router = useRouter();
-  const { data, hydrated, startWorkout, setActiveEquipmentProfile } = useBRGym();
+  const { data, discardWorkout, hydrated, startWorkout, setActiveEquipmentProfile } = useBRGym();
   const activeTrainingProfile = data.settings.activeTrainingProfile;
   const profileSessions = useMemo(() => data.sessions.filter((session) => (session.trainingProfile ?? "vaughn") === activeTrainingProfile), [activeTrainingProfile, data.sessions]);
   const profileTemplates = useMemo(() => data.templates.filter((template) => (template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom")) === activeTrainingProfile), [activeTrainingProfile, data.templates]);
@@ -117,6 +118,29 @@ export default function BRGymWorkoutStartPage() {
 
   return (
     <div className="space-y-4">
+      {data.activeWorkout && (data.activeWorkout.trainingProfile ?? "vaughn") === activeTrainingProfile ? (
+        <Card className="border-amber-400/25 bg-amber-400/8">
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-amber-200">Unfinished workout</p>
+              <h2 className="mt-1 text-xl font-semibold text-white">{data.activeWorkout.workoutName}</h2>
+              <p className="mt-1 text-sm text-slate-300">Started {new Date(data.activeWorkout.startedAt).toLocaleDateString()}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => router.push(`/brgym/workout/${data.activeWorkout!.id}`)}>Resume</Button>
+              <Button
+                onClick={() => {
+                  if (!window.confirm(`Discard the unfinished ${data.activeWorkout!.workoutName}? Saved workout history will not be affected.`)) return;
+                  discardWorkout();
+                  toast.success("Unfinished workout discarded");
+                }}
+                variant="destructive"
+              ><Trash2 className="mr-2 h-4 w-4" /> Discard</Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="border-cyan-400/20 bg-cyan-400/8">
         <CardContent className="space-y-4">
           <div className="flex items-start justify-between gap-3">

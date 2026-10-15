@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ArrowRight, ChevronDown, Plus } from "lucide-react";
+import { ArrowRight, ChevronDown, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { RestTimer } from "@/components/brgym/rest-timer";
@@ -95,6 +95,7 @@ export default function BRGymWorkoutLoggerPage() {
     hydrated,
     logSet,
     replaceExercise,
+    discardWorkout,
     saveWorkout,
     setExerciseNotes,
     setExerciseStruggle,
@@ -328,6 +329,17 @@ export default function BRGymWorkoutLoggerPage() {
             <Badge variant="cyan">{completedExerciseCount}/{activeWorkout.exercises.length} lifts started</Badge>
             <Badge>{data.settings.defaultRestSeconds / 60} min rest</Badge>
           </div>
+          <Button
+            className="mt-4 w-full"
+            onClick={() => {
+              if (!window.confirm(`Discard this unfinished ${activeWorkout.workoutName}? Saved workout history will not be affected.`)) return;
+              discardWorkout();
+              toast.success("Unfinished workout discarded");
+              router.replace("/brgym/workout");
+            }}
+            size="sm"
+            variant="destructive"
+          ><Trash2 className="mr-2 h-4 w-4" /> Discard this workout</Button>
         </CardContent>
       </Card>
 

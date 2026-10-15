@@ -10,7 +10,7 @@ import { buildRotatingPlanEntries } from "@/lib/brgym/plan-rotation";
 import { getBRGymPushSubscription } from "@/lib/brgym/push-client";
 
 export default function BRGymHomePage() {
-  const { clearRunLog, data, hydrated, saveRunLog, updateSettings } = useBRGym();
+  const { clearRunLog, data, discardWorkout, hydrated, saveRunLog, updateSettings } = useBRGym();
 
   if (!hydrated) {
     return <div className="rounded-[28px] bg-white/5 p-5 text-sm text-slate-300">Loading BR Gym…</div>;
@@ -181,12 +181,26 @@ export default function BRGymHomePage() {
         </div>
       </section>
 
-      {activeWorkout && plannedRunIsNext ? (
+      {activeWorkout ? (
         <section className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-50">
-          <p className="font-medium">You also have an unfinished {activeWorkout.workoutName} lift.</p>
-          <Link className="mt-2 inline-block text-amber-100 underline underline-offset-4" href={`/brgym/workout/${activeWorkout.id}`}>
-            Resume that lift
-          </Link>
+          <p className="font-medium">Unfinished {activeWorkout.workoutName}</p>
+          <p className="mt-1 text-xs text-amber-100/75">Started {new Date(activeWorkout.startedAt).toLocaleDateString()}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Link className="rounded-xl bg-white px-3 py-2 text-center text-xs font-semibold text-black" href={`/brgym/workout/${activeWorkout.id}`}>
+              Resume
+            </Link>
+            <button
+              className="rounded-xl border border-amber-200/20 px-3 py-2 text-xs font-semibold text-amber-50"
+              onClick={() => {
+                if (!window.confirm(`Discard the unfinished ${activeWorkout.workoutName}? Saved workout history will not be affected.`)) return;
+                discardWorkout();
+                toast.success("Unfinished workout discarded", { description: "Your next scheduled lift is ready." });
+              }}
+              type="button"
+            >
+              Discard
+            </button>
+          </div>
         </section>
       ) : null}
 
