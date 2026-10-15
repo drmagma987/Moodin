@@ -1288,6 +1288,17 @@ If checks cannot be run, say so clearly.
   - persisted plan merges now retain substituted lift titles and template assignments across reloads and app updates
   - added deterministic split-rotation tests and verified 18 BR Gym tests, lint (existing bachelor-party font warning only), TypeScript, service-worker syntax validation, and `git diff --check`
 
+### 2026-10-14
+
+- Simplified BR Gym after device feedback:
+  - replaced the conflicting hard-coded weekly lift order and plan-slot swapping with one continuous rotation derived from the most recently completed lift
+  - future dated lift slots now follow Push → Pull → Legs → Shoulders across week boundaries and immediately adapt when a different split is completed
+  - restored Training History as an all-workouts view so saved sessions do not disappear when the active training profile changes
+  - added Today-page run completion and reduced run logging to a single completion toggle on Today, Plan, and the guided-run finish screen
+  - retained older detailed run records in History while making all detailed run fields optional for new completions
+  - removed persisted split substitutions from plan rehydration so the earlier malformed future schedule repairs itself from the default dates and actual workout history
+  - bumped the BR Gym service worker to `brgym-v11`
+
 ### 2026-10-13
 
 - Refreshed the Fantasy Football Supertool for the Week 6 waiver cycle:

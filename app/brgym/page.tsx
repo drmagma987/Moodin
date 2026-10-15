@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, BarChart3, BellRing, CalendarDays, ChevronRight, Dumbbell, Flame } from "lucide-react";
+import { ArrowUpRight, BarChart3, BellRing, CalendarDays, Check, ChevronRight, Dumbbell, Flame, Footprints } from "lucide-react";
 import { toast } from "sonner";
 
 import { useBRGym } from "@/components/brgym/provider";
 import { getNextWorkoutCategory } from "@/lib/brgym/logic";
+import { buildRotatingPlanEntries } from "@/lib/brgym/plan-rotation";
 import { getBRGymPushSubscription } from "@/lib/brgym/push-client";
 
 export default function BRGymHomePage() {
-  const { data, hydrated, updateSettings } = useBRGym();
+  const { clearRunLog, data, hydrated, saveRunLog, updateSettings } = useBRGym();
 
   if (!hydrated) {
     return <div className="rounded-[28px] bg-white/5 p-5 text-sm text-slate-300">Loading BR Gym…</div>;
@@ -20,17 +21,27 @@ export default function BRGymHomePage() {
   const profileTemplates = data.templates.filter((template) => (template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom")) === activeTrainingProfile);
   const nextCategory = getNextWorkoutCategory(profileSessions);
   const activeWorkout = (data.activeWorkout?.trainingProfile ?? "vaughn") === activeTrainingProfile ? data.activeWorkout : null;
-  const recentSession = profileSessions[0];
+  const recentSession = data.sessions[0];
   const activeProfile = data.equipmentProfiles.find(
     (profile) => profile.id === data.settings.activeEquipmentProfileId,
   );
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, "0")}-${`${today.getDate()}`.padStart(2, "0")}`;
-  const nextPlanEntry = activeTrainingProfile !== "custom" ? data.trainingPlan?.entries.find((entry) => {
+  const effectivePlanEntries = activeTrainingProfile === "custom" ? [] : buildRotatingPlanEntries({
+    entries: data.trainingPlan?.entries ?? [],
+    sessions: data.sessions,
+    templates: data.templates,
+    activeTrainingProfile,
+    today: todayKey,
+  });
+  const nextPlanEntry = effectivePlanEntries.find((entry) => {
     if ((entry.trainingProfile ?? "vaughn") !== activeTrainingProfile) return false;
     const liftDone = entry.kind === "lift" && data.sessions.some((session) => session.planEntryId === entry.id);
     return entry.date >= todayKey && !entry.runLog && !liftDone;
-  }) : undefined;
+  });
+  const todayEntries = effectivePlanEntries.filter(
+    (entry) => entry.date === todayKey && (entry.trainingProfile ?? "vaughn") === activeTrainingProfile,
+  );
   const timedRunIsNext = nextPlanEntry?.kind === "run" && Boolean(nextPlanEntry.timedSections?.length);
   const plannedRunIsNext = nextPlanEntry?.kind === "run" || nextPlanEntry?.kind === "race";
   const nextActionHref = timedRunIsNext
@@ -80,6 +91,51 @@ export default function BRGymHomePage() {
           </Link>
         </div>
       </section>
+
+      {todayEntries.length ? (
+        <section className="brgym-card rounded-[28px] border p-5">
+          <p className="brgym-kicker">Today</p>
+          <div className="mt-3 space-y-2">
+            {todayEntries.map((entry) => {
+              const isRun = entry.kind !== "lift";
+              const complete = isRun
+                ? Boolean(entry.runLog)
+                : data.sessions.some((session) => session.planEntryId === entry.id);
+              return (
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/15 p-3" key={entry.id}>
+                  <span className={`rounded-xl p-2 ${complete ? "bg-emerald-400/15 text-emerald-200" : "bg-white/5 text-slate-200"}`}>
+                    {complete ? <Check className="h-5 w-5" /> : isRun ? <Footprints className="h-5 w-5" /> : <Dumbbell className="h-5 w-5" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-white">{entry.title}</p>
+                    <p className="mt-1 line-clamp-1 text-xs text-slate-400">{complete ? "Completed" : entry.details}</p>
+                  </div>
+                  {isRun ? (
+                    <button
+                      aria-label={complete ? `Mark ${entry.title} incomplete` : `Mark ${entry.title} complete`}
+                      className={`shrink-0 rounded-xl px-3 py-2 text-xs font-semibold ${complete ? "bg-emerald-400/15 text-emerald-200" : "bg-white text-black"}`}
+                      onClick={() => {
+                        if (complete) {
+                          clearRunLog(entry.id);
+                          toast.success("Run marked incomplete");
+                        } else {
+                          saveRunLog(entry.id, { completedAt: new Date().toISOString() });
+                          toast.success("Run complete");
+                        }
+                      }}
+                      type="button"
+                    >
+                      {complete ? "Done ✓" : "Complete"}
+                    </button>
+                  ) : (
+                    <Link className="shrink-0 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-black" href="/brgym/workout">Start</Link>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <section className="brgym-card rounded-[28px] border p-5">
         <div className="flex items-start gap-4">
@@ -141,7 +197,7 @@ export default function BRGymHomePage() {
         </div>
         <div className="px-3">
           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Sessions</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{profileSessions.length}</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{data.sessions.length}</p>
         </div>
         <div className="px-3">
           <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Setup</p>

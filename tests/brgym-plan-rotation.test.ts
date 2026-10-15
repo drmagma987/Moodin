@@ -1,52 +1,83 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { substitutePlanLift } from "@/lib/brgym/plan-rotation";
-import type { TrainingPlanEntry, WorkoutTemplate } from "@/lib/brgym/types";
+import { buildRotatingPlanEntries } from "@/lib/brgym/plan-rotation";
+import type { TrainingPlanEntry, WorkoutCategory, WorkoutSession, WorkoutTemplate } from "@/lib/brgym/types";
 
-const entries: TrainingPlanEntry[] = [
-  { id: "pull-1", date: "2026-10-12", kind: "lift", title: "Pull", details: "Pull day", templateId: "pull", trainingProfile: "vaughn" },
-  { id: "push-1", date: "2026-10-14", kind: "lift", title: "Push", details: "Push day", templateId: "push", trainingProfile: "vaughn" },
-  { id: "legs-1", date: "2026-10-17", kind: "lift", title: "Legs", details: "Leg day", templateId: "legs", trainingProfile: "vaughn" },
+function template(id: string, name: string, category: WorkoutCategory): WorkoutTemplate {
+  return {
+    id,
+    name,
+    category,
+    exercises: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    isDefault: true,
+    trainingProfile: "vaughn",
+  };
+}
+
+const templates = [
+  template("push", "Push", "Push"),
+  template("pull", "Pull", "Pull"),
+  template("legs", "Legs", "Legs / Lower Back"),
+  template("shoulders", "Shoulders", "Shoulders / Posture"),
 ];
 
-const pushTemplate = {
-  id: "push",
-  name: "Push",
-  category: "Push",
-  exercises: [],
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-  trainingProfile: "vaughn",
-} satisfies WorkoutTemplate;
+const entries: TrainingPlanEntry[] = [
+  { id: "slot-1", date: "2026-10-14", kind: "lift", title: "Push", details: "Old static plan", templateId: "push" },
+  { id: "run", date: "2026-10-15", kind: "run", title: "Run", details: "Easy" },
+  { id: "slot-2", date: "2026-10-16", kind: "lift", title: "Legs", details: "Old static plan", templateId: "legs" },
+  { id: "slot-3", date: "2026-10-18", kind: "lift", title: "Pull", details: "Old static plan", templateId: "pull" },
+  { id: "slot-4", date: "2026-10-20", kind: "lift", title: "Push", details: "Old static plan", templateId: "push" },
+];
 
-test("swaps a substituted lift with its next scheduled occurrence", () => {
-  const result = substitutePlanLift({
+function completedPush(): WorkoutSession {
+  return {
+    id: "completed-push",
+    templateId: "push",
+    workoutName: "Push",
+    category: "Push",
+    date: "2026-10-13T18:00:00.000Z",
+    equipmentProfileId: "apartment-gym",
+    equipmentProfileName: "Apartment Gym",
+    discomfortFlags: { knee: false, lowerBack: false, shoulder: false },
+    exerciseLogs: [],
+    recommendations: [],
+    notes: "",
+    trainingProfile: "vaughn",
+  };
+}
+
+test("future lift slots continuously follow the last completed split", () => {
+  const result = buildRotatingPlanEntries({
     entries,
-    entryId: "pull-1",
-    template: pushTemplate,
+    sessions: [completedPush()],
+    templates,
     activeTrainingProfile: "vaughn",
+    today: "2026-10-14",
   });
 
-  assert.deepEqual(result.map((entry) => entry.templateId), ["push", "pull", "legs"]);
-  assert.deepEqual(result.map((entry) => entry.title), ["Push", "Pull", "Legs"]);
-  assert.deepEqual(result.map((entry) => entry.details), ["Push day", "Pull day", "Leg day"]);
+  assert.deepEqual(result.filter((entry) => entry.kind === "lift").map((entry) => entry.title), [
+    "Pull",
+    "Legs",
+    "Shoulders",
+    "Push",
+  ]);
+  assert.equal(result.find((entry) => entry.id === "run")?.title, "Run");
 });
 
-test("does not displace completed or other-profile lifts", () => {
-  const result = substitutePlanLift({
-    entries: [
-      entries[0],
-      { ...entries[1], trainingProfile: "lauren" },
-      entries[2],
-    ],
-    entryId: "pull-1",
-    template: pushTemplate,
+test("completed and past lift slots stay unchanged", () => {
+  const completed = { ...completedPush(), planEntryId: "slot-2" };
+  const result = buildRotatingPlanEntries({
+    entries,
+    sessions: [completed],
+    templates,
     activeTrainingProfile: "vaughn",
-    completedEntryIds: new Set(["legs-1"]),
+    today: "2026-10-16",
   });
 
-  assert.equal(result[0].templateId, "push");
-  assert.equal(result[1].templateId, "push");
-  assert.equal(result[2].templateId, "legs");
+  assert.equal(result[0].title, "Push");
+  assert.equal(result[2].title, "Legs");
+  assert.equal(result[4].title, "Legs");
 });

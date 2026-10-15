@@ -13,6 +13,7 @@ import {
   REMINDER_SCHEDULE_KEY,
   type AccountabilityScheduleReceipt,
 } from "@/lib/brgym/accountability";
+import { buildRotatingPlanEntries } from "@/lib/brgym/plan-rotation";
 
 export function AccountabilityReminders() {
   const { data, hydrated } = useBRGym();
@@ -29,7 +30,15 @@ export function AccountabilityReminders() {
   useEffect(() => {
     if (!hydrated || !settings.accountabilityRemindersEnabled) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    const planEntries = (entries ?? []).filter(
+    const localNow = new Date();
+    const today = `${localNow.getFullYear()}-${`${localNow.getMonth() + 1}`.padStart(2, "0")}-${`${localNow.getDate()}`.padStart(2, "0")}`;
+    const planEntries = buildRotatingPlanEntries({
+      entries: entries ?? [],
+      sessions: data.sessions,
+      templates: data.templates,
+      activeTrainingProfile: settings.activeTrainingProfile,
+      today,
+    }).filter(
       (entry) => (entry.trainingProfile ?? "vaughn") === settings.activeTrainingProfile,
     );
 
@@ -86,7 +95,7 @@ export function AccountabilityReminders() {
         window.dispatchEvent(new Event(`${REMINDER_REFRESH_EVENT}:status`));
       }
     })();
-  }, [data.sessions, entries, hydrated, refreshGeneration, settings.accountabilityRemindersEnabled, settings.activeTrainingProfile, settings.eveningReminderTime, settings.morningReminderTime]);
+  }, [data.sessions, data.templates, entries, hydrated, refreshGeneration, settings.accountabilityRemindersEnabled, settings.activeTrainingProfile, settings.eveningReminderTime, settings.morningReminderTime]);
 
   return null;
 }

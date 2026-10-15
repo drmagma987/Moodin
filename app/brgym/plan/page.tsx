@@ -10,8 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import type { RunLog, TrainingPlanEntry } from "@/lib/brgym/types";
+import { buildRotatingPlanEntries } from "@/lib/brgym/plan-rotation";
+import type { TrainingPlanEntry } from "@/lib/brgym/types";
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -35,17 +35,8 @@ function isLiftComplete(entry: TrainingPlanEntry, sessionPlanEntryIds: Set<strin
 export default function BRGymPlanPage() {
   const router = useRouter();
   const { data, hydrated, clearRunLog, reschedulePlanEntry, saveRunLog, startWorkout } = useBRGym();
-  const [editingRunId, setEditingRunId] = useState<string | null>(null);
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [showFullPlan, setShowFullPlan] = useState(false);
-  const [runDraft, setRunDraft] = useState({
-    distanceMiles: "",
-    totalMinutes: "",
-    intervalPaces: "",
-    averageHeartRate: "",
-    difficulty: "",
-    notes: "",
-  });
 
   const completedLiftIds = useMemo(
     () => new Set(data.sessions.map((session) => session.planEntryId).filter((id): id is string => Boolean(id))),
@@ -82,12 +73,18 @@ export default function BRGymPlanPage() {
   }
 
   const activeTrainingProfile = data.settings.activeTrainingProfile;
-  const planEntries = plan.entries.filter(
+  const today = localDateKey();
+  const planEntries = buildRotatingPlanEntries({
+    entries: plan.entries,
+    sessions: data.sessions,
+    templates: data.templates,
+    activeTrainingProfile,
+    today,
+  }).filter(
     (entry) => (entry.trainingProfile ?? "vaughn") === activeTrainingProfile,
   );
   const isLaurenPlan = activeTrainingProfile === "lauren";
 
-  const today = localDateKey();
   const recentDate = new Date();
   recentDate.setDate(recentDate.getDate() - 7);
   const recentCutoff = localDateKey(recentDate);
@@ -104,50 +101,6 @@ export default function BRGymPlanPage() {
           && !isLiftComplete(entry, completedLiftIds)
         ),
       ).slice(0, 10);
-
-  function openRunLog(entry: TrainingPlanEntry) {
-    setEditingRunId(entry.id);
-    setRunDraft({
-      distanceMiles: entry.runLog ? `${entry.runLog.distanceMiles}` : "",
-      totalMinutes: entry.runLog ? `${entry.runLog.totalMinutes}` : "",
-      intervalPaces: entry.runLog?.intervalPaces ?? "",
-      averageHeartRate: entry.runLog?.averageHeartRate ? `${entry.runLog.averageHeartRate}` : "",
-      difficulty: entry.runLog ? `${entry.runLog.difficulty}` : "",
-      notes: entry.runLog?.notes ?? "",
-    });
-  }
-
-  function submitRunLog(entry: TrainingPlanEntry) {
-    const distanceMiles = Number(runDraft.distanceMiles);
-    const totalMinutes = Number(runDraft.totalMinutes);
-    const difficulty = Number(runDraft.difficulty);
-    const averageHeartRate = runDraft.averageHeartRate ? Number(runDraft.averageHeartRate) : null;
-    if (!Number.isFinite(distanceMiles) || distanceMiles <= 0) {
-      toast.error("Enter the distance you ran");
-      return;
-    }
-    if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) {
-      toast.error("Enter your total time in minutes");
-      return;
-    }
-    if (!Number.isFinite(difficulty) || difficulty < 1 || difficulty > 10) {
-      toast.error("Difficulty must be from 1 to 10");
-      return;
-    }
-    const log: RunLog = {
-      completedAt: new Date().toISOString(),
-      distanceMiles,
-      totalMinutes,
-      intervalPaces: runDraft.intervalPaces.trim(),
-      averageHeartRate:
-        averageHeartRate !== null && Number.isFinite(averageHeartRate) ? averageHeartRate : null,
-      difficulty,
-      notes: runDraft.notes.trim(),
-    };
-    saveRunLog(entry.id, log);
-    setEditingRunId(null);
-    toast.success(`${entry.title} saved`);
-  }
 
   return (
     <div className="space-y-4">
@@ -292,15 +245,11 @@ export default function BRGymPlanPage() {
                   </Button>
                 ) : null}
 
-                {entry.kind !== "lift" && editingRunId !== entry.id ? (
+                {entry.kind !== "lift" ? (
                   <div className="space-y-3">
                     {entry.runLog ? (
                       <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4 text-sm text-emerald-50">
-                        <p className="font-semibold">
-                          {entry.runLog.distanceMiles} mi in {entry.runLog.totalMinutes} min • Difficulty {entry.runLog.difficulty}/10
-                        </p>
-                        {entry.runLog.averageHeartRate ? <p className="mt-1">Average HR: {entry.runLog.averageHeartRate} bpm</p> : null}
-                        {entry.runLog.intervalPaces ? <p className="mt-1">Splits: {entry.runLog.intervalPaces}</p> : null}
+                        <p className="font-semibold">Completed {new Date(entry.runLog.completedAt).toLocaleDateString()}</p>
                       </div>
                     ) : null}
                     <div className={entry.timedSections?.length ? "grid grid-cols-2 gap-2" : ""}>
@@ -309,55 +258,22 @@ export default function BRGymPlanPage() {
                           <Timer className="mr-2 h-4 w-4" /> Start timer
                         </Button>
                       ) : null}
-                      <Button className="w-full" onClick={() => openRunLog(entry)} variant="secondary">
-                        {entry.runLog ? "Edit log" : "Log run"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-
-                {entry.kind !== "lift" && editingRunId === entry.id ? (
-                  <div className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="text-xs uppercase tracking-[0.14em] text-slate-400">
-                        Distance (mi)
-                        <Input className="mt-2" inputMode="decimal" onChange={(event) => setRunDraft((current) => ({ ...current, distanceMiles: event.target.value }))} value={runDraft.distanceMiles} />
-                      </label>
-                      <label className="text-xs uppercase tracking-[0.14em] text-slate-400">
-                        Total minutes
-                        <Input className="mt-2" inputMode="decimal" onChange={(event) => setRunDraft((current) => ({ ...current, totalMinutes: event.target.value }))} value={runDraft.totalMinutes} />
-                      </label>
-                      <label className="text-xs uppercase tracking-[0.14em] text-slate-400">
-                        Average HR
-                        <Input className="mt-2" inputMode="numeric" onChange={(event) => setRunDraft((current) => ({ ...current, averageHeartRate: event.target.value }))} value={runDraft.averageHeartRate} />
-                      </label>
-                      <label className="text-xs uppercase tracking-[0.14em] text-slate-400">
-                        Difficulty 1-10
-                        <Input className="mt-2" inputMode="numeric" onChange={(event) => setRunDraft((current) => ({ ...current, difficulty: event.target.value }))} value={runDraft.difficulty} />
-                      </label>
-                    </div>
-                    <label className="block text-xs uppercase tracking-[0.14em] text-slate-400">
-                      Interval paces / splits
-                      <Input className="mt-2" onChange={(event) => setRunDraft((current) => ({ ...current, intervalPaces: event.target.value }))} placeholder="8:14, 8:09, 8:18…" value={runDraft.intervalPaces} />
-                    </label>
-                    <label className="block text-xs uppercase tracking-[0.14em] text-slate-400">
-                      Notes
-                      <Textarea className="mt-2" onChange={(event) => setRunDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="How did it feel?" value={runDraft.notes} />
-                    </label>
-                    <Button className="w-full" onClick={() => submitRunLog(entry)}>Save run</Button>
-                    <Button className="w-full" onClick={() => setEditingRunId(null)} variant="secondary">Cancel</Button>
-                    {entry.runLog ? (
                       <Button
                         className="w-full"
                         onClick={() => {
-                          clearRunLog(entry.id);
-                          setEditingRunId(null);
+                          if (entry.runLog) {
+                            clearRunLog(entry.id);
+                            toast.success("Run marked incomplete");
+                          } else {
+                            saveRunLog(entry.id, { completedAt: new Date().toISOString() });
+                            toast.success(`${entry.title} complete`);
+                          }
                         }}
-                        variant="destructive"
+                        variant={entry.runLog ? "secondary" : "default"}
                       >
-                        Clear run log
+                        {entry.runLog ? "Undo completion" : "Mark complete"}
                       </Button>
-                    ) : null}
+                    </div>
                   </div>
                 ) : null}
               </CardContent>

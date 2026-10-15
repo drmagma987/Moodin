@@ -1,51 +1,58 @@
-import type { TrainingPlanEntry, TrainingProfileId, WorkoutTemplate } from "@/lib/brgym/types";
+import { CATEGORY_SEQUENCE } from "@/lib/brgym/defaults";
+import type {
+  TrainingPlanEntry,
+  TrainingProfileId,
+  WorkoutSession,
+  WorkoutTemplate,
+} from "@/lib/brgym/types";
 
-interface SubstitutePlanLiftInput {
+interface BuildRotatingPlanInput {
   entries: TrainingPlanEntry[];
-  entryId: string;
-  template: WorkoutTemplate;
+  sessions: WorkoutSession[];
+  templates: WorkoutTemplate[];
   activeTrainingProfile: TrainingProfileId;
-  completedEntryIds?: Set<string>;
+  today: string;
 }
 
-export function substitutePlanLift({
+export function buildRotatingPlanEntries({
   entries,
-  entryId,
-  template,
+  sessions,
+  templates,
   activeTrainingProfile,
-  completedEntryIds = new Set(),
-}: SubstitutePlanLiftInput): TrainingPlanEntry[] {
-  const targetIndex = entries.findIndex((entry) => entry.id === entryId);
-  const target = entries[targetIndex];
-  if (!target || target.kind !== "lift" || target.templateId === template.id) return entries;
+  today,
+}: BuildRotatingPlanInput): TrainingPlanEntry[] {
+  const profileTemplates = templates.filter(
+    (template) => (template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom")) === activeTrainingProfile,
+  );
+  const templatesByCategory = new Map(profileTemplates.map((template) => [template.category, template]));
+  const rotation = CATEGORY_SEQUENCE.filter((category) => templatesByCategory.has(category));
+  if (rotation.length === 0) return entries;
 
-  const eligibleFutureIndexes = entries
-    .map((entry, index) => ({ entry, index }))
-    .filter(({ entry, index }) =>
-      index !== targetIndex
-      && entry.kind === "lift"
-      && (entry.trainingProfile ?? "vaughn") === activeTrainingProfile
-      && !completedEntryIds.has(entry.id)
-      && (entry.date > target.date || (entry.date === target.date && index > targetIndex)),
-    );
-  const displacedIndex = eligibleFutureIndexes.find(({ entry }) => entry.templateId === template.id)?.index
-    ?? eligibleFutureIndexes[0]?.index;
+  const latestSession = sessions
+    .filter((session) => (session.trainingProfile ?? "vaughn") === activeTrainingProfile)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const lastIndex = latestSession ? rotation.indexOf(latestSession.category) : -1;
+  let rotationIndex = lastIndex >= 0 ? (lastIndex + 1) % rotation.length : 0;
+  const completedEntryIds = new Set(sessions.map((session) => session.planEntryId).filter(Boolean));
 
-  return entries.map((entry, index) => {
-    if (index === targetIndex) {
-      const displaced = displacedIndex === undefined ? null : entries[displacedIndex];
-      return {
-        ...entry,
-        templateId: template.id,
-        title: template.name,
-        details: displaced?.templateId === template.id
-          ? displaced.details
-          : `Complete ${template.name} using its saved workout template.`,
-      };
+  return entries.map((entry) => {
+    if (
+      entry.kind !== "lift"
+      || entry.date < today
+      || completedEntryIds.has(entry.id)
+      || (entry.trainingProfile ?? "vaughn") !== activeTrainingProfile
+    ) {
+      return entry;
     }
-    if (index === displacedIndex) {
-      return { ...entry, templateId: target.templateId ?? null, title: target.title, details: target.details };
-    }
-    return entry;
+    const category = rotation[rotationIndex];
+    const template = templatesByCategory.get(category);
+    rotationIndex = (rotationIndex + 1) % rotation.length;
+    if (!template) return entry;
+    return {
+      ...entry,
+      title: template.name,
+      templateId: template.id,
+      details: `Next in your ${rotation.join(" → ")} rotation.`,
+    };
   });
 }

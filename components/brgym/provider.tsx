@@ -14,7 +14,6 @@ import {
   normalizeWeight,
 } from "@/lib/brgym/logic";
 import { STORAGE_KEY, getDefaultData } from "@/lib/brgym/storage";
-import { substitutePlanLift } from "@/lib/brgym/plan-rotation";
 import type {
   ActiveWorkoutDraft,
   BRGymData,
@@ -43,9 +42,6 @@ function mergeTrainingPlan(
     entries: current.entries.map((entry) => ({
       ...entry,
       date: savedEntries.get(entry.id)?.date ?? entry.date,
-      title: savedEntries.get(entry.id)?.title ?? entry.title,
-      details: savedEntries.get(entry.id)?.details ?? entry.details,
-      templateId: savedEntries.get(entry.id)?.templateId ?? entry.templateId,
       runLog: savedEntries.get(entry.id)?.runLog ?? entry.runLog ?? null,
     })),
   };
@@ -75,7 +71,6 @@ interface BRGymContextValue {
   saveRunLog: (entryId: string, log: RunLog) => void;
   clearRunLog: (entryId: string) => void;
   reschedulePlanEntry: (entryId: string, date: string) => void;
-  substitutePlanLift: (entryId: string, templateId: string) => void;
   saveWorkout: () => WorkoutSession | null;
   updateWorkoutSession: (session: WorkoutSession) => boolean;
   discardWorkout: () => void;
@@ -283,28 +278,6 @@ const useBRGymStore = create<BRGymStore>()(
               entries,
               startDate: entries[0]?.date ?? current.trainingPlan.startDate,
               endDate: entries.at(-1)?.date ?? current.trainingPlan.endDate,
-            },
-          };
-        });
-      },
-      substitutePlanLift(entryId, templateId) {
-        set((current) => {
-          if (!current.trainingPlan) return current;
-          const template = current.templates.find((candidate) => candidate.id === templateId);
-          if (!template) return current;
-          const completedEntryIds = new Set(
-            current.sessions.map((session) => session.planEntryId).filter((id): id is string => Boolean(id)),
-          );
-          return {
-            trainingPlan: {
-              ...current.trainingPlan,
-              entries: substitutePlanLift({
-                entries: current.trainingPlan.entries,
-                entryId,
-                template,
-                activeTrainingProfile: current.settings.activeTrainingProfile,
-                completedEntryIds,
-              }),
             },
           };
         });
@@ -720,7 +693,6 @@ export function useBRGym() {
     saveRunLog: state.saveRunLog,
     clearRunLog: state.clearRunLog,
     reschedulePlanEntry: state.reschedulePlanEntry,
-    substitutePlanLift: state.substitutePlanLift,
     saveWorkout: state.saveWorkout,
     updateWorkoutSession: state.updateWorkoutSession,
     discardWorkout: state.discardWorkout,

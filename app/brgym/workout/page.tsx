@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { getNextWorkoutCategory } from "@/lib/brgym/logic";
+import { buildRotatingPlanEntries } from "@/lib/brgym/plan-rotation";
 import type { SensitivityFlags, WorkoutCategory } from "@/lib/brgym/types";
 
 const categories: WorkoutCategory[] = [
@@ -23,7 +24,7 @@ const categories: WorkoutCategory[] = [
 
 export default function BRGymWorkoutStartPage() {
   const router = useRouter();
-  const { data, hydrated, startWorkout, setActiveEquipmentProfile, substitutePlanLift } = useBRGym();
+  const { data, hydrated, startWorkout, setActiveEquipmentProfile } = useBRGym();
   const activeTrainingProfile = data.settings.activeTrainingProfile;
   const profileSessions = useMemo(() => data.sessions.filter((session) => (session.trainingProfile ?? "vaughn") === activeTrainingProfile), [activeTrainingProfile, data.sessions]);
   const profileTemplates = useMemo(() => data.templates.filter((template) => (template.trainingProfile ?? (template.isDefault ? "vaughn" : "custom")) === activeTrainingProfile), [activeTrainingProfile, data.templates]);
@@ -34,13 +35,20 @@ export default function BRGymWorkoutStartPage() {
   const nextPlanLift = useMemo(() => {
     if (activeTrainingProfile === "custom") return null;
     const completedPlanIds = new Set(profileSessions.map((session) => session.planEntryId).filter(Boolean));
-    return data.trainingPlan?.entries.find((entry) =>
+    const entries = buildRotatingPlanEntries({
+      entries: data.trainingPlan?.entries ?? [],
+      sessions: data.sessions,
+      templates: data.templates,
+      activeTrainingProfile,
+      today: todayKey,
+    });
+    return entries.find((entry) =>
       entry.kind === "lift"
       && (entry.trainingProfile ?? "vaughn") === activeTrainingProfile
       && entry.date >= todayKey
       && !completedPlanIds.has(entry.id),
     ) ?? null;
-  }, [activeTrainingProfile, data.trainingPlan, profileSessions, todayKey]);
+  }, [activeTrainingProfile, data.sessions, data.templates, data.trainingPlan, profileSessions, todayKey]);
   const plannedTemplate = useMemo(
     () => nextPlanLift?.templateId ? profileTemplates.find((template) => template.id === nextPlanLift.templateId) ?? null : null,
     [nextPlanLift, profileTemplates],
@@ -95,10 +103,6 @@ export default function BRGymWorkoutStartPage() {
     const category = options?.category ?? selectedCategory;
     const discomfort = options?.discomfort ?? discomfortFlags;
     const planEntryId = options?.planEntryId ?? nextPlanLift?.id;
-
-    if (planEntryId && nextPlanLift?.templateId !== templateId) {
-      substitutePlanLift(planEntryId, templateId);
-    }
 
     setActiveEquipmentProfile(profileId);
     const workoutId = startWorkout({

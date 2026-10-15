@@ -10,11 +10,8 @@ import { useBRGym } from "@/components/brgym/provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { buildRunPushEvents } from "@/lib/brgym/run-push";
 import { getBRGymPushSubscription, setServiceWorkerPushToken } from "@/lib/brgym/push-client";
-import type { RunLog } from "@/lib/brgym/types";
 
 interface SavedRunTimer {
   startedAt: number | null;
@@ -83,15 +80,6 @@ export default function GuidedRunPage() {
   const completionNotified = useRef(false);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const pushArmGeneration = useRef(0);
-  const runLogInitialized = useRef(false);
-  const [runDraft, setRunDraft] = useState({
-    distanceMiles: "",
-    totalMinutes: "",
-    intervalPaces: "",
-    averageHeartRate: "",
-    difficulty: "",
-    notes: "",
-  });
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -128,19 +116,6 @@ export default function GuidedRunPage() {
   }, [timer]);
 
   const totalSeconds = steps.reduce((total, step) => total + step.seconds, 0);
-
-  useEffect(() => {
-    if (!entry || runLogInitialized.current) return;
-    runLogInitialized.current = true;
-    setRunDraft({
-      distanceMiles: entry.runLog ? `${entry.runLog.distanceMiles}` : "",
-      totalMinutes: entry.runLog ? `${entry.runLog.totalMinutes}` : `${Math.round((totalSeconds / 60) * 10) / 10}`,
-      intervalPaces: entry.runLog?.intervalPaces ?? "",
-      averageHeartRate: entry.runLog?.averageHeartRate ? `${entry.runLog.averageHeartRate}` : "",
-      difficulty: entry.runLog ? `${entry.runLog.difficulty}` : "",
-      notes: entry.runLog?.notes ?? "",
-    });
-  }, [entry, totalSeconds]);
 
   let elapsedBeforeStep = 0;
   let stepIndex = steps.length;
@@ -302,37 +277,6 @@ export default function GuidedRunPage() {
     }
   }
 
-  function submitRunLog() {
-    if (!entry) return;
-    const distanceMiles = Number(runDraft.distanceMiles);
-    const totalMinutes = Number(runDraft.totalMinutes);
-    const difficulty = Number(runDraft.difficulty);
-    const averageHeartRate = runDraft.averageHeartRate ? Number(runDraft.averageHeartRate) : null;
-    if (!Number.isFinite(distanceMiles) || distanceMiles <= 0) {
-      toast.error("Enter the distance you ran");
-      return;
-    }
-    if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) {
-      toast.error("Enter your total time");
-      return;
-    }
-    if (!Number.isFinite(difficulty) || difficulty < 1 || difficulty > 10) {
-      toast.error("Choose a difficulty from 1 to 10");
-      return;
-    }
-    const log: RunLog = {
-      completedAt: entry.runLog?.completedAt ?? new Date().toISOString(),
-      distanceMiles,
-      totalMinutes,
-      intervalPaces: runDraft.intervalPaces.trim(),
-      averageHeartRate: averageHeartRate !== null && Number.isFinite(averageHeartRate) ? averageHeartRate : null,
-      difficulty,
-      notes: runDraft.notes.trim(),
-    };
-    saveRunLog(entry.id, log);
-    toast.success("Run saved to History");
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3 px-1">
@@ -480,38 +424,20 @@ export default function GuidedRunPage() {
         <Card className="border-emerald-400/25 bg-emerald-400/8">
           <CardContent className="space-y-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-emerald-200">Finish the record</p>
-              <h3 className="mt-1 text-xl font-semibold text-white">Log what actually happened</h3>
-              <p className="mt-1 text-sm text-slate-300">Saving here marks the run complete and adds it to History.</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-emerald-200">Run finished</p>
+              <h3 className="mt-1 text-xl font-semibold text-white">That’s enough. Mark it done.</h3>
+              <p className="mt-1 text-sm text-slate-300">No pace, heart-rate, or notes required.</p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs uppercase tracking-[0.14em] text-slate-400">
-                Distance (mi)
-                <Input className="mt-2" inputMode="decimal" onChange={(event) => setRunDraft((current) => ({ ...current, distanceMiles: event.target.value }))} placeholder="3.1" value={runDraft.distanceMiles} />
-              </label>
-              <label className="text-xs uppercase tracking-[0.14em] text-slate-400">
-                Total minutes
-                <Input className="mt-2" inputMode="decimal" onChange={(event) => setRunDraft((current) => ({ ...current, totalMinutes: event.target.value }))} value={runDraft.totalMinutes} />
-              </label>
-              <label className="text-xs uppercase tracking-[0.14em] text-slate-400">
-                Average HR
-                <Input className="mt-2" inputMode="numeric" onChange={(event) => setRunDraft((current) => ({ ...current, averageHeartRate: event.target.value }))} placeholder="Optional" value={runDraft.averageHeartRate} />
-              </label>
-              <label className="text-xs uppercase tracking-[0.14em] text-slate-400">
-                Difficulty 1–10
-                <Input className="mt-2" inputMode="numeric" max="10" min="1" onChange={(event) => setRunDraft((current) => ({ ...current, difficulty: event.target.value }))} placeholder="6" value={runDraft.difficulty} />
-              </label>
-            </div>
-            <label className="block text-xs uppercase tracking-[0.14em] text-slate-400">
-              Splits / interval paces
-              <Input className="mt-2" onChange={(event) => setRunDraft((current) => ({ ...current, intervalPaces: event.target.value }))} placeholder="8:14, 8:09, 8:18…" value={runDraft.intervalPaces} />
-            </label>
-            <label className="block text-xs uppercase tracking-[0.14em] text-slate-400">
-              Notes
-              <Textarea className="mt-2" onChange={(event) => setRunDraft((current) => ({ ...current, notes: event.target.value }))} placeholder="How did it feel? Route, weather, aches, wins…" value={runDraft.notes} />
-            </label>
-            <Button className="w-full" onClick={submitRunLog} size="lg">
-              {entry.runLog ? "Update run in History" : "Save run to History"}
+            <Button
+              className="w-full"
+              disabled={Boolean(entry.runLog)}
+              onClick={() => {
+                saveRunLog(entry.id, { completedAt: new Date().toISOString() });
+                toast.success("Run complete");
+              }}
+              size="lg"
+            >
+              {entry.runLog ? "Completed ✓" : "Mark run complete"}
             </Button>
             {entry.runLog ? (
               <Link className="block text-center text-sm font-medium text-emerald-200" href="/brgym/history">View saved run in History</Link>

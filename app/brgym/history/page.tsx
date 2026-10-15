@@ -51,12 +51,11 @@ function getLogTemplate(log: WorkoutSession["exerciseLogs"][number]): ExerciseTe
 export default function BRGymHistoryPage() {
   const { data, hydrated, updateWorkoutSession } = useBRGym();
   const [editingSession, setEditingSession] = useState<WorkoutSession | null>(null);
-  const visibleSessions = data.sessions.filter((session) => (session.trainingProfile ?? "vaughn") === data.settings.activeTrainingProfile);
+  const visibleSessions = data.sessions;
   const visibleRuns = (data.trainingPlan?.entries ?? [])
     .filter((entry) =>
       entry.kind !== "lift"
-      && Boolean(entry.runLog)
-      && (entry.trainingProfile ?? "vaughn") === data.settings.activeTrainingProfile,
+      && Boolean(entry.runLog),
     )
     .sort((a, b) => (b.runLog?.completedAt ?? b.date).localeCompare(a.runLog?.completedAt ?? a.date));
 
@@ -87,7 +86,8 @@ export default function BRGymHistoryPage() {
 
       {visibleRuns.map((entry) => {
         const run = entry.runLog!;
-        const pace = run.distanceMiles > 0 ? run.totalMinutes / run.distanceMiles : null;
+        const hasDetails = Boolean(run.distanceMiles && run.totalMinutes);
+        const pace = hasDetails ? run.totalMinutes! / run.distanceMiles! : null;
         const paceTotalSeconds = pace === null ? null : Math.round(pace * 60);
         const paceMinutes = paceTotalSeconds === null ? null : Math.floor(paceTotalSeconds / 60);
         const paceSeconds = paceTotalSeconds === null ? null : paceTotalSeconds % 60;
@@ -99,23 +99,24 @@ export default function BRGymHistoryPage() {
                 <div>
                   <p className="text-lg font-semibold text-white">{entry.title}</p>
                   <p className="mt-1 text-sm text-slate-300">
-                    {run.distanceMiles} mi • {run.totalMinutes} min
-                    {paceMinutes !== null && paceSeconds !== null ? ` • ${paceMinutes}:${paceSeconds.toString().padStart(2, "0")}/mi` : ""}
+                    {hasDetails
+                      ? `${run.distanceMiles} mi • ${run.totalMinutes} min${paceMinutes !== null && paceSeconds !== null ? ` • ${paceMinutes}:${paceSeconds.toString().padStart(2, "0")}/mi` : ""}`
+                      : "Completed"}
                   </p>
                 </div>
               </div>
               <p className="text-right text-xs text-slate-400">{new Date(run.completedAt).toLocaleString()}</p>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+            {hasDetails || run.difficulty || run.averageHeartRate ? <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
               <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Difficulty</p>
-                <p className="mt-1 font-semibold text-white">{run.difficulty}/10</p>
+                <p className="mt-1 font-semibold text-white">{run.difficulty ? `${run.difficulty}/10` : "Not logged"}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/15 p-3">
                 <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Average HR</p>
                 <p className="mt-1 font-semibold text-white">{run.averageHeartRate ? `${run.averageHeartRate} bpm` : "Not logged"}</p>
               </div>
-            </div>
+            </div> : null}
             {run.intervalPaces ? <p className="mt-3 text-sm text-slate-200"><span className="text-slate-400">Splits:</span> {run.intervalPaces}</p> : null}
             {run.notes ? <p className="mt-2 text-sm text-slate-200"><span className="text-slate-400">Notes:</span> {run.notes}</p> : null}
           </article>

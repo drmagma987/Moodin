@@ -162,12 +162,12 @@ export interface ActiveWorkoutDraft {
 
 export interface RunLog {
   completedAt: string;
-  distanceMiles: number;
-  totalMinutes: number;
-  intervalPaces: string;
+  distanceMiles?: number;
+  totalMinutes?: number;
+  intervalPaces?: string;
   averageHeartRate?: number | null;
-  difficulty: number;
-  notes: string;
+  difficulty?: number;
+  notes?: string;
 }
 
 export interface RunIntervalStep {
